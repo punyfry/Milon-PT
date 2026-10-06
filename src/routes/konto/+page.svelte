@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
 	let storageStatus = $state<string | null>(null);
 
@@ -21,6 +21,16 @@
 	<p>Inloggad som {data.user?.name ?? data.user?.email}</p>
 	<p><small>Användar-ID (för importskriptet): <code>{data.user?.id}</code></small></p>
 
+	<form method="POST" action="?/goal" class="goal">
+		<label>
+			Veckomål (pass per vecka)
+			<input name="weeklySessionGoal" type="number" inputmode="numeric" min="0" max="14" value={data.weeklySessionGoal ?? ''} />
+		</label>
+		<button type="submit">Spara</button>
+	</form>
+	{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
+	{#if form?.goalSaved}<p role="status">Veckomålet är sparat.</p>{/if}
+
 	<p><button onclick={testStorage}>Testa lagring</button></p>
 	{#if storageStatus}<pre>{storageStatus}</pre>{/if}
 
@@ -29,3 +39,24 @@
 		<button type="submit">Logga ut</button>
 	</form>
 </main>
+
+<style>
+	.goal {
+		display: flex;
+		gap: 0.5rem;
+		align-items: end;
+		margin: 1rem 0;
+	}
+	.goal label {
+		display: grid;
+		gap: 0.25rem;
+	}
+	.goal input {
+		width: 5rem;
+		font: inherit;
+		padding: 0.4rem;
+	}
+	.error {
+		color: var(--danger);
+	}
+</style>

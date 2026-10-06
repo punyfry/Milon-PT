@@ -22,6 +22,8 @@
 		--on-accent: #ffffff;
 		--danger: #b3261e;
 		--done: #e3f1e8;
+		/* Seriefärg för diagram, validerad mot ytan (dataviz-validatorn). */
+		--series: #1f8a5b;
 		--radius: 14px;
 		color-scheme: light;
 	}
@@ -36,6 +38,7 @@
 			--on-accent: #0d1f16;
 			--danger: #f2827a;
 			--done: #1f3328;
+			--series: #3aa874;
 			color-scheme: dark;
 		}
 	}

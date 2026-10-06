@@ -1,4 +1,5 @@
-import type { ActiveSession, Exercise, ExerciseSet, ExerciseType, LogEntry } from '../../model';
+import { formatSet } from '../../format';
+import type { ActiveSession, Exercise, LogEntry } from '../../model';
 import { formatCatalog } from '../builder/prompt';
 
 /** Systemprompten för hjälparen, ordagrant enligt SPEC.md med kontexten ifylld. */
@@ -17,14 +18,7 @@ Regler:
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.
 - Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.`;
 
-const num = (n: number) => String(n).replace('.', ',');
-
-export function formatSet(type: ExerciseType, set: ExerciseSet): string {
-	if (type === 'weight' && 'weight' in set) return `${num(set.weight)} kg × ${set.reps}`;
-	if (type === 'time' && 'seconds' in set) return `${set.seconds} s`;
-	if ('reps' in set) return `${set.reps} reps`;
-	return '?';
-}
+export { formatSet };
 
 /** "Marklyft (ex_marklyft, weight): 40 kg × 8 klart, 45 kg × 6" – en rad per övning. */
 export function formatSessionState(session: ActiveSession, exercises: ReadonlyMap<string, Exercise>): string {

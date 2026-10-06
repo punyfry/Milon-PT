@@ -4,7 +4,8 @@
 	import { onMount } from 'svelte';
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
-	import { formatNumber, formatSeconds, timeAgo } from '$lib/format';
+	import { formatMetric, formatNumber, formatSeconds, timeAgo } from '$lib/format';
+	import { bestSet } from '$lib/history/stats';
 	import type { ActiveSession } from '$lib/model';
 	import {
 		addSet,
@@ -189,6 +190,18 @@
 
 	const summary = $derived(session && mode === 'finish' ? summarize(session, infos) : null);
 
+	/** Övningar där dagens bästa set slår allt tidigare (första gången räknas inte). */
+	const records = $derived.by(() => {
+		const found = new Map<string, number>();
+		if (!session || mode !== 'finish') return found;
+		for (const ex of session.exercises) {
+			const info = infos.get(ex.exerciseId);
+			const today = info && bestSet(info.type, ex.sets.filter((s) => s.done));
+			if (info?.best !== undefined && today && today.value > info.best) found.set(ex.exerciseId, today.value);
+		}
+		return found;
+	});
+
 	async function save() {
 		if (!session) return;
 		saving = true;
@@ -315,7 +328,12 @@
 			<ul>
 				{#each summary.exercises as ex (ex.exerciseId)}
 					<li class:skipped={ex.doneSets === 0}>
-						<span>{ex.name}</span>
+						<span>
+							{ex.name}
+							{#if records.has(ex.exerciseId)}
+								<span class="record">★ Nytt rekord: {formatMetric(ex.type, records.get(ex.exerciseId)!)}</span>
+							{/if}
+						</span>
 						<span class="meta">
 							{ex.doneSets}/{ex.totalSets} set
 							{#if ex.doneSets > 0}· {formatVolume(ex.type, ex.volume)}{/if}
@@ -461,6 +479,11 @@
 		gap: 1rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid var(--border);
+	}
+	.record {
+		display: block;
+		font-size: 0.85rem;
+		font-weight: 600;
 	}
 	.summary li.skipped {
 		color: var(--muted);
