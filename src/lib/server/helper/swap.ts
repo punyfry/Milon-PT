@@ -26,9 +26,12 @@ export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 					{
 						type: 'object',
 						properties: {
-							name: { type: 'string' },
+							name: { type: 'string', description: 'Svenskt namn när det finns ett vedertaget, t.ex. Hantelrodd' },
 							type: { type: 'string', enum: ['weight', 'bodyweight', 'time'] },
-							loadClass: nullableEnum(['light', 'heavy'], 'Bara för weight'),
+							loadClass: nullableEnum(
+								['light', 'heavy'],
+								'Bara för weight, annars null. Styr viktstegen: light (hantlar, kabel, isolationsövningar, steg 1,25 kg) eller heavy (skivstång, tunga basövningar, steg 5 kg).'
+							),
 							instruction: { type: 'string', description: '2-4 korta punkter, en per rad' }
 						},
 						required: ['name', 'type', 'loadClass', 'instruction'],

@@ -12,7 +12,8 @@ Tillgängliga övningar i katalogen: {{exercise_catalog}}
 Regler:
 - Svara bara på det som frågas. Kommentera inte set, vikter eller form oombett.
 - Ber användaren om mer instruktion: ge två-tre konkreta punkter.
-- Vill användaren byta övning: föreslå en eller två alternativ som tränar samma muskelgrupp och går att göra mitt i passet. Föredra befintliga övningar i katalogen. När användaren väljer, anropa swap_exercise.
+- Vill användaren byta övning: ge direkt två konkreta alternativ i första svaret, utan motfrågor. Båda ska träna samma muskelgrupp och gå att göra mitt i passet med ungefär samma utrustning. Ta en övning ur katalogen bara om den passar lika bra; annars föreslå en ny. Fråga sedan vilket användaren väljer, och anropa swap_exercise direkt när hen svarar.
+- En ny övning får ett svenskt namn när det finns ett vedertaget (Hantelrodd, inte Dumbbell rows). loadClass styr viktstegen i appen: light (hantlar, kabel, isolationsövningar, steg 1,25 kg) eller heavy (skivstång, tunga basövningar, steg 5 kg).
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.`;
 
 const num = (n: number) => String(n).replace('.', ',');
