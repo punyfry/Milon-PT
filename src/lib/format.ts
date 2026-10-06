@@ -35,3 +35,19 @@ export function formatSeconds(total: number): string {
 	const s = Math.max(0, Math.round(total));
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** "40 kg × 8", "8 reps", "45 s" */
+export function formatSet(type: 'weight' | 'bodyweight' | 'time', set: { weight?: number; reps?: number; seconds?: number }): string {
+	// Hårda mellanslag: ett set bryts aldrig mitt i ("62,5 kg × 8").
+	if (type === 'weight' && set.weight !== undefined) return `${formatNumber(set.weight)}\u00a0kg\u00a0×\u00a0${set.reps ?? 0}`;
+	if (type === 'time' && set.seconds !== undefined) return `${set.seconds} s`;
+	if (set.reps !== undefined) return `${set.reps} reps`;
+	return '?';
+}
+
+/** Värde i en övningstyps mått: "54 kg", "12 reps", "1:05". */
+export function formatMetric(type: 'weight' | 'bodyweight' | 'time', value: number): string {
+	if (type === 'weight') return `${formatNumber(value)} kg`;
+	if (type === 'time') return formatSeconds(value);
+	return `${formatNumber(value)} reps`;
+}

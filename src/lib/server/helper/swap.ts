@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { isExerciseType, isLoadClass, isObject, normalizeName, type ActiveSession, type Exercise } from '../../model';
+import { bestEver } from '../../history/stats';
 import type { ExerciseInfo } from '../../session/active';
 import { createExercise } from '../data/exercises';
 import type { UserStorage } from '../storage/types';
@@ -47,13 +48,15 @@ export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 };
 
 export function toInfo(e: Exercise): ExerciseInfo {
+	const best = bestEver(e);
 	return {
 		id: e.id,
 		name: e.name,
 		type: e.type,
 		...(e.loadClass ? { loadClass: e.loadClass } : {}),
 		instruction: e.instruction,
-		...(e.log[0] ? { lastEntry: e.log[0] } : {})
+		...(e.log[0] ? { lastEntry: e.log[0] } : {}),
+		...(best !== null ? { best } : {})
 	};
 }
 

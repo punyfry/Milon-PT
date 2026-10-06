@@ -23,6 +23,8 @@ export interface ExerciseInfo {
 	loadClass?: LoadClass;
 	instruction: string;
 	lastEntry?: LogEntry;
+	/** Bästa värdet hittills (1RM, reps eller sekunder), för att markera rekord vid avslut. */
+	best?: number;
 }
 
 // --- tid ----------------------------------------------------------------

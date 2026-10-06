@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { getExercise, getLatestWorkout, getProfile, getWorkout } from '$lib/server/data';
 import { isAiConfigured } from '$lib/server/ai/client';
+import { toInfo } from '$lib/server/helper/swap';
 import { storageFor } from '$lib/server/storage';
 import { DEFAULT_KCAL, type ExerciseInfo } from '$lib/session/active';
 import type { PageServerLoad } from './$types';
@@ -30,8 +31,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	for (const id of ids) {
 		const stored = await getExercise(storage, id);
 		if (!stored) continue;
-		const { name, type, loadClass, instruction, log } = stored.data;
-		exercises.push({ id, name, type, ...(loadClass ? { loadClass } : {}), instruction, ...(log[0] ? { lastEntry: log[0] } : {}) });
+		exercises.push(toInfo(stored.data));
 	}
 
 	const profile = (await getProfile(storage)).data;
