@@ -95,9 +95,20 @@ export interface Profile {
 	coachContext?: string;
 }
 
-/** Pågående pass i localStorage under nyckeln `milonpt.activeSession`. */
-export type ActiveSet = ExerciseSet & { done: boolean };
+/**
+ * Ett set i det pågående passet. För tidsövningar kan en timer gå: den
+ * lagrar sluttidpunkten (inte ett intervall), så den stämmer även om skärmen
+ * låses eller fliken byts.
+ */
+export type ActiveSet = ExerciseSet & {
+	done: boolean;
+	/** ISO-tid när nedräkningen når noll. Finns bara medan timern går. */
+	timerEndsAt?: string;
+	/** Nedräkningens längd i sekunder, för att räkna ut tiden vid tidig stopp. */
+	timerDuration?: number;
+};
 
+/** Pågående pass i localStorage under nyckeln `milonpt.activeSession`. */
 export interface ActiveSession {
 	sessionId: string;
 	workoutSlug: string;
