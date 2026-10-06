@@ -56,7 +56,9 @@
 	:global(main) {
 		max-width: 40rem;
 		margin: 0 auto;
-		padding: 1rem 1rem 4rem;
+		/* Säkerhetsmarginaler för notch och hemindikator när appen körs från hemskärmen. */
+		padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+			calc(4rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 	}
 	:global(a) {
 		color: var(--accent);

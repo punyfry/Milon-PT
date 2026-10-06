@@ -75,6 +75,17 @@ npm run import -- min-export.json --user <användar-ID> --apply  # skriver till 
 - Skriptet läser `BLOB_READ_WRITE_TOKEN` från miljön, `.env.local` eller `.env`.
 - Med `--local` skrivs i stället till `.data/`, den lokala lagringen som dev-servern använder utan Blob-token.
 
+## Lägg på hemskärmen (PWA)
+
+Appen har ett webbmanifest (`static/manifest.webmanifest`) och ikoner i `static/icons/`, så den kan installeras som en app:
+
+- **iPhone (Safari):** Dela → Lägg till på hemskärmen.
+- **Android (Chrome):** meny ⋮ → Installera app / Lägg till på startskärmen.
+
+Den öppnas då i helskärm utan webbläsarens adressfält. Offline-stöd är utanför scope (SPEC.md), så det finns ingen service worker och appen kräver nätverk.
+
+Ikonerna ritas med `python3 scripts/make_icons.py static/icons` (kräver Pillow); ändra färg eller form där och kör om det om du vill byta ikon.
+
 ## Kommandon
 
 - `npm run dev` – utvecklingsserver
