@@ -41,8 +41,9 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 			properties: {
 				existingId: { type: ['string', 'null'], description: 'id från katalogen, eller null för en ny övning' },
 				name: { type: ['string', 'null'], description: 'Namn på ny övning, annars null' },
-				type: { type: ['string', 'null'], enum: ['weight', 'bodyweight', 'time', null] },
-				loadClass: { type: ['string', 'null'], enum: ['light', 'heavy', null], description: 'Bara för weight' },
+				// Strikta verktyg godtar inte enum ihop med type-listan ['string', 'null'], så null uttrycks med anyOf.
+				type: { anyOf: [{ type: 'string', enum: ['weight', 'bodyweight', 'time'] }, { type: 'null' }] },
+				loadClass: { anyOf: [{ type: 'string', enum: ['light', 'heavy'] }, { type: 'null' }], description: 'Bara för weight' },
 				instruction: { type: ['string', 'null'], description: '2-4 korta punkter, en per rad' },
 				sets: { type: 'integer', description: 'Föreslaget antal set' },
 				target

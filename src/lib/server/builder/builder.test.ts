@@ -262,3 +262,31 @@ describe('lagringsfel i ett verktygsanrop', () => {
 		expect(conversation.log.at(-1)).toEqual({ role: 'assistant', text: 'Nu gick det.' });
 	});
 });
+
+describe('verktygsscheman', () => {
+	/** Går igenom alla delscheman i ett JSON-schema. */
+	function* nodes(schema: unknown): Generator<Record<string, unknown>> {
+		if (Array.isArray(schema)) for (const s of schema) yield* nodes(s);
+		else if (schema && typeof schema === 'object') {
+			yield schema as Record<string, unknown>;
+			for (const v of Object.values(schema)) yield* nodes(v);
+		}
+	}
+
+	it('kombinerar aldrig enum med en lista av typer (avvisas av API:t för strict-verktyg)', async () => {
+		const { BUILDER_TOOLS } = await import('./tools');
+		for (const tool of BUILDER_TOOLS) {
+			expect(tool.strict).toBe(true);
+			for (const node of nodes(tool.input_schema)) {
+				if ('enum' in node) {
+					expect(typeof node.type, `${tool.name}: enum med type ${JSON.stringify(node.type)}`).toBe('string');
+					expect(node.enum).not.toContain(null);
+				}
+				if (node.type === 'object') {
+					expect(node.additionalProperties, tool.name).toBe(false);
+					expect(Object.keys((node.properties as object) ?? {}).sort()).toEqual([...((node.required as string[]) ?? [])].sort());
+				}
+			}
+		}
+	});
+});
