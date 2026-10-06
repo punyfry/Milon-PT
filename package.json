@@ -26,6 +26,7 @@
 		"vitest": "^5.0.3"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.131.0",
 		"@auth/sveltekit": "^1.11.3",
 		"@vercel/blob": "^2.8.1"
 	}
