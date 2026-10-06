@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getExercise, getLatestWorkout, getProfile, getWorkout } from '$lib/server/data';
+import { isAiConfigured } from '$lib/server/ai/client';
 import { storageFor } from '$lib/server/storage';
 import { DEFAULT_KCAL, type ExerciseInfo } from '$lib/session/active';
 import type { PageServerLoad } from './$types';
@@ -37,6 +38,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	return {
 		workout,
 		exercises,
-		kcalSuggestion: profile.kcalPerWorkout?.[workout.slug] ?? DEFAULT_KCAL
+		kcalSuggestion: profile.kcalPerWorkout?.[workout.slug] ?? DEFAULT_KCAL,
+		helperAvailable: isAiConfigured()
 	};
 };

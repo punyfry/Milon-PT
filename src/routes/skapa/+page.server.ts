@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getWorkout, listExercises, listLatestWorkouts, listWorkoutVersions } from '$lib/server/data';
-import { builderModel, isBuilderConfigured } from '$lib/server/builder/client';
+import { builderModel, isAiConfigured } from '$lib/server/ai/client';
 import { conversationView, loadConversation } from '$lib/server/builder/conversation';
 import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
@@ -55,7 +55,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
 	return {
-		configured: isBuilderConfigured(),
+		configured: isAiConfigured(),
 		model: builderModel(),
 		conversation,
 		editing,

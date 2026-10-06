@@ -2,12 +2,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import HelpPanel from '$lib/components/HelpPanel.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import { formatNumber, formatSeconds, timeAgo } from '$lib/format';
 	import type { ActiveSession } from '$lib/model';
 	import {
 		addSet,
 		adjust,
+		applySwap,
 		anyTimerRunning,
 		completeExpiredTimers,
 		createActiveSession,
@@ -28,7 +30,9 @@
 
 	let { data }: PageProps = $props();
 
-	const infos = $derived(new Map<string, ExerciseInfo>(data.exercises.map((e) => [e.id, e])));
+	/** Övningar som bytts in under passet och inte fanns i sidans data. */
+	let swappedIn = $state<ExerciseInfo[]>([]);
+	const infos = $derived(new Map<string, ExerciseInfo>([...data.exercises, ...swappedIn].map((e) => [e.id, e])));
 
 	let session = $state<ActiveSession | null>(null);
 	/** Ett annat pass pågår redan; visas i stället för att skriva över det. */
@@ -58,7 +62,9 @@
 				if (missing.length) params.set('ex', missing.join(','));
 				const target = `/pass/${stored.workoutSlug}?${params}`;
 				if (target !== page.url.pathname + page.url.search) {
-					void goto(target, { replaceState: true });
+					// Full omladdning: en klientnavigering till samma rutt återanvänder
+					// komponenten, och då körs inte den här initieringen igen.
+					location.replace(target);
 					return;
 				}
 			}
@@ -103,6 +109,69 @@
 			wakeLock.destroy();
 		};
 	});
+
+	// --- hjälparen ----------------------------------------------------------
+
+	interface HelpState {
+		open: boolean;
+		/** Frågor och svar som skickas med som historik (alltid par). */
+		turns: { role: 'user' | 'assistant'; text: string }[];
+		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
+		busy: boolean;
+		error: string | null;
+	}
+	let help = $state<Record<string, HelpState>>({});
+
+	function toggleHelp(exerciseId: string) {
+		const current = help[exerciseId];
+		help[exerciseId] = current
+			? { ...current, open: !current.open }
+			: { open: true, turns: [], log: [], busy: false, error: null };
+	}
+
+	/** Målet i passmallen för den ursprungliga övningen på den här platsen. */
+	function templateTarget(exerciseId: string) {
+		const original = session?.deviations.find((d) => d.to === exerciseId)?.from ?? exerciseId;
+		return data.workout.exercises.find((e) => e.exerciseId === original)?.target;
+	}
+
+	async function ask(exerciseId: string, question: string) {
+		const state = help[exerciseId];
+		if (!session || !state || state.busy) return;
+		state.busy = true;
+		state.error = null;
+		state.log.push({ role: 'user', text: question });
+		try {
+			const res = await fetch('/api/helper', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					session: $state.snapshot(session),
+					exerciseId,
+					history: $state.snapshot(state.turns),
+					question
+				})
+			});
+			const body = await res.json().catch(() => null);
+			if (!res.ok) throw new Error(body?.message ?? `Servern svarade ${res.status}`);
+			state.turns.push({ role: 'user', text: question }, { role: 'assistant', text: body.reply });
+			state.log.push({ role: 'assistant', text: body.reply });
+			if (body.swap) {
+				const { from, to } = body.swap as { from: string; to: ExerciseInfo };
+				const target = templateTarget(from);
+				swappedIn.push(to);
+				change((s) => applySwap(s, from, to, target));
+				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
+				// Hjälpen följer med till den nya övningen.
+				help[to.id] = state;
+				delete help[from];
+			}
+		} catch (e) {
+			state.error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
+		} finally {
+			state.busy = false;
+		}
+	}
 
 	function onAdjust(exIndex: number, setIndex: number, field: SetField, dir: 1 | -1) {
 		const loadClass = infos.get(session!.exercises[exIndex].exerciseId)?.loadClass;
@@ -182,8 +251,24 @@
 
 		{#each session.exercises as ex, exIndex (ex.exerciseId + exIndex)}
 			{@const info = infos.get(ex.exerciseId)}
+			{@const helpState = help[ex.exerciseId]}
 			<section class="exercise">
-				<h2>{info?.name ?? ex.exerciseId}</h2>
+				<div class="exercise-head">
+					<h2>{info?.name ?? ex.exerciseId}</h2>
+					{#if data.helperAvailable && info}
+						<button class="help" aria-expanded={helpState?.open ?? false} onclick={() => toggleHelp(ex.exerciseId)}>Hjälp</button>
+					{/if}
+				</div>
+				{#if helpState?.open && info}
+					<HelpPanel
+						name={info.name}
+						log={helpState.log}
+						busy={helpState.busy}
+						error={helpState.error}
+						onask={(q) => ask(ex.exerciseId, q)}
+						onclose={() => (helpState.open = false)}
+					/>
+				{/if}
 				{#if info?.instruction}
 					<details>
 						<summary>Instruktion</summary>
@@ -299,9 +384,25 @@
 		padding: 0.9rem 0.75rem;
 		margin-bottom: 1rem;
 	}
+	.exercise-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0 0.25rem 0.25rem;
+	}
 	.exercise h2 {
 		font-size: 1.15rem;
-		margin: 0 0 0.25rem 0.25rem;
+		margin: 0;
+	}
+	.help {
+		padding: 0.35rem 0.8rem;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		background: var(--bg);
+		color: var(--text);
+		font-size: 0.9rem;
+		cursor: pointer;
 	}
 	details {
 		margin: 0 0.25rem 0.5rem;

@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { isObject, type WorkoutExercise } from '../../model';
+import { modelOptions, type CreateMessage } from '../ai/models';
 import { listExercises } from '../data/exercises';
 import { getProfile } from '../data/profile';
 import { getLatestWorkout } from '../data/workouts';
@@ -73,9 +74,7 @@ export async function saveConversation(storage: UserStorage, conversation: Build
 
 // --- en tur -------------------------------------------------------------
 
-export type CreateMessage = (
-	params: Anthropic.Beta.MessageCreateParamsNonStreaming
-) => Promise<Anthropic.Beta.BetaMessage>;
+export type { CreateMessage };
 
 export interface TurnOptions {
 	model: string;
@@ -84,9 +83,6 @@ export interface TurnOptions {
 	/** Högsta antal modellanrop per tur (verktygsrundor). */
 	maxIterations?: number;
 }
-
-/** Modeller som tar emot `fallbacks: "default"` (server-side fallback vid avböjt svar). */
-const FALLBACK_MODELS = new Set(['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1']);
 
 export function requestParams(conversation: BuilderConversation, model: string): Anthropic.Beta.MessageCreateParamsNonStreaming {
 	return {
@@ -98,9 +94,7 @@ export function requestParams(conversation: BuilderConversation, model: string):
 		cache_control: { type: 'ephemeral' },
 		tools: BUILDER_TOOLS,
 		messages: conversation.messages,
-		// Haiku 4.5 har inte adaptivt tänkande eller effort; övriga aktuella modeller har det.
-		...(model.startsWith('claude-haiku') ? {} : { thinking: { type: 'adaptive' as const }, output_config: { effort: 'medium' as const } }),
-		...(FALLBACK_MODELS.has(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {})
+		...modelOptions(model, 'medium')
 	};
 }
 

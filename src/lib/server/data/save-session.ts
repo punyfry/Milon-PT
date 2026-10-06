@@ -43,11 +43,16 @@ export interface SaveSessionResult {
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
-/** Grundkontroll av indata innan något läses från lagringen. */
-export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
-	const issues: string[] = [];
-	if (!isObject(raw) || !isObject(raw.session)) throw new ValidationError('sparning', ['session saknas']);
-	const s = raw.session;
+/**
+ * Grundkontroll av ett pågående pass från klienten (localStorage), innan
+ * något läses från lagringen. Lägger fel i `issues` och returnerar passet.
+ */
+export function checkActiveSession(raw: unknown, issues: string[]): ActiveSession | null {
+	if (!isObject(raw)) {
+		issues.push('session saknas');
+		return null;
+	}
+	const s = raw;
 	if (typeof s.sessionId !== 'string' || !ID.test(s.sessionId)) issues.push('session.sessionId är ogiltigt');
 	if (typeof s.workoutSlug !== 'string' || !/^[a-z0-9-]+$/.test(s.workoutSlug)) issues.push('session.workoutSlug är ogiltig');
 	if (typeof s.workoutVersion !== 'number' || !Number.isInteger(s.workoutVersion) || s.workoutVersion < 1)
@@ -55,7 +60,6 @@ export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 	for (const key of ['startedAt', 'lastActivityAt'] as const) {
 		if (typeof s[key] !== 'string' || !DATETIME.test(s[key] as string)) issues.push(`session.${key} är ogiltig`);
 	}
-	if (typeof raw.endedAt !== 'string' || !DATETIME.test(raw.endedAt)) issues.push('endedAt är ogiltig');
 	if (!Array.isArray(s.exercises)) issues.push('session.exercises måste vara en lista');
 	else
 		s.exercises.forEach((ex, i) => {
@@ -68,12 +72,21 @@ export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 			if (!isObject(d) || d.type !== 'swap' || typeof d.from !== 'string' || !ID.test(d.from) || typeof d.to !== 'string' || !ID.test(d.to))
 				issues.push(`session.deviations[${i}] är ogiltig`);
 		});
+	return s as unknown as ActiveSession;
+}
+
+/** Grundkontroll av indata för sparning innan något läses från lagringen. */
+export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
+	const issues: string[] = [];
+	if (!isObject(raw) || !isObject(raw.session)) throw new ValidationError('sparning', ['session saknas']);
+	const session = checkActiveSession(raw.session, issues);
+	if (typeof raw.endedAt !== 'string' || !DATETIME.test(raw.endedAt)) issues.push('endedAt är ogiltig');
 	const kcal = raw.kcalEstimate;
 	if (kcal !== undefined && kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000))
 		issues.push('kcalEstimate är ogiltig');
-	if (issues.length) throw new ValidationError('sparning', issues);
+	if (issues.length || !session) throw new ValidationError('sparning', issues);
 	return {
-		session: s as unknown as ActiveSession,
+		session,
 		endedAt: raw.endedAt as string,
 		...(typeof kcal === 'number' ? { kcalEstimate: Math.round(kcal) } : {}),
 		saveAsNewVersion: raw.saveAsNewVersion === true

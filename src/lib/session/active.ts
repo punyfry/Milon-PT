@@ -254,3 +254,33 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 
 /** Förslag enligt SPEC.md: styrka ca 250–350 kcal. Profilens värde för passet går före. */
 export const DEFAULT_KCAL = 300;
+
+// --- byte av övning -----------------------------------------------------
+
+/**
+ * Byter övning i det pågående passet (från hjälparen) och lägger bytet som
+ * avvikelse; passmallen rörs inte.
+ * - Seten förifylls för den nya övningen med samma antal som den gamla.
+ * - Har den gamla övningen klara set behålls de, och den nya läggs efter den.
+ * - Byts en redan inbytt övning igen uppdateras avvikelsen (A→B→C blir A→C),
+ *   och byts den tillbaka till originalet tas avvikelsen bort.
+ */
+export function applySwap(session: ActiveSession, fromId: string, to: ExerciseInfo, target?: Target): void {
+	const index = session.exercises.findIndex((e) => e.exerciseId === fromId);
+	if (index < 0 || session.exercises.some((e) => e.exerciseId === to.id)) return;
+
+	const old = session.exercises[index];
+	const fresh = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target) };
+	const done = old.sets.filter((s) => s.done);
+	if (done.length) {
+		old.sets = done;
+		session.exercises.splice(index + 1, 0, fresh);
+	} else {
+		session.exercises.splice(index, 1, fresh);
+	}
+
+	const earlier = session.deviations.findIndex((d) => d.type === 'swap' && d.to === fromId);
+	if (earlier < 0) session.deviations.push({ type: 'swap', from: fromId, to: to.id });
+	else if (session.deviations[earlier].from === to.id) session.deviations.splice(earlier, 1);
+	else session.deviations[earlier] = { type: 'swap', from: session.deviations[earlier].from, to: to.id };
+}
