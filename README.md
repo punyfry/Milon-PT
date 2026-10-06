@@ -19,6 +19,8 @@ Stack: SvelteKit, Vercel (Blob), Auth.js med Google, Claude API.
 | `src/lib/session/` | Det pågående passet i webbläsaren: förifyllning, −/+, set, timer, sammanfattning och localStorage |
 | `src/lib/server/data/save-session.ts` | Sparar ett avslutat pass: övningsloggar, ev. ny passversion och sist sessionsposten. Går att köra om utan dubbletter |
 | `src/routes/pass/[slug]` | Aktivt pass och avslut |
+| `src/lib/server/builder/` | Pass-byggaren: systemprompt, verktygen `propose_exercise`/`set_workout` och konversationsloopen mot Claude API |
+| `src/routes/skapa` | Skapa och redigera pass i chatt med Milon, live-lista och versioner |
 | `src/routes/api/storage/selftest` | `POST` skriver och läser tillbaka `users/<userId>/_selftest.json` för att verifiera Blob-kopplingen |
 
 Använd lagringen från en route så här:

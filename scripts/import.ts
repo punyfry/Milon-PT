@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { BlobUserStorage } from '../src/lib/server/storage/blob';
 import { LocalFileUserStorage } from '../src/lib/server/storage/local';
 import { ValidationError } from '../src/lib/model';
+import { todayInStockholm } from '../src/lib/time';
 import { applyImport, parseImportFile, planImportFor, summarizePlan } from '../src/lib/server/import/craft';
 
 function usage(message?: string): never {
@@ -46,10 +47,6 @@ function loadEnv() {
 		// Värden som redan finns i miljön skrivs inte över.
 		if (existsSync(f)) process.loadEnvFile(f);
 	}
-}
-
-function todayInStockholm(): string {
-	return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' }).format(new Date());
 }
 
 async function main() {
