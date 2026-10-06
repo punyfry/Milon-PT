@@ -1,5 +1,0 @@
-# Milon-PT
-
-Minimalistisk träningslogg med AI-coach. Se [SPEC.md](SPEC.md) för specifikationen.
-
-Stack: SvelteKit, Vercel (Blob), Auth.js med Google, Claude API.
