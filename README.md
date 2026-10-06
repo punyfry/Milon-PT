@@ -21,6 +21,8 @@ Stack: SvelteKit, Vercel (Blob), Auth.js med Google, Claude API.
 | `src/routes/pass/[slug]` | Aktivt pass och avslut |
 | `src/lib/server/builder/` | Pass-byggaren: systemprompt, verktygen `propose_exercise`/`set_workout` och konversationsloopen mot Claude API |
 | `src/routes/skapa` | Skapa och redigera pass i chatt med Milon, live-lista och versioner |
+| `src/lib/server/helper/` | Hjälparen under passet: systemprompt, `swap_exercise` och anropet (`POST /api/helper`) |
+| `src/lib/server/ai/` | Delat för Claude API: klient, modellval (`MODEL_BUILDER`, `MODEL_HELPER`) och modellberoende parametrar |
 | `src/routes/api/storage/selftest` | `POST` skriver och läser tillbaka `users/<userId>/_selftest.json` för att verifiera Blob-kopplingen |
 
 Använd lagringen från en route så här:

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
 import { isObject } from '$lib/model';
-import { builderModel, createMessage, isBuilderConfigured } from '$lib/server/builder/client';
+import { builderModel, createMessage, isAiConfigured } from '$lib/server/ai/client';
 import {
 	conversationView,
 	loadConversation,
@@ -22,7 +22,7 @@ const MAX_MESSAGE = 2000;
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
-	if (!isBuilderConfigured()) error(503, 'ANTHROPIC_API_KEY saknas på servern');
+	if (!isAiConfigured()) error(503, 'ANTHROPIC_API_KEY saknas på servern');
 
 	const body: unknown = await request.json().catch(() => null);
 	if (!isObject(body)) error(400, 'Ogiltig JSON');

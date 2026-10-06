@@ -275,7 +275,8 @@ describe('verktygsscheman', () => {
 
 	it('kombinerar aldrig enum med en lista av typer (avvisas av API:t för strict-verktyg)', async () => {
 		const { BUILDER_TOOLS } = await import('./tools');
-		for (const tool of BUILDER_TOOLS) {
+		const { SWAP_TOOL } = await import('../helper/swap');
+		for (const tool of [...BUILDER_TOOLS, SWAP_TOOL]) {
 			expect(tool.strict).toBe(true);
 			for (const node of nodes(tool.input_schema)) {
 				if ('enum' in node) {
