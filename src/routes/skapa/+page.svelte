@@ -269,7 +269,7 @@
 		position: sticky;
 		bottom: 0;
 		background: var(--bg);
-		padding: 0.5rem 0 0.75rem;
+		padding: 0.5rem 0 calc(0.75rem + env(safe-area-inset-bottom));
 		display: grid;
 		gap: 0.5rem;
 	}
