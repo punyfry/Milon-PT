@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { addDays, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
+import { addDays, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
 import { getProfile, listExercises, listSessions } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const storage = storageFor(locals);
 	const today = todayInStockholm();
 	const param = url.searchParams.get('vecka');
-	if (param !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(param) || Number.isNaN(Date.parse(param)))) error(400, 'Ogiltigt datum');
+	if (param !== null && !isValidDate(param)) error(400, 'Ogiltigt datum');
 	const start = weekStartOf(param ?? today);
 	const currentStart = weekStartOf(today);
 

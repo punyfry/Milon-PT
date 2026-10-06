@@ -13,7 +13,7 @@ export const actions: Actions = {
 	goal: async ({ locals, request }) => {
 		const storage = storageFor(locals);
 		const raw = String((await request.formData()).get('weeklySessionGoal') ?? '').trim();
-		const goal = raw === '' ? undefined : Number(raw);
+		const goal = raw === '' ? undefined : /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
 		if (goal !== undefined && (!Number.isInteger(goal) || goal < 0 || goal > 14)) {
 			return fail(400, { goalError: 'Ange ett heltal mellan 0 och 14.' });
 		}

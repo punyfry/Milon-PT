@@ -7,9 +7,22 @@
 
 	const weekdays = ['M', 'T', 'O', 'T', 'F', 'L', 'S'];
 	const dayNum = (d: string) => Number(d.slice(8, 10));
+	const thisYear = $derived(data.today.slice(0, 4));
+	/** "3 okt." i år, annars "3 jan. 2021". */
 	const shortDate = (d: string) =>
-		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', {
+			day: 'numeric',
+			month: 'short',
+			...(d.startsWith(thisYear) ? {} : { year: 'numeric' }),
+			timeZone: 'UTC'
+		});
+	/** "tisdag 6 oktober" för skärmläsare. */
+	const longDate = (d: string) =>
+		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 	const range = $derived(`${shortDate(data.week.days[0].date)} – ${shortDate(data.week.days[6].date)}`);
+	const weekYear = $derived(data.week.days[3].date.slice(0, 4));
+	const kindFor = (type: string): 'seconds' | 'integer' | 'number' =>
+		type === 'time' ? 'seconds' : type === 'bodyweight' ? 'integer' : 'number';
 	const v = $derived(data.week.volumeByType);
 </script>
 
@@ -23,7 +36,7 @@
 		<div class="week-head">
 			<a href={`/historik?vecka=${data.prevWeek}`} aria-label="Föregående vecka">←</a>
 			<div>
-				<strong>{data.isCurrentWeek ? 'Denna vecka' : `Vecka ${data.week.week}`}</strong>
+				<strong>{data.isCurrentWeek ? 'Denna vecka' : `Vecka ${data.week.week}${weekYear !== thisYear ? `, ${weekYear}` : ''}`}</strong>
 				<span class="meta">{range}</span>
 			</div>
 			{#if data.nextWeek}
@@ -35,11 +48,15 @@
 
 		<ol class="strip">
 			{#each data.week.days as day, i (day.date)}
-				<li class:trained={day.trained} class:today={day.date === data.today}>
-					<span class="wd">{weekdays[i]}</span>
+				<li
+					class:trained={day.trained}
+					class:today={day.date === data.today}
+					aria-label="{longDate(day.date)}, {day.trained ? 'tränat' : 'vila'}"
+					aria-current={day.date === data.today ? 'date' : undefined}
+				>
+					<span class="wd" aria-hidden="true">{weekdays[i]}</span>
 					<span class="dot" aria-hidden="true"></span>
-					<span class="num">{dayNum(day.date)}</span>
-					<span class="sr">{day.trained ? 'tränat' : 'vila'}</span>
+					<span class="num" aria-hidden="true">{dayNum(day.date)}</span>
 				</li>
 			{/each}
 		</ol>
@@ -68,15 +85,23 @@
 	<div class="milestones">
 		{#each data.milestones as m (m.key)}
 			<section class="card">
-				<h3>{m.title}</h3>
-				{#if m.exercise && m.points.length}
+				<h3>
+					{m.title}
+					{#if m.exercise && m.exercise.name !== m.title}<span class="meta">· {m.exercise.name}</span>{/if}
+				</h3>
+				{#if m.exercise && m.points.length > 1}
 					<LineChart
 						points={m.points}
 						height={120}
-						label="{m.title} över tid"
+						label="{m.exercise.name} över tid"
+						kind={kindFor(m.exercise.type)}
 						format={(n) => formatMetric(m.exercise!.type, n)}
 					/>
-					<a class="more" href={`/historik/ovning/${m.exercise.id}`}>Alla pass</a>
+					<a class="more" href={`/historik/ovning/${m.exercise.id}`} aria-label="Alla pass med {m.exercise.name}">Alla pass</a>
+				{:else if m.exercise && m.points.length === 1}
+					<p class="meta">
+						{m.exercise.name}: ett pass hittills, {formatMetric(m.exercise.type, m.points[0].value)}. Grafen visas från två pass.
+					</p>
 				{:else if m.exercise}
 					<p class="meta">Ingen historik för {m.exercise.name} än.</p>
 				{:else}
@@ -184,13 +209,6 @@
 		font-size: 0.85rem;
 		font-variant-numeric: tabular-nums;
 	}
-	.sr {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
-	}
 	.tiles {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -223,6 +241,7 @@
 	}
 	.milestones {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem;
 	}
 	.more {

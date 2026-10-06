@@ -38,7 +38,12 @@
 			{#if data.points.length}<span class="best">Bästa: {fmt(best)}</span>{/if}
 		</div>
 		{#if data.points.length > 1}
-			<LineChart points={data.points} label="{data.metric.label} för {ex.name} över tid" format={fmt} />
+			<LineChart
+				points={data.points}
+				label="{data.metric.label} för {ex.name} över tid"
+				kind={ex.type === 'time' ? 'seconds' : ex.type === 'bodyweight' ? 'integer' : 'number'}
+				format={fmt}
+			/>
 		{:else if data.points.length === 1}
 			<p class="meta">Ett pass hittills: {fmt(data.points[0].value)}. Grafen visas från två pass.</p>
 		{:else}

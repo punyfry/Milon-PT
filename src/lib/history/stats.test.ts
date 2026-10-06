@@ -6,6 +6,7 @@ import {
 	bestSet,
 	estimated1RM,
 	isoWeek,
+	isValidDate,
 	milestoneExercises,
 	progressSeries,
 	recordEntries,
@@ -104,5 +105,22 @@ describe('milstolpar', () => {
 		const ex = (name: string): Exercise => ({ ...plankan, id: name, name });
 		const found = milestoneExercises([ex('Pull-ups'), ex('Handstående mot vägg'), ex('Pull-up med gummiband')]);
 		expect(found.map((m) => m.exercise?.name ?? null)).toEqual(['Pull-ups', 'Handstående mot vägg']);
+	});
+
+	it('väljer den matchande övningen som tränats senast', () => {
+		const empty: Exercise = { ...plankan, id: 'ex_chin_ups', name: 'Chin-ups', log: [] };
+		const used: Exercise = { ...plankan, id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', log: [{ date: '2026-10-01', sets: [{ reps: 5 }] }] };
+		const archived: Exercise = { ...used, id: 'ex_pullup_old', name: 'Pullup', archived: true, log: [{ date: '2026-10-05', sets: [{ reps: 6 }] }] };
+		expect(milestoneExercises([empty, archived, used])[0].exercise?.id).toBe('ex_pull_up');
+	});
+});
+
+describe('datumkontroll', () => {
+	it('godtar bara riktiga datum inom rimliga år', () => {
+		expect(isValidDate('2026-10-06')).toBe(true);
+		expect(isValidDate('2028-02-29')).toBe(true);
+		for (const bad of ['2026-02-30', '2026-13-01', '0001-01-01', '9999-12-31', 'abc', '2026-1-1']) {
+			expect(isValidDate(bad), bad).toBe(false);
+		}
 	});
 });

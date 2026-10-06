@@ -88,6 +88,14 @@ const DAY = 86_400_000;
 const toDate = (d: string) => new Date(`${d}T12:00:00Z`);
 const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Ett riktigt datum YYYY-MM-DD inom rimliga år (t.ex. inte 2026-02-30). */
+export function isValidDate(date: string): boolean {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+	const year = Number(date.slice(0, 4));
+	const d = toDate(date);
+	return year >= 2000 && year <= 2100 && !Number.isNaN(d.getTime()) && fmt(d) === date;
+}
+
 export function addDays(date: string, days: number): string {
 	return fmt(new Date(toDate(date).getTime() + days * DAY));
 }
@@ -157,10 +165,17 @@ export const MILESTONES = [
 	{ key: 'handstand', title: 'Handstående', match: /^(handstående|handstand)/ }
 ] as const;
 
-/** Övningarna som räknas som milstolpar (Pull-up i reps, handstående i sekunder). */
+/**
+ * Övningarna som räknas som milstolpar (Pull-up i reps, handstående i
+ * sekunder). Matchar flera övningar väljs den som tränats senast, och en
+ * arkiverad bara om ingen annan matchar.
+ */
 export function milestoneExercises(exercises: readonly Exercise[]) {
-	return MILESTONES.map((m) => ({
-		...m,
-		exercise: exercises.find((e) => m.match.test(normalizeName(e.name))) ?? null
-	}));
+	const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
+	return MILESTONES.map((m) => {
+		const matches = exercises
+			.filter((e) => m.match.test(normalizeName(e.name)))
+			.sort((a, b) => Number(a.archived) - Number(b.archived) || lastDate(b).localeCompare(lastDate(a)));
+		return { ...m, exercise: matches[0] ?? null };
+	});
 }

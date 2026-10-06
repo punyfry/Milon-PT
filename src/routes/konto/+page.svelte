@@ -22,11 +22,11 @@
 	<p><small>Användar-ID (för importskriptet): <code>{data.user?.id}</code></small></p>
 
 	<form method="POST" action="?/goal" class="goal">
-		<label>
-			Veckomål (pass per vecka)
-			<input name="weeklySessionGoal" type="number" inputmode="numeric" min="0" max="14" value={data.weeklySessionGoal ?? ''} />
-		</label>
-		<button type="submit">Spara</button>
+		<label for="goal">Veckomål (pass per vecka)</label>
+		<div class="row">
+			<input id="goal" name="weeklySessionGoal" type="number" inputmode="numeric" min="0" max="14" value={data.weeklySessionGoal ?? ''} />
+			<button type="submit">Spara</button>
+		</div>
 	</form>
 	{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
 	{#if form?.goalSaved}<p role="status">Veckomålet är sparat.</p>{/if}
@@ -42,14 +42,13 @@
 
 <style>
 	.goal {
-		display: flex;
-		gap: 0.5rem;
-		align-items: end;
-		margin: 1rem 0;
-	}
-	.goal label {
 		display: grid;
 		gap: 0.25rem;
+		margin: 1rem 0;
+	}
+	.goal .row {
+		display: flex;
+		gap: 0.5rem;
 	}
 	.goal input {
 		width: 5rem;

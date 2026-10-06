@@ -13,23 +13,31 @@
 		points: Point[];
 		format: (value: number) => string;
 		label: string;
+		/** Styr y-axelns steg: hela tal (reps) och sekunder får inga halva steg. */
+		kind?: 'number' | 'integer' | 'seconds';
 		height?: number;
 	}
 
-	let { points, format, label, height = 160 }: Props = $props();
+	let { points, format, label, kind = 'number', height = 160 }: Props = $props();
 
 	let width = $state(320);
 	let active = $state<number | null>(null);
 
-	const pad = { top: 16, right: 52, bottom: 22, left: 36 };
 	const time = (d: string) => Date.parse(`${d}T12:00:00Z`);
+	/** Ungefärlig textbredd i px för 11–12 px systemtypsnitt. */
+	const textWidth = (t: string, px = 6.6) => t.length * px;
 
 	/** "Snälla" värden för y-axeln. */
 	function niceStep(range: number, count: number) {
 		const raw = range / Math.max(count, 1);
+		if (kind === 'seconds') {
+			const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
+			return steps.find((s) => s >= raw) ?? 3600;
+		}
 		const mag = 10 ** Math.floor(Math.log10(raw || 1));
 		const n = raw / mag;
-		return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+		const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+		return kind === 'integer' ? Math.max(1, Math.round(step)) : step;
 	}
 
 	const scale = $derived.by(() => {
@@ -46,14 +54,22 @@
 		const ticks: number[] = [];
 		for (let v = min; v <= max + step / 2; v += step) ticks.push(Math.round(v * 100) / 100);
 
+		// Marginaler efter etiketternas längd, så att inget klipps.
+		const pad = {
+			top: 16,
+			bottom: 22,
+			left: Math.max(...ticks.map((t) => textWidth(format(t)))) + 10,
+			right: textWidth(format(points.at(-1)?.value ?? 0), 7.4) + 14
+		};
 		const t0 = time(points[0]?.date ?? '2000-01-01');
 		const t1 = time(points.at(-1)?.date ?? '2000-01-01');
 		const innerW = Math.max(width - pad.left - pad.right, 10);
 		const innerH = height - pad.top - pad.bottom;
 		const x = (d: string) => pad.left + (t1 === t0 ? innerW / 2 : ((time(d) - t0) / (t1 - t0)) * innerW);
 		const y = (v: number) => pad.top + innerH - ((v - min) / (max - min || 1)) * innerH;
-		return { x, y, ticks, innerW };
+		return { x, y, ticks, innerW, pad };
 	});
+	const pad = $derived(scale.pad);
 
 	const xy = $derived(points.map((p) => ({ ...p, cx: scale.x(p.date), cy: scale.y(p.value) })));
 	const line = $derived(xy.map((p, i) => `${i ? 'L' : 'M'}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' '));
@@ -64,11 +80,22 @@
 	);
 	const last = $derived(xy.at(-1));
 
+	/** Årtalet visas när serien spänner över flera år eller inte är i år. */
+	const withYear = $derived.by(() => {
+		const years = new Set(points.map((p) => p.date.slice(0, 4)));
+		return years.size > 1 || !years.has(String(new Date().getFullYear()));
+	});
 	const dateLabel = (d: string) =>
-		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', {
+			day: 'numeric',
+			month: 'short',
+			...(withYear ? { year: 'numeric' } : {}),
+			timeZone: 'UTC'
+		});
 
 	function nearest(clientX: number, rect: DOMRect) {
-		const px = clientX - rect.left;
+		// Diagrammet skalas till behållarens bredd; räkna om till diagrammets koordinater.
+		const px = ((clientX - rect.left) / (rect.width || 1)) * width;
 		let best = 0;
 		for (let i = 1; i < xy.length; i++) if (Math.abs(xy[i].cx - px) < Math.abs(xy[best].cx - px)) best = i;
 		return best;
@@ -76,6 +103,11 @@
 
 	function onPointer(e: PointerEvent) {
 		active = nearest(e.clientX, (e.currentTarget as HTMLElement).getBoundingClientRect());
+	}
+
+	/** Vid tryck ligger värdet kvar tills nästa tryck; med mus försvinner det när pekaren lämnar. */
+	function onLeave(e: PointerEvent) {
+		if (e.pointerType !== 'touch') active = null;
 	}
 
 	function onKey(e: KeyboardEvent) {
@@ -107,12 +139,12 @@
 	tabindex={points.length ? 0 : -1}
 	onpointermove={onPointer}
 	onpointerdown={onPointer}
-	onpointerleave={() => (active = null)}
+	onpointerleave={onLeave}
 	onkeydown={onKey}
 	onblur={() => (active = null)}
 >
 	{#if points.length}
-		<svg {width} {height} aria-hidden="true">
+		<svg viewBox="0 0 {width} {height}" {height} aria-hidden="true">
 			{#each scale.ticks as t (t)}
 				<line class="grid" x1={pad.left} x2={pad.left + scale.innerW} y1={scale.y(t)} y2={scale.y(t)} />
 				<text class="tick" x={pad.left - 6} y={scale.y(t)} dy="0.32em" text-anchor="end">{format(t)}</text>
@@ -137,7 +169,6 @@
 				class="tooltip"
 				style:left="{Math.min(Math.max(hover.cx, 60), width - 60)}px"
 				style:top="{Math.max(hover.cy - 8, 0)}px"
-				aria-live="polite"
 			>
 				<strong>{format(hover.value)}</strong>
 				<span>{dateLabel(hover.date)}</span>
@@ -150,10 +181,12 @@
 	.chart {
 		position: relative;
 		width: 100%;
+		min-width: 0;
 		touch-action: pan-y;
 	}
 	svg {
 		display: block;
+		width: 100%;
 		overflow: visible;
 	}
 	.chart:focus {
