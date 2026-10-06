@@ -16,6 +16,9 @@ Stack: SvelteKit, Vercel (Blob), Auth.js med Google, Claude API.
 | `src/lib/server/data/` | Läs/skriv övningar, passmallar (versionerade), sparade pass och profil via lagringsgränssnittet. Allt valideras vid läsning och skrivning |
 | `src/lib/server/import/craft.ts` | Engångsimporten: validera fil → planera mot befintliga data → skriv |
 | `scripts/import.ts` | Kommandoradsskript för importen |
+| `src/lib/session/` | Det pågående passet i webbläsaren: förifyllning, −/+, set, timer, sammanfattning och localStorage |
+| `src/lib/server/data/save-session.ts` | Sparar ett avslutat pass: övningsloggar, ev. ny passversion och sist sessionsposten. Går att köra om utan dubbletter |
+| `src/routes/pass/[slug]` | Aktivt pass och avslut |
 | `src/routes/api/storage/selftest` | `POST` skriver och läser tillbaka `users/<userId>/_selftest.json` för att verifiera Blob-kopplingen |
 
 Använd lagringen från en route så här:
@@ -33,6 +36,8 @@ await storage.writeJson('profile.json', data, { ifMatch: profile?.version });
 1. `npm install`
 2. Kopiera `.env.example` till `.env` och fyll i värdena (se nedan).
 3. `npm run dev` och öppna http://localhost:5173
+
+Utan `BLOB_READ_WRITE_TOKEN` sparar dev-servern data i lokala filer under `.data/` (gitignorerad). I produktion krävs token.
 
 ### Google OAuth-klient
 
@@ -62,6 +67,7 @@ npm run import -- min-export.json --user <användar-ID> --apply  # skriver till 
 - Samma fil kan köras igen utan dubbletter: identiska loggposter och oförändrade pass hoppas över.
 - `weight`-övningar utan `loadClass` får `light` (med en varning).
 - Skriptet läser `BLOB_READ_WRITE_TOKEN` från miljön, `.env.local` eller `.env`.
+- Med `--local` skrivs i stället till `.data/`, den lokala lagringen som dev-servern använder utan Blob-token.
 
 ## Kommandon
 

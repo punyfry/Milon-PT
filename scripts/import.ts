@@ -3,18 +3,20 @@
  *
  *   npm run import -- <fil.json> --user <userId>            # visar planen, skriver inget
  *   npm run import -- <fil.json> --user <userId> --apply    # skriver
+ *   npm run import -- <fil.json> --user <userId> --local --apply  # skriver till .data/ (lokal dev)
  *
  * `userId` är ditt Google-ID, som visas på startsidan när du är inloggad.
  * `BLOB_READ_WRITE_TOKEN` läses från miljön eller från .env / .env.local.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { BlobUserStorage } from '../src/lib/server/storage/blob';
+import { LocalFileUserStorage } from '../src/lib/server/storage/local';
 import { ValidationError } from '../src/lib/model';
 import { applyImport, parseImportFile, planImportFor, summarizePlan } from '../src/lib/server/import/craft';
 
 function usage(message?: string): never {
 	if (message) console.error(message + '\n');
-	console.error('Användning: npm run import -- <fil.json> --user <userId> [--apply]');
+	console.error('Användning: npm run import -- <fil.json> --user <userId> [--local] [--apply]');
 	process.exit(1);
 }
 
@@ -22,9 +24,11 @@ function parseArgs(argv: string[]) {
 	let file: string | undefined;
 	let user: string | undefined;
 	let apply = false;
+	let local = false;
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === '--apply') apply = true;
+		else if (a === '--local') local = true;
 		else if (a === '--user') user = argv[++i];
 		else if (a.startsWith('--user=')) user = a.slice('--user='.length);
 		else if (a === '--help' || a === '-h') usage();
@@ -34,7 +38,7 @@ function parseArgs(argv: string[]) {
 	}
 	if (!file) usage('Ange importfilen.');
 	if (!user) usage('Ange --user med ditt användar-ID (visas på startsidan).');
-	return { file, user, apply };
+	return { file, user, apply, local };
 }
 
 function loadEnv() {
@@ -49,11 +53,11 @@ function todayInStockholm(): string {
 }
 
 async function main() {
-	const { file, user, apply } = parseArgs(process.argv.slice(2));
+	const { file, user, apply, local } = parseArgs(process.argv.slice(2));
 	loadEnv();
 
 	const input = parseImportFile(JSON.parse(readFileSync(file, 'utf8')));
-	const storage = new BlobUserStorage(user, process.env.BLOB_READ_WRITE_TOKEN);
+	const storage = local ? new LocalFileUserStorage(user) : new BlobUserStorage(user, process.env.BLOB_READ_WRITE_TOKEN);
 	const plan = await planImportFor(storage, input, todayInStockholm());
 
 	console.log(summarizePlan(plan));
@@ -70,7 +74,7 @@ async function main() {
 		return;
 	}
 	await applyImport(storage, plan);
-	console.log(`\nKlart: ${writes} filer skrevs till users/${user}/.`);
+	console.log(`\nKlart: ${writes} filer skrevs till ${local ? '.data/' : ''}users/${user}/.`);
 }
 
 main().catch((e) => {

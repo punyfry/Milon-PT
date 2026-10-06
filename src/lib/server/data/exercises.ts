@@ -82,7 +82,10 @@ export function sortLog(log: LogEntry[]): LogEntry[] {
 	return [...log].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-/** Lägger till en loggpost först i loggen (den är nyast). */
+/**
+ * Lägger till en loggpost. Loggen hålls sorterad nyast först; en post med
+ * samma datum som befintliga hamnar före dem.
+ */
 export async function prependLogEntry(
 	storage: UserStorage,
 	exerciseId: string,
@@ -90,6 +93,6 @@ export async function prependLogEntry(
 ): Promise<StoredJson<Exercise>> {
 	const current = await getExercise(storage, exerciseId);
 	if (!current) throw new Error(`Övningen ${exerciseId} finns inte`);
-	const updated = { ...current.data, log: [entry, ...current.data.log] };
+	const updated = { ...current.data, log: sortLog([entry, ...current.data.log]) };
 	return saveExercise(storage, updated, current.version);
 }
