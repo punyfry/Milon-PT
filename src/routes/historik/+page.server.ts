@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		today,
 		week: weekSummary(start, exercises, sessions),
 		weeklyGoal: profile.data.weeklySessionGoal ?? null,
-		prevWeek: addDays(start, -7),
+		prevWeek: isValidDate(addDays(start, -7)) ? addDays(start, -7) : null,
 		nextWeek: start < currentStart ? addDays(start, 7) : null,
 		isCurrentWeek: start === currentStart,
 		exercises: list,

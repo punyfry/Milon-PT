@@ -34,7 +34,11 @@
 
 	<section class="card week" aria-label="Vecka {data.week.week}">
 		<div class="week-head">
-			<a href={`/historik?vecka=${data.prevWeek}`} aria-label="Föregående vecka">←</a>
+			{#if data.prevWeek}
+				<a href={`/historik?vecka=${data.prevWeek}`} aria-label="Föregående vecka">←</a>
+			{:else}
+				<span class="placeholder" aria-hidden="true"></span>
+			{/if}
 			<div>
 				<strong>{data.isCurrentWeek ? 'Denna vecka' : `Vecka ${data.week.week}${weekYear !== thisYear ? `, ${weekYear}` : ''}`}</strong>
 				<span class="meta">{range}</span>

@@ -93,6 +93,11 @@
 			timeZone: 'UTC'
 		});
 
+	/** Första datumetiketten visas bara om den inte krockar med den sista. */
+	const showFirstDate = $derived(
+		xy.length < 2 || textWidth(dateLabel(xy[0].date)) + textWidth(dateLabel(xy.at(-1)!.date)) + 12 <= scale.innerW
+	);
+
 	function nearest(clientX: number, rect: DOMRect) {
 		// Diagrammet skalas till behållarens bredd; räkna om till diagrammets koordinater.
 		const px = ((clientX - rect.left) / (rect.width || 1)) * width;
@@ -149,7 +154,9 @@
 				<line class="grid" x1={pad.left} x2={pad.left + scale.innerW} y1={scale.y(t)} y2={scale.y(t)} />
 				<text class="tick" x={pad.left - 6} y={scale.y(t)} dy="0.32em" text-anchor="end">{format(t)}</text>
 			{/each}
-			<text class="tick" x={xy[0].cx} y={height - 4} text-anchor={xy.length > 1 ? 'start' : 'middle'}>{dateLabel(xy[0].date)}</text>
+			{#if showFirstDate}
+				<text class="tick" x={xy[0].cx} y={height - 4} text-anchor={xy.length > 1 ? 'start' : 'middle'}>{dateLabel(xy[0].date)}</text>
+			{/if}
 			{#if xy.length > 1}
 				<text class="tick" x={last!.cx} y={height - 4} text-anchor="end">{dateLabel(last!.date)}</text>
 				<path class="area" d={area} />
