@@ -82,6 +82,8 @@ describe('hjälparen', () => {
 		expect(system).not.toContain('2026-09-02'); // bara de fem senaste
 		expect(system).toContain('ex_axelpress | Axelpress | weight | light');
 		expect(system).toContain('ge direkt två konkreta alternativ i första svaret, utan motfrågor');
+		expect(system).toContain('Föreslå aldrig en katalogövning som tränar en annan muskelgrupp');
+		expect(system).toContain('Skriv ren text utan markdown');
 		expect(system).toContain('light (hantlar, kabel, isolationsövningar, steg 1,25 kg)');
 		expect(params.messages).toEqual([{ role: 'user', content: 'Är 17,5 för tungt?' }]);
 		// Haiku: inga tanke-, effort- eller fallback-parametrar.
