@@ -67,6 +67,7 @@ npm run import -- min-export.json --user <användar-ID> --apply  # skriver till 
 - Samma fil kan köras igen utan dubbletter: identiska loggposter och oförändrade pass hoppas över.
 - `weight`-övningar utan `loadClass` får `light` (med en varning).
 - Skriptet läser `BLOB_READ_WRITE_TOKEN` från miljön, `.env.local` eller `.env`.
+- Med `--local` skrivs i stället till `.data/`, den lokala lagringen som dev-servern använder utan Blob-token.
 
 ## Kommandon
 
