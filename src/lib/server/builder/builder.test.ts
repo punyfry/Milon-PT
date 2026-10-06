@@ -226,3 +226,39 @@ describe('en tur', () => {
 		expect(haiku).not.toHaveProperty('thinking');
 	});
 });
+
+describe('lagringsfel i ett verktygsanrop', () => {
+	/** Lagring som kastar när en övning ska skrivas, t.ex. ett nätverksfel mot Blob. */
+	class FailingWrites extends MemoryUserStorage {
+		failing = true;
+		override async writeJson(path: string, data: unknown, options?: Parameters<MemoryUserStorage['writeJson']>[2]) {
+			if (this.failing && path.startsWith('exercises/')) throw new Error('nätverksfel');
+			return super.writeJson(path, data, options);
+		}
+	}
+
+	it('ger ett felsvar till modellen så att konversationen förblir giltig', async () => {
+		const storage = new FailingWrites('u1');
+		const conversation = await startConversation(storage, null);
+		const { create, calls } = scripted(
+			message([toolUse('t1', 'propose_exercise', newExercise)], 'tool_use'),
+			message([text('Det gick inte att spara just nu.')], 'end_turn'),
+			message([text('Nu gick det.')], 'end_turn')
+		);
+
+		await runTurn(storage, conversation, 'Lägg till hantelrodd', { model: 'm', today: TODAY, createMessage: create });
+
+		// Varje tool_use följs av ett tool_result, så nästa anrop är giltigt.
+		expect(conversation.messages[2]).toMatchObject({
+			role: 'user',
+			content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true }]
+		});
+		expect(conversation.log).toContainEqual({ role: 'error', text: 'Kunde inte spara: nätverksfel' });
+		expect(conversation.draft).toEqual([]);
+
+		storage.failing = false;
+		await runTurn(storage, conversation, 'Försök igen', { model: 'm', today: TODAY, createMessage: create });
+		expect(calls).toHaveLength(3);
+		expect(conversation.log.at(-1)).toEqual({ role: 'assistant', text: 'Nu gick det.' });
+	});
+});

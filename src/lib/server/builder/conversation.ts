@@ -162,9 +162,19 @@ export async function runTurn(
 
 		const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
 		for (const tool of toolUses) {
-			const outcome = await executeTool(storage, conversation, tool.name, tool.input, options.today);
+			// Varje tool_use måste följas av ett tool_result, annars avvisar API:t
+			// resten av konversationen. Även oväntade fel (t.ex. lagringen) blir
+			// därför ett felsvar till modellen.
+			let outcome;
+			try {
+				outcome = await executeTool(storage, conversation, tool.name, tool.input, options.today);
+			} catch (e) {
+				const reason = e instanceof Error ? e.message : String(e);
+				outcome = { isError: true, content: `Kunde inte spara: ${reason}. Be användaren försöka igen.` };
+				conversation.log.push({ role: 'error', text: `Kunde inte spara: ${reason}` });
+			}
 			results.push({ type: 'tool_result', tool_use_id: tool.id, content: outcome.content, ...(outcome.isError ? { is_error: true } : {}) });
-			if (outcome.event) conversation.log.push({ role: 'event', text: outcome.event });
+			if ('event' in outcome && outcome.event) conversation.log.push({ role: 'event', text: outcome.event });
 		}
 		conversation.messages.push({ role: 'user', content: results });
 	}

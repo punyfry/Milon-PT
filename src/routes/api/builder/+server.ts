@@ -10,7 +10,7 @@ import {
 	startConversation,
 	type BuilderConversation
 } from '$lib/server/builder/conversation';
-import { storageFor } from '$lib/server/storage';
+import { storageFor, StorageConflictError } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { RequestHandler } from './$types';
 
@@ -56,7 +56,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		apiError = e;
 	}
 	// Spara även efter fel, så att övningar och pass som hann skapas finns kvar i loggen.
-	await saveConversation(storage, conversation, version);
+	try {
+		await saveConversation(storage, conversation, version);
+	} catch (e) {
+		if (e instanceof StorageConflictError) error(409, 'Konversationen ändrades i ett annat fönster. Ladda om sidan.');
+		throw e;
+	}
 
 	if (apiError) {
 		console.error('Pass-byggaren:', apiError);
