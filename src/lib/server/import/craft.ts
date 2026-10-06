@@ -8,8 +8,12 @@
  * 3. `applyImport` skriver planen via lagringsgränssnittet.
  *
  * Övningsnamn matchas mot befintliga övningar (skiftläges- och
- * blankstegsokänsligt) innan nya skapas. Importen går att köra om med samma
- * fil: identiska loggposter och oförändrade pass hoppas över.
+ * blankstegsokänsligt) innan nya skapas. Utöver övningar och pass kan filen
+ * ha en profil (mål, regler, kcal per passtyp), anteckningar på loggposter,
+ * arkiverade övningar och genomförda pass (`sessions`), som blir
+ * sessionsposter med loggposterna samma dag kopplade. Importen går att köra
+ * om med samma fil: identiska loggposter, pass och sessioner hoppas över,
+ * och befintliga värden i profilen skrivs aldrig över.
  */
 import {
 	Issues,
@@ -19,9 +23,11 @@ import {
 	isLoadClass,
 	isObject,
 	normalizeName,
+	sessionIdFor,
 	slugify,
 	targetMatchesType,
 	uniqueId,
+	validateKcalEstimates,
 	validateLogEntry,
 	validateTarget,
 	workoutFileName,
@@ -29,11 +35,16 @@ import {
 	type ExerciseType,
 	type LoadClass,
 	type LogEntry,
+	type Profile,
+	type SessionRecord,
 	type Target,
 	type WorkoutExercise,
 	type WorkoutTemplate
 } from '../../model';
+import { stockholmOffset } from '../../time';
 import { listExercises, saveExercise, sortLog } from '../data/exercises';
+import { getProfile, saveProfile } from '../data/profile';
+import { createSession, listSessions } from '../data/sessions';
 import { listLatestWorkouts } from '../data/workouts';
 import type { StoredJson, UserStorage } from '../storage/types';
 
@@ -44,7 +55,22 @@ export interface ImportExercise {
 	type: ExerciseType;
 	loadClass?: LoadClass;
 	instruction: string;
+	archived: boolean;
 	log: LogEntry[];
+}
+
+export interface ImportProfile {
+	goals?: string;
+	rules?: string[];
+	kcalEstimates?: Profile['kcalEstimates'];
+	weeklySessionGoal?: number;
+}
+
+/** Ett genomfört pass ur Craft: datum, passets namn och ev. kcal. */
+export interface ImportSession {
+	date: string;
+	workout: string;
+	kcalEstimate?: number;
 }
 
 export interface ImportWorkout {
@@ -53,8 +79,10 @@ export interface ImportWorkout {
 }
 
 export interface ImportFile {
+	profile?: ImportProfile;
 	exercises: ImportExercise[];
 	workouts: ImportWorkout[];
+	sessions: ImportSession[];
 }
 
 export function parseImportFile(raw: unknown): ImportFile {
@@ -87,8 +115,10 @@ export function parseImportFile(raw: unknown): ImportFile {
 				type: e.type,
 				...(e.type === 'weight' && isLoadClass(e.loadClass) ? { loadClass: e.loadClass } : {}),
 				instruction: typeof e.instruction === 'string' ? e.instruction.trim() : '',
+				archived: e.archived === true,
 				log: log.filter((l) => l !== null)
 			});
+			if (e.archived !== undefined && typeof e.archived !== 'boolean') issues.add(`${p}.archived`, 'måste vara true eller false');
 		});
 
 	const workouts: ImportWorkout[] = [];
@@ -120,8 +150,60 @@ export function parseImportFile(raw: unknown): ImportFile {
 			workouts.push({ name, exercises: items });
 		});
 
+	const profile = raw.profile === undefined ? undefined : parseProfile(raw.profile, issues);
+
+	const sessions: ImportSession[] = [];
+	const rawSessions = raw.sessions ?? [];
+	if (!Array.isArray(rawSessions)) issues.add('sessions', 'måste vara en lista');
+	else
+		rawSessions.forEach((s, i) => {
+			const p = `sessions[${i}]`;
+			if (!isObject(s)) return issues.add(p, 'måste vara ett objekt');
+			const date = typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date) && !Number.isNaN(Date.parse(s.date)) ? s.date : null;
+			if (!date) issues.add(`${p}.date`, 'måste vara ett datum YYYY-MM-DD');
+			const workout = typeof s.workout === 'string' ? s.workout.trim() : '';
+			if (!workout) issues.add(`${p}.workout`, 'måste vara passets namn');
+			const kcal = s.kcalEstimate;
+			if (kcal !== undefined && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000))
+				issues.add(`${p}.kcalEstimate`, 'måste vara ett tal mellan 0 och 5000');
+			if (date && workout) sessions.push({ date, workout, ...(typeof kcal === 'number' ? { kcalEstimate: Math.round(kcal) } : {}) });
+		});
+
 	if (!issues.ok) throw new ValidationError('importfil', issues.list);
-	return { exercises, workouts };
+	return { ...(profile ? { profile } : {}), exercises, workouts, sessions };
+}
+
+/** Profil ur Craft: goals som text eller lista, rules, kcalEstimates och veckomål. */
+function parseProfile(v: unknown, issues: Issues): ImportProfile | undefined {
+	if (!isObject(v)) {
+		issues.add('profile', 'måste vara ett objekt');
+		return undefined;
+	}
+	const out: ImportProfile = {};
+	if (typeof v.goals === 'string') {
+		if (v.goals.trim()) out.goals = v.goals.trim();
+	} else if (Array.isArray(v.goals)) {
+		if (!v.goals.every((g) => typeof g === 'string')) issues.add('profile.goals', 'måste vara text eller en lista med text');
+		else {
+			const goals = (v.goals as string[]).map((g) => g.trim()).filter(Boolean);
+			if (goals.length) out.goals = goals.map((g) => `- ${g}`).join('\n');
+		}
+	} else if (v.goals !== undefined) issues.add('profile.goals', 'måste vara text eller en lista med text');
+
+	if (v.rules !== undefined) {
+		if (!Array.isArray(v.rules) || !v.rules.every((r) => typeof r === 'string')) issues.add('profile.rules', 'måste vara en lista med text');
+		else out.rules = (v.rules as string[]).map((r) => r.trim()).filter(Boolean);
+	}
+	if (v.kcalEstimates !== undefined) {
+		const k = validateKcalEstimates(v.kcalEstimates, issues, 'profile.kcalEstimates');
+		if (k) out.kcalEstimates = k;
+	}
+	if (v.weeklySessionGoal !== undefined) {
+		const g = v.weeklySessionGoal;
+		if (typeof g !== 'number' || !Number.isInteger(g) || g < 0 || g > 14) issues.add('profile.weeklySessionGoal', 'måste vara ett heltal 0-14');
+		else if (g > 0) out.weeklySessionGoal = g;
+	}
+	return out;
 }
 
 // --- planering ----------------------------------------------------------
@@ -135,10 +217,26 @@ export type WorkoutPlan =
 	| { action: 'create' | 'new-version'; workout: WorkoutTemplate }
 	| { action: 'unchanged'; workout: WorkoutTemplate };
 
+export type ProfilePlan =
+	| { action: 'create' | 'update'; profile: Profile; version?: string; changes: string[] }
+	| { action: 'unchanged'; profile: Profile };
+
+export type SessionPlan = { action: 'create' | 'unchanged'; session: SessionRecord };
+
 export interface ImportPlan {
+	profile: ProfilePlan;
 	exercises: ExercisePlan[];
 	workouts: WorkoutPlan[];
+	sessions: SessionPlan[];
 	warnings: string[];
+}
+
+/** Det som redan finns hos användaren. */
+export interface ExistingData {
+	exercises: StoredJson<Exercise>[];
+	latestWorkouts: WorkoutTemplate[];
+	sessions: SessionRecord[];
+	profile: { data: Profile; version?: string };
 }
 
 function sameSets(a: LogEntry, b: LogEntry): boolean {
@@ -151,32 +249,51 @@ function sameWorkoutContent(a: Pick<WorkoutTemplate, 'name' | 'exercises'>, b: P
 
 export const IMPORT_CHANGE_NOTE = 'Import från Craft';
 
+/** Importerade pass saknar klockslag; de läggs mitt på dagen i svensk tid. */
+export function importedStartTime(date: string): string {
+	return `${date}T12:00:00${stockholmOffset(date)}`;
+}
+
 /**
  * Räknar ut vad importen skulle göra mot befintliga data. Skriver ingenting.
  * `today` (YYYY-MM-DD) blir `createdAt` på nya passversioner.
  */
-export function planImport(
-	input: ImportFile,
-	existingExercises: StoredJson<Exercise>[],
-	existingLatestWorkouts: WorkoutTemplate[],
-	today: string
-): ImportPlan {
+export function planImport(input: ImportFile, existing: ExistingData, today: string): ImportPlan {
 	const warnings: string[] = [];
 	const errors: string[] = [];
 
+	// 1. Sessions-id per datum, så att loggposterna kan kopplas till sina pass.
+	const takenSessionIds = new Set(existing.sessions.map((s) => s.id));
+	const sessionIdByDate = new Map<string, string>();
+	const sessionDrafts: { id: string; slug: string; startedAt: string; imp: ImportSession; existing?: SessionRecord }[] = [];
+	for (const imp of [...input.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
+		const slug = slugify(imp.workout);
+		const startedAt = importedStartTime(imp.date);
+		const same = existing.sessions.find((s) => s.startedAt === startedAt && s.workoutSlug === slug);
+		const id = same?.id ?? sessionIdFor(imp.date, takenSessionIds);
+		takenSessionIds.add(id);
+		if (sessionIdByDate.has(imp.date)) warnings.push(`Flera pass ${imp.date}: loggposterna kopplas till det första`);
+		else sessionIdByDate.set(imp.date, id);
+		sessionDrafts.push({ id, slug, startedAt, imp, ...(same ? { existing: same } : {}) });
+	}
+	const withSession = (e: LogEntry): LogEntry =>
+		!e.sessionId && sessionIdByDate.has(e.date) ? { ...e, sessionId: sessionIdByDate.get(e.date)! } : e;
+
+	// 2. Övningar.
 	const byName = new Map<string, Exercise>();
-	for (const { data } of existingExercises) {
+	for (const { data } of existing.exercises) {
 		const key = normalizeName(data.name);
 		if (byName.has(key)) warnings.push(`Flera befintliga övningar heter "${data.name}", matchar mot ${byName.get(key)!.id}`);
 		else byName.set(key, data);
 	}
-	const versions = new Map(existingExercises.map((e) => [e.data.id, e.version]));
-	const takenIds = new Set(existingExercises.map((e) => e.data.id));
+	const versions = new Map(existing.exercises.map((e) => [e.data.id, e.version]));
+	const takenIds = new Set(existing.exercises.map((e) => e.data.id));
 
 	const exercisePlans: ExercisePlan[] = [];
 	for (const imp of input.exercises) {
-		const existing = byName.get(normalizeName(imp.name));
-		if (!existing) {
+		const current = byName.get(normalizeName(imp.name));
+		const entries = dedupeLog(imp.log.map(withSession));
+		if (!current) {
 			let loadClass = imp.loadClass;
 			if (imp.type === 'weight' && !loadClass) {
 				loadClass = 'light';
@@ -190,42 +307,66 @@ export function planImport(
 				type: imp.type,
 				...(loadClass ? { loadClass } : {}),
 				instruction: imp.instruction,
-				archived: false,
-				log: sortLog(dedupeLog(imp.log))
+				archived: imp.archived,
+				log: sortLog(entries)
 			};
 			byName.set(normalizeName(imp.name), exercise);
 			exercisePlans.push({ action: 'create', exercise, addedLogEntries: exercise.log.length });
 			continue;
 		}
 
-		if (existing.type !== imp.type) {
-			errors.push(`"${imp.name}" är ${imp.type} i filen men ${existing.type} i appen (${existing.id})`);
+		if (current.type !== imp.type) {
+			errors.push(`"${imp.name}" är ${imp.type} i filen men ${current.type} i appen (${current.id})`);
 			continue;
 		}
 		const changes: string[] = [];
-		const updated: Exercise = { ...existing };
-		if (!existing.instruction && imp.instruction) {
+		const updated: Exercise = { ...current, log: current.log.map((e) => ({ ...e })) };
+		if (!current.instruction && imp.instruction) {
 			updated.instruction = imp.instruction;
 			changes.push('instruktion');
 		}
-		if (existing.type === 'weight' && !existing.loadClass && imp.loadClass) {
+		if (current.type === 'weight' && !current.loadClass && imp.loadClass) {
 			updated.loadClass = imp.loadClass;
 			changes.push('loadClass');
 		}
-		const newEntries = dedupeLog(imp.log).filter((e) => !existing.log.some((x) => sameSets(x, e)));
-		if (newEntries.length) {
-			updated.log = sortLog([...existing.log, ...newEntries]);
-			changes.push(`${newEntries.length} loggposter`);
+		if (imp.archived && !current.archived) {
+			updated.archived = true;
+			changes.push('arkiverad');
 		}
+		// Nya poster läggs till; befintliga identiska poster får anteckning och passkoppling om de saknas.
+		let added = 0;
+		let enriched = 0;
+		for (const e of entries) {
+			const match = updated.log.find((x) => sameSets(x, e));
+			if (!match) {
+				updated.log.push(e);
+				added++;
+				continue;
+			}
+			let touched = false;
+			if (!match.note && e.note) {
+				match.note = e.note;
+				touched = true;
+			}
+			if (!match.sessionId && e.sessionId) {
+				match.sessionId = e.sessionId;
+				touched = true;
+			}
+			if (touched) enriched++;
+		}
+		if (added || enriched) updated.log = sortLog(updated.log);
+		if (added) changes.push(`${added} loggposter`);
+		if (enriched) changes.push(`${enriched} loggposter kompletterade`);
 		byName.set(normalizeName(imp.name), updated);
 		exercisePlans.push(
 			changes.length
-				? { action: 'update', exercise: updated, version: versions.get(existing.id)!, addedLogEntries: newEntries.length, changes }
-				: { action: 'unchanged', exercise: existing }
+				? { action: 'update', exercise: updated, version: versions.get(current.id)!, addedLogEntries: added, changes }
+				: { action: 'unchanged', exercise: current }
 		);
 	}
 
-	const latestBySlug = new Map(existingLatestWorkouts.map((w) => [w.slug, w]));
+	// 3. Pass.
+	const latestBySlug = new Map(existing.latestWorkouts.map((w) => [w.slug, w]));
 	const workoutPlans: WorkoutPlan[] = [];
 	for (const imp of input.workouts) {
 		const slug = slugify(imp.name);
@@ -259,8 +400,73 @@ export function planImport(
 		workoutPlans.push({ action: latest ? 'new-version' : 'create', workout });
 	}
 
+	// 4. Sparade pass.
+	const versionBySlug = new Map(existing.latestWorkouts.map((w) => [w.slug, w.version]));
+	for (const p of workoutPlans) versionBySlug.set(p.workout.slug, p.workout.version);
+	const plannedExercises = exercisePlans.map((p) => p.exercise);
+	const sessionPlans: SessionPlan[] = [];
+	for (const d of sessionDrafts) {
+		if (d.existing) {
+			sessionPlans.push({ action: 'unchanged', session: d.existing });
+			continue;
+		}
+		const version = versionBySlug.get(d.slug);
+		if (!version) {
+			errors.push(`Passet ${d.imp.date} ("${d.imp.workout}") finns varken i filen eller i appen`);
+			continue;
+		}
+		const exerciseIds = plannedExercises.filter((e) => e.log.some((l) => l.sessionId === d.id)).map((e) => e.id);
+		if (!exerciseIds.length) warnings.push(`Passet ${d.imp.date} ("${d.imp.workout}") har inga loggade övningar`);
+		sessionPlans.push({
+			action: 'create',
+			session: {
+				id: d.id,
+				workoutSlug: d.slug,
+				workoutVersion: version,
+				startedAt: d.startedAt,
+				endedAt: d.startedAt,
+				exerciseIds,
+				deviations: [],
+				...(d.imp.kcalEstimate !== undefined ? { kcalEstimate: d.imp.kcalEstimate } : {})
+			}
+		});
+	}
+
+	// 5. Profil: fyll bara i det som saknas; regler läggs till.
+	const current = existing.profile.data;
+	const next: Profile = { ...current };
+	const profileChanges: string[] = [];
+	const imp = input.profile;
+	if (imp?.goals && !current.goals?.trim()) {
+		next.goals = imp.goals;
+		profileChanges.push('mål');
+	}
+	const newRules = (imp?.rules ?? []).filter((r) => !(current.rules ?? []).includes(r));
+	if (newRules.length) {
+		next.rules = [...(current.rules ?? []), ...newRules];
+		profileChanges.push(`${newRules.length} regler`);
+	}
+	for (const [type, range] of Object.entries(imp?.kcalEstimates ?? {})) {
+		if (range && !current.kcalEstimates?.[type as keyof NonNullable<Profile['kcalEstimates']>]) {
+			next.kcalEstimates = { ...next.kcalEstimates, [type]: range };
+			profileChanges.push(`kcal för ${type === 'hiit' ? 'HIIT' : 'styrka'}`);
+		}
+	}
+	if (imp?.weeklySessionGoal && !current.weeklySessionGoal) {
+		next.weeklySessionGoal = imp.weeklySessionGoal;
+		profileChanges.push('veckomål');
+	}
+	const profilePlan: ProfilePlan = profileChanges.length
+		? {
+				action: existing.profile.version ? 'update' : 'create',
+				profile: next,
+				...(existing.profile.version ? { version: existing.profile.version } : {}),
+				changes: profileChanges
+			}
+		: { action: 'unchanged', profile: current };
+
 	if (errors.length) throw new ValidationError('import', errors);
-	return { exercises: exercisePlans, workouts: workoutPlans, warnings };
+	return { profile: profilePlan, exercises: exercisePlans, workouts: workoutPlans, sessions: sessionPlans, warnings };
 }
 
 /** Tar bort identiska dubbletter inom filen (samma datum och samma set). */
@@ -277,6 +483,7 @@ function dedupeLog(log: LogEntry[]): LogEntry[] {
  * sedan planen räknades ut.
  */
 export async function applyImport(storage: UserStorage, plan: ImportPlan): Promise<void> {
+	if (plan.profile.action !== 'unchanged') await saveProfile(storage, plan.profile.profile, plan.profile.version);
 	for (const p of plan.exercises) {
 		if (p.action === 'create') {
 			await storage.writeJson(`exercises/${p.exercise.id}.json`, p.exercise, { createOnly: true });
@@ -290,16 +497,37 @@ export async function applyImport(storage: UserStorage, plan: ImportPlan): Promi
 			createOnly: true
 		});
 	}
+	// Sessionsposterna sist: de pekar på övningar och pass som nu finns.
+	for (const p of plan.sessions) {
+		if (p.action === 'create') await createSession(storage, p.session);
+	}
+}
+
+/** Antal filer som skulle skrivas. */
+export function countWrites(plan: ImportPlan): number {
+	return (
+		(plan.profile.action === 'unchanged' ? 0 : 1) +
+		plan.exercises.filter((p) => p.action !== 'unchanged').length +
+		plan.workouts.filter((p) => p.action !== 'unchanged').length +
+		plan.sessions.filter((p) => p.action === 'create').length
+	);
 }
 
 /** Läser befintliga data och räknar ut planen. */
 export async function planImportFor(storage: UserStorage, input: ImportFile, today: string): Promise<ImportPlan> {
-	const [exercises, workouts] = await Promise.all([listExercises(storage), listLatestWorkouts(storage)]);
-	return planImport(input, exercises, workouts, today);
+	const [exercises, latestWorkouts, sessions, profile] = await Promise.all([
+		listExercises(storage),
+		listLatestWorkouts(storage),
+		listSessions(storage),
+		getProfile(storage)
+	]);
+	return planImport(input, { exercises, latestWorkouts, sessions, profile }, today);
 }
 
 export function summarizePlan(plan: ImportPlan): string {
 	const lines: string[] = [];
+	if (plan.profile.action === 'unchanged') lines.push('= profil oförändrad');
+	else lines.push(`${plan.profile.action === 'create' ? '+' : '~'} profil: ${plan.profile.changes.join(', ')}`);
 	for (const p of plan.exercises) {
 		const e = p.exercise;
 		if (p.action === 'create') lines.push(`+ övning ${e.id} "${e.name}" (${e.type}, ${p.addedLogEntries} loggposter)`);
@@ -312,6 +540,15 @@ export function summarizePlan(plan: ImportPlan): string {
 		if (p.action === 'create') lines.push(`+ pass ${file} "${w.name}" (${w.exercises.length} övningar)`);
 		else if (p.action === 'new-version') lines.push(`~ pass ${file} "${w.name}": ny version`);
 		else lines.push(`= pass ${file} "${w.name}" oförändrat`);
+	}
+	for (const p of plan.sessions) {
+		const se = p.session;
+		const kcal = se.kcalEstimate !== undefined ? `, ${se.kcalEstimate} kcal` : '';
+		lines.push(
+			p.action === 'create'
+				? `+ genomfört pass ${se.startedAt.slice(0, 10)} ${se.workoutSlug} (${se.id}, ${se.exerciseIds.length} övningar${kcal})`
+				: `= genomfört pass ${se.startedAt.slice(0, 10)} redan sparat (${se.id})`
+		);
 	}
 	for (const w of plan.warnings) lines.push(`! ${w}`);
 	return lines.join('\n');

@@ -31,6 +31,8 @@ export interface LogEntry {
 	/** YYYY-MM-DD */
 	date: string;
 	sets: ExerciseSet[];
+	/** Fri anteckning, t.ex. "Nästa gång: prova 25 kg". */
+	note?: string;
 }
 
 export interface Exercise {
@@ -82,6 +84,12 @@ export interface SessionRecord {
 	kcalEstimate?: number;
 }
 
+export type KcalWorkoutType = 'strength' | 'hiit';
+export interface KcalRange {
+	min: number;
+	max: number;
+}
+
 export interface Profile {
 	/** Fritext om mål. */
 	goals?: string;
@@ -89,8 +97,10 @@ export interface Profile {
 	weeklySessionGoal?: number;
 	/** Träningsregler som coachen ska känna till. */
 	rules?: string[];
-	/** kcal-uppskattning per pass, nyckel = workout-slug. */
+	/** kcal-uppskattning per pass, nyckel = workout-slug. Går före kcalEstimates. */
 	kcalPerWorkout?: Record<string, number>;
+	/** kcal-uppskattning per passtyp (SPEC.md: styrka ca 250–350, HIIT ca 300–450). */
+	kcalEstimates?: Partial<Record<KcalWorkoutType, KcalRange>>;
 	/** Övrig kontext till coachen. */
 	coachContext?: string;
 }

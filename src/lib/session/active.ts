@@ -11,6 +11,7 @@ import {
 	type ExerciseType,
 	type LoadClass,
 	type LogEntry,
+	type Profile,
 	type Target,
 	type WorkoutTemplate
 } from '$lib/model';
@@ -256,6 +257,18 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 
 /** Förslag enligt SPEC.md: styrka ca 250–350 kcal. Profilens värde för passet går före. */
 export const DEFAULT_KCAL = 300;
+
+/**
+ * kcal-förslag vid avslut: profilens värde för just det här passet, annars
+ * mitten av profilens intervall för passtypen (HIIT om namnet säger det,
+ * annars styrka), annars DEFAULT_KCAL.
+ */
+export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 'slug' | 'name'>): number {
+	const perWorkout = profile.kcalPerWorkout?.[workout.slug];
+	if (perWorkout !== undefined) return perWorkout;
+	const range = profile.kcalEstimates?.[/hiit/i.test(workout.name) ? 'hiit' : 'strength'];
+	return range ? Math.round((range.min + range.max) / 2 / 10) * 10 : DEFAULT_KCAL;
+}
 
 // --- byte av övning -----------------------------------------------------
 

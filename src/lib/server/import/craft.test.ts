@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '../../model';
-import { createExercise, getExercise, listLatestWorkouts, saveWorkoutVersion } from '../data';
+import { createExercise, createSession, getExercise, getProfile, listLatestWorkouts, listSessions, saveProfile, saveWorkoutVersion } from '../data';
+import { kcalSuggestion } from '../../session/active';
 import { MemoryUserStorage } from '../storage/memory';
-import { applyImport, parseImportFile, planImportFor } from './craft';
+import { applyImport, countWrites, parseImportFile, planImportFor } from './craft';
 
 const example = JSON.parse(readFileSync('scripts/import-example.json', 'utf8'));
 const TODAY = '2026-10-06';
@@ -139,5 +140,127 @@ describe('import från Craft', () => {
 			'Passet "Pass A": målet för "Plankan" ska anges i seconds (time)'
 		]);
 		expect((await storage.list()).length).toBe(1);
+	});
+});
+
+describe('import med profil, anteckningar och pass', () => {
+	const full = {
+		profile: {
+			goals: ['Klara en pull-up', 'Stå på händerna'],
+			rules: ['Tränar kvällar'],
+			kcalEstimates: { strength: { min: 250, max: 350 }, hiit: { min: 300, max: 450 } }
+		},
+		exercises: [
+			{
+				name: 'Marklyft',
+				type: 'weight',
+				loadClass: 'heavy',
+				instruction: '',
+				log: [
+					{ date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' },
+					{ date: '2026-09-21', sets: [{ weight: 25, reps: 10 }] }
+				]
+			},
+			{
+				name: 'Planka',
+				type: 'time',
+				instruction: '',
+				log: [{ date: '2026-09-29', sets: [{ seconds: 30 }] }]
+			},
+			{ name: 'Wheel out', type: 'bodyweight', archived: true, instruction: '', log: [{ date: '2026-09-27', sets: [{ reps: 8 }] }] }
+		],
+		workouts: [
+			{ name: 'Pass A', exercises: [{ name: 'Marklyft', sets: 3, target: { reps: 10 } }, { name: 'Planka', sets: 3, target: { seconds: 30 } }] },
+			{ name: 'Pass C – HIIT', exercises: [{ name: 'Planka', sets: 4, target: { seconds: 40 } }] }
+		],
+		sessions: [
+			{ date: '2026-09-29', workout: 'Pass A', kcalEstimate: 300 },
+			{ date: '2026-09-21', workout: 'Pass A' }
+		]
+	};
+
+	it('skapar profil, sessioner och kopplar loggposterna till sina pass', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const plan = await runImport(storage, full);
+		expect(plan.profile).toMatchObject({ action: 'create', changes: ['mål', '1 regler', 'kcal för styrka', 'kcal för HIIT'] });
+
+		const profile = (await getProfile(storage)).data;
+		expect(profile.goals).toBe('- Klara en pull-up\n- Stå på händerna');
+		expect(profile.kcalEstimates?.hiit).toEqual({ min: 300, max: 450 });
+
+		const sessions = await listSessions(storage);
+		expect(sessions.map((s) => [s.id, s.workoutSlug, s.workoutVersion, s.startedAt, s.exerciseIds, s.kcalEstimate])).toEqual([
+			['s_20260929', 'pass-a', 1, '2026-09-29T12:00:00+02:00', ['ex_marklyft', 'ex_planka'], 300],
+			['s_20260921', 'pass-a', 1, '2026-09-21T12:00:00+02:00', ['ex_marklyft'], undefined]
+		]);
+
+		const marklyft = (await getExercise(storage, 'ex_marklyft'))!.data;
+		expect(marklyft.log[0]).toEqual({ sessionId: 's_20260929', date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' });
+		expect(marklyft.log[1].sessionId).toBe('s_20260921');
+		// Dag utan pass i filen: ingen koppling.
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ archived: true, log: [{ date: '2026-09-27' }] });
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data.log[0].sessionId).toBeUndefined();
+	});
+
+	it('är idempotent och skriver aldrig över befintlig profil', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await saveProfile(storage, { goals: 'Mina egna mål', rules: ['Tränar kvällar'], weeklySessionGoal: 3 });
+		const first = await runImport(storage, full);
+		expect(first.profile).toMatchObject({ action: 'update', changes: ['kcal för styrka', 'kcal för HIIT'] });
+		expect((await getProfile(storage)).data).toMatchObject({ goals: 'Mina egna mål', rules: ['Tränar kvällar'], weeklySessionGoal: 3 });
+
+		const second = await runImport(storage, full);
+		expect(countWrites(second)).toBe(0);
+		expect(second.sessions.every((s) => s.action === 'unchanged')).toBe(true);
+		expect((await listSessions(storage)).length).toBe(2);
+	});
+
+	it('kompletterar befintliga loggposter med anteckning och passkoppling', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await runImport(storage, { exercises: [{ ...full.exercises[0], log: full.exercises[0].log.map((e) => ({ date: e.date, sets: e.sets })) }] });
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBeUndefined();
+
+		const plan = await runImport(storage, full);
+		expect(plan.exercises[0]).toMatchObject({ action: 'update', addedLogEntries: 0, changes: ['2 loggposter kompletterade'] });
+		const log = (await getExercise(storage, 'ex_marklyft'))!.data.log;
+		expect(log).toHaveLength(2);
+		expect(log[0]).toMatchObject({ note: 'Marginal kvar', sessionId: 's_20260929' });
+	});
+
+	it('ger andra passet samma dag ett eget id och undviker krock med befintliga pass', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await runImport(storage, { ...full, sessions: [] });
+		await createSession(storage, {
+			id: 's_20260929',
+			workoutSlug: 'pass-a',
+			workoutVersion: 1,
+			startedAt: '2026-09-29T18:00:00+02:00',
+			endedAt: '2026-09-29T19:00:00+02:00',
+			exerciseIds: [],
+			deviations: []
+		});
+		const plan = await runImport(storage, full);
+		expect(plan.sessions.map((s) => s.session.id)).toEqual(['s_20260921', 's_20260929_2']);
+	});
+
+	it('stoppar pass som pekar på okänt pass och felaktig profil', () => {
+		expect(() => parseImportFile({ profile: { goals: [1], kcalEstimates: { yoga: { min: 1, max: 2 } } } })).toThrow(
+			/profile\.goals[\s\S]*profile\.kcalEstimates\.yoga/
+		);
+		expect(() => parseImportFile({ sessions: [{ date: '29/9', workout: '' }] })).toThrow(/sessions\[0\]\.date[\s\S]*sessions\[0\]\.workout/);
+	});
+
+	it('avvisar en session för ett pass som inte finns', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const input = parseImportFile({ sessions: [{ date: '2026-09-29', workout: 'Pass X' }] });
+		await expect(planImportFor(storage, input, TODAY)).rejects.toThrow(/Pass X/);
+	});
+
+	it('föreslår kcal per pass, per passtyp och annars standard', () => {
+		const profile = { kcalEstimates: { strength: { min: 250, max: 350 }, hiit: { min: 300, max: 450 } }, kcalPerWorkout: { 'pass-b': 280 } };
+		expect(kcalSuggestion(profile, { slug: 'pass-b', name: 'Pass B' })).toBe(280);
+		expect(kcalSuggestion(profile, { slug: 'pass-a', name: 'Pass A' })).toBe(300);
+		expect(kcalSuggestion(profile, { slug: 'pass-c-hiit', name: 'Pass C – HIIT' })).toBe(380);
+		expect(kcalSuggestion({}, { slug: 'pass-a', name: 'Pass A' })).toBe(300);
 	});
 });

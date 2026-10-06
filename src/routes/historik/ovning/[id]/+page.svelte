@@ -67,7 +67,10 @@
 					{#each data.entries as e, i (i)}
 						<tr>
 							<td>{date(e.date)}</td>
-							<td>{setsText(e.sets)}</td>
+							<td>
+								{setsText(e.sets)}
+								{#if e.note}<span class="note">{e.note}</span>{/if}
+							</td>
 							<td class="num">
 								{e.best === null ? '–' : fmt(e.best)}
 								{#if e.record}<span class="record">★ Rekord</span>{/if}
@@ -151,6 +154,12 @@
 		text-align: right;
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
+	}
+	.note {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 0.8rem;
+		color: var(--muted);
 	}
 	.record {
 		display: block;

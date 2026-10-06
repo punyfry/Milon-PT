@@ -282,6 +282,9 @@
 						onclose={() => (helpState.open = false)}
 					/>
 				{/if}
+				{#if info?.lastEntry?.note}
+					<p class="last-note"><span>Förra gången:</span> {info.lastEntry.note}</p>
+				{/if}
 				{#if info?.instruction}
 					<details>
 						<summary>Instruktion</summary>
@@ -421,6 +424,14 @@
 		color: var(--text);
 		font-size: 0.9rem;
 		cursor: pointer;
+	}
+	.last-note {
+		margin: 0 0.25rem 0.5rem;
+		font-size: 0.9rem;
+		white-space: pre-line;
+	}
+	.last-note span {
+		color: var(--muted);
 	}
 	details {
 		margin: 0 0.25rem 0.5rem;
