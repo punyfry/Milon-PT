@@ -32,5 +32,7 @@ def icon(rounded: bool, scale: float):
 icon(True, 1.0).resize((512, 512), Image.LANCZOS).save(f'{OUT}/icon-512.png')
 icon(True, 1.0).resize((192, 192), Image.LANCZOS).save(f'{OUT}/icon-192.png')
 icon(False, 0.82).resize((512, 512), Image.LANCZOS).save(f'{OUT}/maskable-512.png')
+# Favikon: större hantel så den syns i en flik vid 16 px. favicon.ico för verktyg som frågar efter den direkt.
+icon(True, 1.3).save(f'{OUT}/../favicon.ico', sizes=[(16, 16), (32, 32), (48, 48)])
 # iOS rundar själv och vill inte ha genomskinlighet.
 icon(False, 0.9).convert('RGB').resize((180, 180), Image.LANCZOS).save(f'{OUT}/apple-touch-icon.png')
