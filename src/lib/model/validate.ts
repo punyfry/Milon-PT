@@ -1,0 +1,344 @@
+import type {
+	Deviation,
+	Exercise,
+	ExerciseSet,
+	ExerciseType,
+	LoadClass,
+	LogEntry,
+	Profile,
+	SessionRecord,
+	Target,
+	WorkoutExercise,
+	WorkoutTemplate
+} from './types';
+
+/**
+ * Handskrivna validerare för datamodellen. Varje validerare samlar fel med
+ * sökväg (t.ex. `exercises[2].log[0].sets[1].reps`) i stället för att stanna
+ * vid det första, så importfilen kan rättas i ett svep.
+ */
+export class Issues {
+	readonly list: string[] = [];
+	add(path: string, message: string) {
+		this.list.push(path ? `${path}: ${message}` : message);
+	}
+	get ok() {
+		return this.list.length === 0;
+	}
+}
+
+export class ValidationError extends Error {
+	constructor(
+		readonly what: string,
+		readonly issues: string[]
+	) {
+		super(`Ogiltig ${what}:\n  - ${issues.join('\n  - ')}`);
+		this.name = 'ValidationError';
+	}
+}
+
+/** Kör en validerare och kastar `ValidationError` om något är fel. */
+export function assertValid<T>(
+	what: string,
+	value: unknown,
+	validator: (v: unknown, issues: Issues, path: string) => T | null
+): T {
+	const issues = new Issues();
+	const result = validator(value, issues, '');
+	if (!issues.ok || result === null) throw new ValidationError(what, issues.list);
+	return result;
+}
+
+// --- primitiver ---------------------------------------------------------
+
+type Obj = Record<string, unknown>;
+
+export function isObject(v: unknown): v is Obj {
+	return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function join(path: string, key: string | number): string {
+	return typeof key === 'number' ? `${path}[${key}]` : path ? `${path}.${key}` : key;
+}
+
+function str(o: Obj, key: string, issues: Issues, path: string, opts: { optional?: boolean; allowEmpty?: boolean } = {}): string | undefined {
+	const v = o[key];
+	if (v === undefined && opts.optional) return undefined;
+	if (typeof v !== 'string' || (!opts.allowEmpty && v.trim() === '')) {
+		issues.add(join(path, key), opts.allowEmpty ? 'måste vara en sträng' : 'måste vara en icke-tom sträng');
+		return undefined;
+	}
+	return v;
+}
+
+function num(o: Obj, key: string, issues: Issues, path: string, opts: { int?: boolean; min?: number; optional?: boolean } = {}): number | undefined {
+	const v = o[key];
+	if (v === undefined && opts.optional) return undefined;
+	if (typeof v !== 'number' || !Number.isFinite(v)) {
+		issues.add(join(path, key), 'måste vara ett tal');
+		return undefined;
+	}
+	if (opts.int && !Number.isInteger(v)) issues.add(join(path, key), 'måste vara ett heltal');
+	if (opts.min !== undefined && v < opts.min) issues.add(join(path, key), `måste vara minst ${opts.min}`);
+	return v;
+}
+
+function arr(o: Obj, key: string, issues: Issues, path: string): unknown[] | undefined {
+	const v = o[key];
+	if (!Array.isArray(v)) {
+		issues.add(join(path, key), 'måste vara en lista');
+		return undefined;
+	}
+	return v;
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+const ID = /^[A-Za-z0-9_-]{1,100}$/;
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function date(o: Obj, key: string, issues: Issues, path: string): string | undefined {
+	const v = str(o, key, issues, path);
+	if (v === undefined) return undefined;
+	if (!DATE.test(v) || Number.isNaN(Date.parse(v))) issues.add(join(path, key), 'måste vara ett datum YYYY-MM-DD');
+	return v;
+}
+
+function datetime(o: Obj, key: string, issues: Issues, path: string): string | undefined {
+	const v = str(o, key, issues, path);
+	if (v === undefined) return undefined;
+	if (!DATETIME.test(v) || Number.isNaN(Date.parse(v))) issues.add(join(path, key), 'måste vara en ISO-tid med tidszon');
+	return v;
+}
+
+function id(o: Obj, key: string, issues: Issues, path: string): string | undefined {
+	const v = str(o, key, issues, path);
+	if (v !== undefined && !ID.test(v)) issues.add(join(path, key), 'får bara innehålla a-z, 0-9, _ och -');
+	return v;
+}
+
+// --- modellen -----------------------------------------------------------
+
+export const EXERCISE_TYPES: readonly ExerciseType[] = ['weight', 'bodyweight', 'time'];
+export const LOAD_CLASSES: readonly LoadClass[] = ['light', 'heavy'];
+
+export function isExerciseType(v: unknown): v is ExerciseType {
+	return EXERCISE_TYPES.includes(v as ExerciseType);
+}
+
+export function isLoadClass(v: unknown): v is LoadClass {
+	return LOAD_CLASSES.includes(v as LoadClass);
+}
+
+/** Validerar ett set mot övningstypen och returnerar det utan extra fält. */
+export function validateSet(v: unknown, type: ExerciseType, issues: Issues, path: string): ExerciseSet | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	let set: ExerciseSet | null = null;
+	if (type === 'weight') {
+		const weight = num(v, 'weight', issues, path, { min: 0 });
+		const reps = num(v, 'reps', issues, path, { int: true, min: 0 });
+		if (weight !== undefined && reps !== undefined) set = { weight, reps };
+	} else if (type === 'bodyweight') {
+		const reps = num(v, 'reps', issues, path, { int: true, min: 0 });
+		if (reps !== undefined) set = { reps };
+	} else {
+		const seconds = num(v, 'seconds', issues, path, { int: true, min: 0 });
+		if (seconds !== undefined) set = { seconds };
+	}
+	return issues.list.length === before ? set : null;
+}
+
+export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues, path: string): LogEntry | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const sessionId = v.sessionId === undefined ? undefined : id(v, 'sessionId', issues, path);
+	const d = date(v, 'date', issues, path);
+	const rawSets = arr(v, 'sets', issues, path) ?? [];
+	const sets = rawSets.map((s, i) => validateSet(s, type, issues, join(join(path, 'sets'), i)));
+	if (issues.list.length !== before || d === undefined) return null;
+	return { ...(sessionId ? { sessionId } : {}), date: d, sets: sets as ExerciseSet[] };
+}
+
+export function validateExercise(v: unknown, issues: Issues, path: string): Exercise | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const exId = id(v, 'id', issues, path);
+	const name = str(v, 'name', issues, path);
+	const type = v.type;
+	if (!isExerciseType(type)) {
+		issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
+		return null;
+	}
+	let loadClass: LoadClass | undefined;
+	if (type === 'weight') {
+		if (isLoadClass(v.loadClass)) loadClass = v.loadClass;
+		else issues.add(join(path, 'loadClass'), `måste vara ${LOAD_CLASSES.join(' eller ')} för weight`);
+	}
+	const instruction = str(v, 'instruction', issues, path, { allowEmpty: true });
+	if (typeof v.archived !== 'boolean') issues.add(join(path, 'archived'), 'måste vara true eller false');
+	const log = (arr(v, 'log', issues, path) ?? []).map((e, i) =>
+		validateLogEntry(e, type, issues, join(join(path, 'log'), i))
+	);
+	if (issues.list.length !== before) return null;
+	return {
+		id: exId!,
+		name: name!,
+		type,
+		...(loadClass ? { loadClass } : {}),
+		instruction: instruction!,
+		archived: v.archived as boolean,
+		log: log as LogEntry[]
+	};
+}
+
+export function validateTarget(v: unknown, issues: Issues, path: string): Target | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	if ('reps' in v && 'seconds' in v) {
+		issues.add(path, 'ange antingen reps eller seconds, inte båda');
+		return null;
+	}
+	if ('seconds' in v) {
+		const seconds = num(v, 'seconds', issues, path, { int: true, min: 1 });
+		return seconds === undefined ? null : { seconds };
+	}
+	const reps = num(v, 'reps', issues, path, { int: true, min: 1 });
+	return reps === undefined ? null : { reps };
+}
+
+/** Mål i reps för weight/bodyweight, sekunder för time. */
+export function targetMatchesType(target: Target, type: ExerciseType): boolean {
+	return type === 'time' ? 'seconds' in target : 'reps' in target;
+}
+
+export function validateWorkoutExercise(v: unknown, issues: Issues, path: string): WorkoutExercise | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const exerciseId = id(v, 'exerciseId', issues, path);
+	const sets = num(v, 'sets', issues, path, { int: true, min: 1 });
+	const target = validateTarget(v.target, issues, join(path, 'target'));
+	if (issues.list.length !== before || !target) return null;
+	return { exerciseId: exerciseId!, sets: sets!, target };
+}
+
+export function validateWorkout(v: unknown, issues: Issues, path: string): WorkoutTemplate | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const slug = str(v, 'slug', issues, path);
+	if (slug !== undefined && !SLUG.test(slug)) issues.add(join(path, 'slug'), 'får bara innehålla a-z, 0-9 och -');
+	const name = str(v, 'name', issues, path);
+	const version = num(v, 'version', issues, path, { int: true, min: 1 });
+	const createdAt = date(v, 'createdAt', issues, path);
+	const changeNote = str(v, 'changeNote', issues, path, { optional: true, allowEmpty: true });
+	const exercises = (arr(v, 'exercises', issues, path) ?? []).map((e, i) =>
+		validateWorkoutExercise(e, issues, join(join(path, 'exercises'), i))
+	);
+	if (issues.list.length !== before) return null;
+	return {
+		slug: slug!,
+		name: name!,
+		version: version!,
+		createdAt: createdAt!,
+		...(changeNote !== undefined ? { changeNote } : {}),
+		exercises: exercises as WorkoutExercise[]
+	};
+}
+
+function validateDeviation(v: unknown, issues: Issues, path: string): Deviation | null {
+	if (!isObject(v) || v.type !== 'swap') {
+		issues.add(path, 'okänd avvikelse (bara type "swap" stöds)');
+		return null;
+	}
+	const before = issues.list.length;
+	const from = id(v, 'from', issues, path);
+	const to = id(v, 'to', issues, path);
+	if (issues.list.length !== before) return null;
+	return { type: 'swap', from: from!, to: to! };
+}
+
+export function validateSession(v: unknown, issues: Issues, path: string): SessionRecord | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const sId = id(v, 'id', issues, path);
+	const workoutSlug = str(v, 'workoutSlug', issues, path);
+	const workoutVersion = num(v, 'workoutVersion', issues, path, { int: true, min: 1 });
+	const startedAt = datetime(v, 'startedAt', issues, path);
+	const endedAt = datetime(v, 'endedAt', issues, path);
+	const exerciseIds = (arr(v, 'exerciseIds', issues, path) ?? []).map((e, i) => {
+		if (typeof e !== 'string' || !ID.test(e)) issues.add(join(join(path, 'exerciseIds'), i), 'ogiltigt övnings-ID');
+		return e as string;
+	});
+	const deviations = (arr(v, 'deviations', issues, path) ?? []).map((d, i) =>
+		validateDeviation(d, issues, join(join(path, 'deviations'), i))
+	);
+	const kcalEstimate = num(v, 'kcalEstimate', issues, path, { min: 0, optional: true });
+	if (issues.list.length !== before) return null;
+	return {
+		id: sId!,
+		workoutSlug: workoutSlug!,
+		workoutVersion: workoutVersion!,
+		startedAt: startedAt!,
+		endedAt: endedAt!,
+		exerciseIds,
+		deviations: deviations as Deviation[],
+		...(kcalEstimate !== undefined ? { kcalEstimate } : {})
+	};
+}
+
+export function validateProfile(v: unknown, issues: Issues, path: string): Profile | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const goals = str(v, 'goals', issues, path, { optional: true, allowEmpty: true });
+	const weeklySessionGoal = num(v, 'weeklySessionGoal', issues, path, { int: true, min: 0, optional: true });
+	const coachContext = str(v, 'coachContext', issues, path, { optional: true, allowEmpty: true });
+	let rules: string[] | undefined;
+	if (v.rules !== undefined) {
+		rules = (arr(v, 'rules', issues, path) ?? []).map((r, i) => {
+			if (typeof r !== 'string') issues.add(join(join(path, 'rules'), i), 'måste vara en sträng');
+			return r as string;
+		});
+	}
+	let kcalPerWorkout: Record<string, number> | undefined;
+	if (v.kcalPerWorkout !== undefined) {
+		if (!isObject(v.kcalPerWorkout)) issues.add(join(path, 'kcalPerWorkout'), 'måste vara ett objekt');
+		else {
+			kcalPerWorkout = {};
+			for (const k of Object.keys(v.kcalPerWorkout)) {
+				const n = num(v.kcalPerWorkout, k, issues, join(path, 'kcalPerWorkout'), { min: 0 });
+				if (n !== undefined) kcalPerWorkout[k] = n;
+			}
+		}
+	}
+	if (issues.list.length !== before) return null;
+	return {
+		...(goals !== undefined ? { goals } : {}),
+		...(weeklySessionGoal !== undefined ? { weeklySessionGoal } : {}),
+		...(rules ? { rules } : {}),
+		...(kcalPerWorkout ? { kcalPerWorkout } : {}),
+		...(coachContext !== undefined ? { coachContext } : {})
+	};
+}

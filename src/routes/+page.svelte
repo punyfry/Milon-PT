@@ -16,6 +16,7 @@
 <main>
 	<h1>Milon-PT</h1>
 	<p>Inloggad som {data.user?.name ?? data.user?.email}</p>
+	<p><small>Användar-ID (för importskriptet): <code>{data.user?.id}</code></small></p>
 
 	<button onclick={testStorage}>Testa lagring</button>
 	{#if storageStatus}<pre>{storageStatus}</pre>{/if}

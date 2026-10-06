@@ -12,6 +12,10 @@ Stack: SvelteKit, Vercel (Blob), Auth.js med Google, Claude API.
 | `src/hooks.server.ts` | Kräver inloggning + allowlist på alla routes utom `/login` och `/auth/*`. Sätter `locals.user` |
 | `src/lib/server/allowlist.ts` | Läser `ALLOWED_EMAILS`. Tom lista = ingen släpps in |
 | `src/lib/server/storage/` | Lagringsgränssnittet (`UserStorage`) och Vercel Blob-implementationen. Allt skrivs med `access: 'private'` under `users/<userId>/` och inga blob-URL:er lämnar servern |
+| `src/lib/model/` | Datamodellen (typer enligt SPEC.md), validering och id-hjälpare. Delas av server och klient |
+| `src/lib/server/data/` | Läs/skriv övningar, passmallar (versionerade), sparade pass och profil via lagringsgränssnittet. Allt valideras vid läsning och skrivning |
+| `src/lib/server/import/craft.ts` | Engångsimporten: validera fil → planera mot befintliga data → skriv |
+| `scripts/import.ts` | Kommandoradsskript för importen |
 | `src/routes/api/storage/selftest` | `POST` skriver och läser tillbaka `users/<userId>/_selftest.json` för att verifiera Blob-kopplingen |
 
 Använd lagringen från en route så här:
@@ -43,8 +47,26 @@ Om OAuth-samtyckesskärmen står i läget *Testing* måste din e-post även läg
 
 Skapa en Blob-store i Vercel-projektet (Storage → Create → Blob) med **privat** åtkomst och koppla den till projektet. Då skapas `BLOB_READ_WRITE_TOKEN`. Hämta den lokalt med `vercel env pull .env.local` (läses också av Vite) eller kopiera den manuellt till `.env`.
 
+## Import från Craft
+
+Importfilen har formatet i SPEC.md, se `scripts/import-example.json`. Ditt användar-ID (Googles `sub`) visas på startsidan när du är inloggad.
+
+```sh
+npm run import -- min-export.json --user <användar-ID>          # torrkörning: visar planen
+npm run import -- min-export.json --user <användar-ID> --apply  # skriver till Blob
+```
+
+- Hela filen valideras först, och alla fel listas med sökväg (t.ex. `exercises[2].log[0].sets[1].reps`). Ingenting skrivs om något är fel.
+- Övningsnamn matchas mot befintliga övningar (skiftläge och blanksteg spelar ingen roll) innan nya skapas. En matchad övning får de nya loggposterna och en instruktion om den saknar en, men ett befintligt namn eller en befintlig instruktion skrivs aldrig över.
+- Pass får slug ur namnet (`Pass A` → `pass-a`). Finns passet redan med annat innehåll skapas nästa version, och äldre versioner ligger kvar.
+- Samma fil kan köras igen utan dubbletter: identiska loggposter och oförändrade pass hoppas över.
+- `weight`-övningar utan `loadClass` får `light` (med en varning).
+- Skriptet läser `BLOB_READ_WRITE_TOKEN` från miljön, `.env.local` eller `.env`.
+
 ## Kommandon
 
 - `npm run dev` – utvecklingsserver
 - `npm run check` – typkontroll
+- `npm test` – enhetstester (vitest)
+- `npm run import` – importskriptet, se ovan
 - `npm run build` – produktionsbygge (adapter-vercel)

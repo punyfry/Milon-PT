@@ -1,12 +1,13 @@
 import {
+	BlobError,
 	BlobPreconditionFailedError,
 	del,
 	get,
+	head,
 	list,
 	put,
 	type ListBlobResultBlob
 } from '@vercel/blob';
-import { env } from '$env/dynamic/private';
 import { resolvePath, userRoot } from './paths';
 import {
 	StorageConflictError,
@@ -24,16 +25,13 @@ import {
 export class BlobUserStorage implements UserStorage {
 	readonly userId: string;
 	readonly #root: string;
+	readonly #token: string;
 
-	constructor(userId: string) {
+	constructor(userId: string, token: string | undefined) {
+		if (!token) throw new Error('BLOB_READ_WRITE_TOKEN saknas');
 		this.userId = userId;
 		this.#root = userRoot(userId);
-	}
-
-	get #token(): string {
-		const token = env.BLOB_READ_WRITE_TOKEN;
-		if (!token) throw new Error('BLOB_READ_WRITE_TOKEN saknas');
-		return token;
+		this.#token = token;
 	}
 
 	async readJson<T>(path: string): Promise<StoredJson<T> | null> {
@@ -67,11 +65,21 @@ export class BlobUserStorage implements UserStorage {
 			return { version: result.etag };
 		} catch (e) {
 			if (e instanceof BlobPreconditionFailedError) throw new StorageConflictError(path);
-			// put throws a generic BlobError when the blob exists and overwrite isn't allowed.
-			if (options.createOnly && e instanceof Error && /already exists/i.test(e.message)) {
+			// put throws a generic BlobError when the blob exists and overwrite isn't
+			// allowed, so check whether that's what happened.
+			if (options.createOnly && e instanceof BlobError && (await this.#exists(pathname))) {
 				throw new StorageConflictError(path);
 			}
 			throw e;
+		}
+	}
+
+	async #exists(pathname: string): Promise<boolean> {
+		try {
+			await head(pathname, { token: this.#token });
+			return true;
+		} catch {
+			return false;
 		}
 	}
 

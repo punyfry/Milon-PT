@@ -1,0 +1,33 @@
+{
+	"exercises": [
+		{
+			"name": "Marklyft",
+			"type": "weight",
+			"loadClass": "heavy",
+			"instruction": "",
+			"log": [{ "date": "2026-09-29", "sets": [{ "weight": 40, "reps": 8 }] }]
+		},
+		{
+			"name": "Plankan",
+			"type": "time",
+			"instruction": "",
+			"log": [{ "date": "2026-09-29", "sets": [{ "seconds": 45 }, { "seconds": 40 }] }]
+		},
+		{
+			"name": "Pull-up",
+			"type": "bodyweight",
+			"instruction": "",
+			"log": []
+		}
+	],
+	"workouts": [
+		{
+			"name": "Pass A",
+			"exercises": [
+				{ "name": "Marklyft", "sets": 3, "target": { "reps": 8 } },
+				{ "name": "Plankan", "sets": 3, "target": { "seconds": 45 } },
+				{ "name": "Pull-up", "sets": 3, "target": { "reps": 5 } }
+			]
+		}
+	]
+}

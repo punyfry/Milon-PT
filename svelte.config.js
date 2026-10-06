@@ -9,7 +9,13 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: adapter()
+		adapter: adapter(),
+		typescript: {
+			// Typkontrollera även importskriptet och vitest-konfigen.
+			config: (tsconfig) => {
+				tsconfig.include.push('../scripts/**/*.ts', '../vitest.config.ts');
+			}
+		}
 	}
 };
 
