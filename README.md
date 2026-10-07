@@ -50,6 +50,8 @@ const profile = await storage.readJson<Profile>('profile.json');
 await storage.writeJson('profile.json', data, { ifMatch: profile?.version });
 ```
 
+Within one request `storageFor` returns the same storage. In GET requests, identical reads and listings share one call (each caller gets its own copy); any write drops what is shared. Every request gets a `Server-Timing` header (total and storage time), and requests that use storage log one `[timing]` line with the route pattern and call counts, so slow views can be traced in the Vercel logs.
+
 ## Getting started locally
 
 1. `npm install`
@@ -84,6 +86,8 @@ If the OAuth consent screen is in *Testing* mode, your e-mail must also be added
 ### Vercel Blob
 
 Create a Blob store in the Vercel project (Storage → Create → Blob) with **private** access and connect it to the project. This creates `BLOB_READ_WRITE_TOKEN`. Pull it locally with `vercel env pull .env.local` or copy it into `.env`.
+
+The store is in Stockholm, and the functions are pinned to the same region (`regions: ['arn1']` in `svelte.config.js`), since each page load makes many storage calls. Change both together.
 
 ## Data model
 
