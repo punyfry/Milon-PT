@@ -29,7 +29,7 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 
 ## Conventions
 
-- UI text, code comments, commit messages, PR descriptions and tests are in **Swedish**. Existing English comments in the auth/storage layer can stay.
+- **Language:** code, identifiers, comments, tests, log messages, commit messages, PR descriptions and repo docs for developers are in **English**. Only what the user sees or says is in **Swedish**: UI text, error messages shown in the app, and the AI prompts and conversations with Milon. Existing Swedish comments and tests are being translated; write new ones in English and translate the ones you touch.
 - Formatting: tabs, single quotes, no trailing commas, print width ~140. Prettier is not installed; match the surrounding code (or run `npx prettier --use-tabs --single-quote --trailing-comma none --print-width 140` on `.ts` files only).
 - Svelte 5 runes only (`$state`, `$derived`, `$props`, snippets). No stores unless needed.
 - Keep SvelteKit on 2.x: `@auth/sveltekit` does not support SvelteKit 3 yet.
@@ -47,6 +47,6 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 
 ## Workflow
 
-- Use the `leverera` skill (`.claude/skills/leverera/SKILL.md`) for features, fixes and issues: you code, then run the subagents `milon-reviewer` and `milon-tester` (`.claude/agents/`) in parallel, fix their findings and merge when CI and both are satisfied.
+- Use the `deliver` skill (`.claude/skills/deliver/SKILL.md`) for features, fixes and issues: you code, then run the subagents `milon-reviewer` and `milon-tester` (`.claude/agents/`) in parallel, fix their findings and merge when CI and both are satisfied.
 - One branch and PR per change; squash-merge with the PR number in the title. Describe how to test in the PR.
 - Decisions that belong to the owner (product behaviour, UX choices) go to a GitHub issue instead of being guessed.
