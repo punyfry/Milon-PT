@@ -35,6 +35,7 @@
 		.mint { color: var(--accent); }
 		.white { color: #fff; }
 		.icon { background: var(--bg); border-radius: 22%; outline: 1px solid var(--line); color: var(--accent); }
+		.icon.light { background: #f3f2ee; color: #0d6b63; }
 		.icon svg { width: 100%; height: 100%; }
 		.stack { display: flex; flex-direction: column; gap: 16px; }
 		@media (max-width: 600px) { .big svg { width: 100%; max-width: 256px; height: auto; } }
@@ -53,13 +54,15 @@
 		const svg = (size, cls = '') =>
 			`<svg class="${cls}" viewBox="0 0 96 96" width="${size}" height="${size}" role="img" aria-label="${LOGO.title}">${LOGO.body}</svg>`;
 		const fig = (inner, cap) => `<figure>${inner}<figcaption>${cap}</figcaption></figure>`;
-		const icon = (size) => fig(`<div class="icon" style="width:${size}px;height:${size}px">${svg(size)}</div>`, `icon ${size}`);
+		const icon = (size, light = false) =>
+			fig(`<div class="icon${light ? ' light' : ''}" style="width:${size}px;height:${size}px">${svg(size)}</div>`, `${light ? 'light ' : ''}icon ${size}`);
 		document.getElementById('out').innerHTML = `<section>
 			<h2>Milon-PT<span>logo.svg</span></h2>
 			<p class="desc">${LOGO.title.replace('Milon-PT: ', '')}</p>
 			<div class="stack">
 				<div class="row big">${fig(svg(256, 'mint'), '256')}${fig(svg(64, 'mint'), '64')}${fig(svg(32, 'mint'), '32')}</div>
 				<div class="row">${icon(180)}${icon(64)}${icon(32)}</div>
+				<div class="row">${icon(180, true)}${icon(64, true)}${icon(32, true)}</div>
 				<div class="row">${fig(svg(128, 'white'), 'white 128')}${fig(svg(64, 'white'), 'white 64')}${fig(svg(32, 'white'), 'white 32')}${fig(svg(16, 'white'), 'white 16')}</div>
 			</div>
 		</section>`;
