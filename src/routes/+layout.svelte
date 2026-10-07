@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
+	import NavProgress from '$lib/components/NavProgress.svelte';
 	import PendingSaves from '$lib/components/PendingSaves.svelte';
 	import TabBar from '$lib/components/TabBar.svelte';
 	import type { LayoutProps } from './$types';
@@ -15,6 +16,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+<NavProgress />
 <div class="app" class:tabs={showTabs}>
 	<PendingSaves />
 	{@render children()}

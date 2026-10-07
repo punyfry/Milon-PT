@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import Icon from './Icon.svelte';
 
 	const tabs = [
@@ -9,13 +9,16 @@
 		{ href: '/konto', label: 'Konto', icon: 'user' }
 	] as const;
 
-	const current = (href: string) =>
-		href === '/' ? page.url.pathname === '/' : page.url.pathname === href || page.url.pathname.startsWith(href + '/');
+	const matches = (href: string, pathname: string) =>
+		href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');
+	/** While a view loads, the tapped tab is highlighted right away so the tap is seen to work. */
+	const shown = $derived(navigating.to?.url.pathname ?? page.url.pathname);
 </script>
 
-<nav aria-label="Huvudmeny">
+<!-- The tabs' code is fetched up front; their data still loads on tap (preload-data in app.html). -->
+<nav aria-label="Huvudmeny" data-sveltekit-preload-code="eager">
 	{#each tabs as t (t.href)}
-		<a href={t.href} aria-current={current(t.href) ? 'page' : undefined}>
+		<a href={t.href} aria-current={matches(t.href, page.url.pathname) ? 'page' : undefined} class:on={matches(t.href, shown)}>
 			<Icon name={t.icon} />
 			<span>{t.label}</span>
 		</a>
@@ -46,10 +49,10 @@
 		font-weight: 500;
 		text-decoration: none;
 	}
-	a[aria-current='page'] {
+	a.on {
 		color: var(--text);
 	}
-	a[aria-current='page'] :global(svg) {
+	a.on :global(svg) {
 		stroke: var(--accent);
 	}
 </style>

@@ -18,13 +18,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const storage = storageFor(locals);
 	const today = todayInStockholm();
 	const weekStart = weekStartOf(today);
-	const [workouts, exercises, weekSessions, profile] = await Promise.all([
-		listLatestWorkouts(storage),
+	const latest = listLatestWorkouts(storage);
+	// Everything in parallel; the latest session per workout only waits for the workout list.
+	const [workouts, lastBySlug, exercises, weekSessions, profile] = await Promise.all([
+		latest,
+		latest.then((ws) => lastSessionBySlug(storage, ws.map((w) => w.slug))),
 		listExercises(storage),
 		listSessionsBetween(storage, weekStart, addDays(weekStart, 7)),
 		getProfile(storage)
 	]);
-	const lastBySlug = await lastSessionBySlug(storage, workouts.map((w) => w.slug));
 	const names = new Map(exercises.map((e) => [e.data.id, e.data.name]));
 
 	const cards: WorkoutCard[] = workouts.map((w) => ({

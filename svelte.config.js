@@ -9,7 +9,9 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: adapter(),
+		// Functions run in Stockholm, next to the Blob store; every page load makes
+		// many storage calls, so the distance between them adds up.
+		adapter: adapter({ regions: ['arn1'] }),
 		// Content-Security-Policy. SvelteKit adds hashes/nonces for its own inline
 		// scripts. The sign-in form redirects to Google, hence form-action.
 		// Inline styles are needed for Svelte's style: directive.
