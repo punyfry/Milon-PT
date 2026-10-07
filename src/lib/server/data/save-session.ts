@@ -1,5 +1,5 @@
 /**
- * Sparar ett avslutat pass (SPEC.md, "Avsluta pass"):
+ * Sparar ett avslutat pass:
  * övningsloggar, eventuellt en ny passversion och sist sessionsposten.
  *
  * Sparningen går att köra om: misslyckas den halvvägs och klienten försöker

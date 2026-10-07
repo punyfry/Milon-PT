@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dev } from '$app/environment';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -80,8 +81,10 @@
 	{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
 	{#if form?.goalSaved}<p role="status">Veckomålet är sparat.</p>{/if}
 
-	<p><button onclick={testStorage}>Testa lagring</button></p>
-	{#if storageStatus}<pre>{storageStatus}</pre>{/if}
+	{#if dev}
+		<p><button onclick={testStorage}>Testa lagring</button></p>
+		{#if storageStatus}<pre>{storageStatus}</pre>{/if}
+	{/if}
 
 	<section class="import">
 		<h2>Importera från Craft</h2>

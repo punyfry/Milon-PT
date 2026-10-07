@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
 import { ValidationError } from '$lib/model';
-import { createMessage, helperModel, isAiConfigured } from '$lib/server/ai/client';
+import { assertAiCallsLeft, helperModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
+import { AiLimitError } from '$lib/server/ai/usage';
 import { askHelper, parseHelperInput } from '$lib/server/helper/ask';
 import { storageFor } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
@@ -19,8 +20,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw e;
 	}
 	try {
-		return json(await askHelper(storage, input, { model: helperModel(), createMessage }));
+		await assertAiCallsLeft(storage);
+		return json(await askHelper(storage, input, { model: helperModel(), createMessage: limitedCreateMessage(storage) }));
 	} catch (e) {
+		if (e instanceof AiLimitError) error(429, e.message);
 		console.error('Hjälparen:', e);
 		if (e instanceof Anthropic.RateLimitError) error(429, 'Milon är upptagen just nu. Försök igen om en stund.');
 		if (e instanceof Anthropic.APIError) error(502, 'Milon kunde inte svara just nu. Försök igen.');

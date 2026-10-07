@@ -1,13 +1,13 @@
 /**
  * Historiken räknas ut ur övningsloggarna och sessionsposterna; inget lagras
- * separat (SPEC.md, "Historik och import").
+ * separat.
  */
 import { normalizeName, type Exercise, type ExerciseSet, type ExerciseType, type SessionRecord } from '$lib/model';
 import { volume } from '$lib/session/active';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Beräknad 1RM enligt SPEC.md: vikt × (1 + reps / 30). */
+/** Beräknad 1RM (Epley): vikt × (1 + reps / 30). */
 export function estimated1RM(weight: number, reps: number): number {
 	return reps > 0 ? round1(weight * (1 + reps / 30)) : 0;
 }

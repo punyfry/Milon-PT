@@ -2,7 +2,7 @@ import { formatSet as formatSetForDisplay } from '../../format';
 import type { ActiveSession, Exercise, LogEntry } from '../../model';
 import { formatCatalog } from '../builder/prompt';
 
-/** Systemprompten för hjälparen, ordagrant enligt SPEC.md med kontexten ifylld. */
+/** Systemprompten för hjälparen, med kontexten ifylld. Prompten bor här, inte i dokumentationen. */
 const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. Användaren tränar just nu och har bett om hjälp. Svara på svenska i högst fyra meningar, utan inledning.
 
 Pass: {{workout_name}}

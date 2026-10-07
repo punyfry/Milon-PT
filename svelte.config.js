@@ -10,6 +10,26 @@ const config = {
 	},
 	kit: {
 		adapter: adapter(),
+		// Content-Security-Policy. SvelteKit lägger själv till hashar för sina
+		// inline-skript. Inloggningsformuläret skickas vidare till Google, därav
+		// form-action. Inline-stilar behövs för Sveltes style:-direktiv.
+		csp: {
+			mode: 'auto',
+			directives: {
+				'default-src': ['self'],
+				'script-src': ['self'],
+				'style-src': ['self', 'unsafe-inline'],
+				'img-src': ['self', 'data:', 'blob:'],
+				'font-src': ['self'],
+				'connect-src': ['self'],
+				'manifest-src': ['self'],
+				'worker-src': ['self'],
+				'object-src': ['none'],
+				'base-uri': ['self'],
+				'frame-ancestors': ['none'],
+				'form-action': ['self', 'https://accounts.google.com']
+			}
+		},
 		typescript: {
 			// Typkontrollera även importskriptet och vitest-konfigen.
 			config: (tsconfig) => {

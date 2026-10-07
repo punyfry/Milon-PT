@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import { AiLimitError } from '../ai/usage';
 import { isObject, type WorkoutExercise } from '../../model';
 import { modelOptions, type CreateMessage } from '../ai/models';
 import { listExercises } from '../data/exercises';
@@ -119,7 +120,8 @@ export async function runTurn(
 		try {
 			response = await options.createMessage(requestParams(conversation, options.model));
 		} catch (e) {
-			conversation.log.push({ role: 'error', text: 'Milon kunde inte svara just nu. Försök igen om en stund.' });
+			const text = e instanceof AiLimitError ? e.message : 'Milon kunde inte svara just nu. Försök igen om en stund.';
+			conversation.log.push({ role: 'error', text });
 			throw e;
 		}
 

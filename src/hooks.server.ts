@@ -1,36 +1,6 @@
-import { error, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { handle as authHandle } from './auth';
-import { isAllowedEmail } from '$lib/server/allowlist';
+import { authorization } from '$lib/server/security/guard';
+import { securityHeaders } from '$lib/server/security/headers';
 
-const PUBLIC_PATHS = ['/login', '/auth/'];
-
-function isPublic(pathname: string): boolean {
-	return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p));
-}
-
-/**
- * Every route except the login page and Auth.js' own endpoints requires a
- * session whose e-mail is still on the allowlist. The allowlist is checked
- * on every request, so removing an address locks it out without waiting for
- * the session cookie to expire.
- */
-const authorization: Handle = async ({ event, resolve }) => {
-	const session = await event.locals.auth();
-	const user = session?.user;
-
-	if (user?.id && user.email && isAllowedEmail(user.email)) {
-		event.locals.user = { id: user.id, email: user.email, name: user.name ?? null };
-	} else {
-		event.locals.user = null;
-	}
-
-	if (!event.locals.user && !isPublic(event.url.pathname)) {
-		if (event.url.pathname.startsWith('/api/')) error(401, 'Inte inloggad');
-		redirect(303, '/login');
-	}
-
-	return resolve(event);
-};
-
-export const handle = sequence(authHandle, authorization);
+export const handle = sequence(securityHeaders, authHandle, authorization);
