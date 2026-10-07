@@ -25,6 +25,7 @@
 		type SetField
 	} from '$lib/session/active';
 	import { beep, unlockAudio } from '$lib/session/beep';
+	import { isNetworkError, pendingKey, queueSave } from '$lib/session/outbox';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/session/storage';
 	import { createWakeLock } from '$lib/session/wakelock';
 	import type { PageProps } from './$types';
@@ -217,17 +218,31 @@
 		if (!session) return;
 		saving = true;
 		saveError = null;
+		const body = {
+			session: $state.snapshot(session),
+			endedAt: localIsoString(new Date()),
+			kcalEstimate: Number.isFinite(kcal) && kcal >= 0 ? kcal : undefined,
+			saveAsNewVersion: session.deviations.length > 0 && saveAsNewVersion
+		};
 		try {
-			const res = await fetch('/api/sessions', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					session: $state.snapshot(session),
-					endedAt: localIsoString(new Date()),
-					kcalEstimate: Number.isFinite(kcal) && kcal >= 0 ? kcal : undefined,
-					saveAsNewVersion: session.deviations.length > 0 && saveAsNewVersion
-				})
-			});
+			let res: Response;
+			try {
+				res = await fetch('/api/sessions', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(body)
+				});
+			} catch (e) {
+				// Inget nät: lägg passet i kön, det skickas när nätet är tillbaka.
+				const userId = page.data.userId as string | null;
+				const key = pendingKey(session.sessionId, session.startedAt);
+				if (isNetworkError(e) && userId && queueSave({ key, userId, workoutName: data.workout.name, body })) {
+					clearActiveSession();
+					await goto('/').catch(() => (location.href = '/'));
+					return;
+				}
+				throw e;
+			}
 			if (!res.ok) {
 				const body = await res.json().catch(() => null);
 				throw new Error(body?.message ?? `Servern svarade ${res.status}`);

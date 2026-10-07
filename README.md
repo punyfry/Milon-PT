@@ -90,7 +90,7 @@ Appen har ett webbmanifest (`static/manifest.webmanifest`) och ikoner i `static/
 - **iPhone (Safari):** Dela → Lägg till på hemskärmen.
 - **Android (Chrome):** meny ⋮ → Installera app / Lägg till på startskärmen.
 
-Den öppnas då i helskärm utan webbläsarens adressfält. Offline-stöd är utanför scope (SPEC.md), så det finns ingen service worker och appen kräver nätverk.
+Den öppnas då i helskärm utan webbläsarens adressfält. En service worker (`src/service-worker.ts`) sparar sidor du öppnat, så att de visas utan nät, och visar annars en egen offlinesida. Sparar du ett pass utan nät läggs det i kö på telefonen och skickas när nätet är tillbaka; en ruta överst visar vad som väntar. Pass-byggaren och hjälparen kräver nät.
 
 Ikonerna ritas med `python3 scripts/make_icons.py static/icons` (kräver Pillow); ändra färg eller form där och kör om det om du vill byta ikon.
 
