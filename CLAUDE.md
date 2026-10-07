@@ -32,7 +32,7 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 - **Language:** code, identifiers, comments, tests, log messages, commit messages, PR descriptions and repo docs for developers are in **English**. Only what the user sees or says is in **Swedish**: UI text, error messages shown in the app, and the AI prompts and conversations with Milon. Existing Swedish comments and tests are being translated; write new ones in English and translate the ones you touch.
 - Formatting: tabs, single quotes, no trailing commas, print width ~140. Prettier is not installed; match the surrounding code (or run `npx prettier --use-tabs --single-quote --trailing-comma none --print-width 140` on `.ts` files only).
 - Svelte 5 runes only (`$state`, `$derived`, `$props`, snippets). No stores unless needed.
-- Keep SvelteKit on 2.x: `@auth/sveltekit` does not support SvelteKit 3 yet.
+- Keep SvelteKit on 2.x: `@auth/sveltekit` does not support SvelteKit 3 yet. Blocked major upgrades are listed as `ignore` rules in `.github/dependabot.yml`; remove a rule when its blocker is gone.
 - Strict tool schemas for Claude: don't combine `enum` with a `type` array; use `anyOf` with `{ type: 'null' }`.
 - Dates are `YYYY-MM-DD` in Europe/Stockholm (`src/lib/time.ts`); timestamps are ISO with offset. Session ids are `s_YYYYMMDD[_n]`.
 - Shared types and validation live in `src/lib/model` and are used by both server and client.

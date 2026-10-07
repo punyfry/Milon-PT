@@ -10,6 +10,20 @@ updates:
       # Group small updates into one PR instead of one per package.
       minor-and-patch:
         update-types: [minor, patch]
+    # Major versions we can't take yet. Remove a rule when its blocker is gone.
+    ignore:
+      # @auth/sveltekit only supports SvelteKit ^1 || ^2.
+      - dependency-name: '@sveltejs/kit'
+        update-types: ['version-update:semver-major']
+      # adapter-vercel 7 requires SvelteKit 3.
+      - dependency-name: '@sveltejs/adapter-vercel'
+        update-types: ['version-update:semver-major']
+      # svelte-check only supports TypeScript ^5 || ^6.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # Types follow the Node runtime (22 in CI); bump them together with the runtime.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
