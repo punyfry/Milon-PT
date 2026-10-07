@@ -61,6 +61,7 @@
 			</p>
 			{#if p.error}
 				<p class="actions">
+					{#if p.error.startsWith('Logga in')}<a href="/login">Logga in</a>{/if}
 					<button class="link" onclick={flush} disabled={sending}>Försök igen</button>
 					<button class="link danger" onclick={() => discard(p)}>Släng</button>
 				</p>
@@ -75,12 +76,17 @@
 <style>
 	.pending {
 		max-width: 40rem;
-		margin: max(0.5rem, env(safe-area-inset-top)) auto 0;
+		margin: max(0.5rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
 		padding: 0.6rem 0.85rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface);
 		font-size: 0.9rem;
+	}
+	@media (min-width: 42rem) {
+		.pending {
+			margin-inline: auto;
+		}
 	}
 	.pending p {
 		margin: 0 0 0.25rem;
