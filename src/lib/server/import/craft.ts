@@ -537,7 +537,7 @@ export function summarizePlan(plan: ImportPlan): string {
 	else lines.push(`${plan.profile.action === 'create' ? '+' : '~'} profil: ${plan.profile.changes.join(', ')}`);
 	for (const p of plan.exercises) {
 		const e = p.exercise;
-		if (p.action === 'create') lines.push(`+ övning ${e.id} "${e.name}" (${e.type}, ${p.addedLogEntries} loggposter)`);
+		if (p.action === 'create') lines.push(`+ övning ${e.id} "${e.name}" (${e.type}, ${p.addedLogEntries} loggposter)${e.archived ? ", arkiverad" : ""}`);
 		else if (p.action === 'update') lines.push(`~ övning ${e.id} "${e.name}": ${p.changes.join(', ')}`);
 		else lines.push(`= övning ${e.id} "${e.name}" oförändrad`);
 	}
