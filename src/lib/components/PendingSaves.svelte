@@ -1,43 +1,56 @@
 <script lang="ts">
 	/**
 	 * Visar pass som väntar på att sparas (sparades utan nät) och skickar dem
-	 * när sidan laddas och när nätet kommer tillbaka.
+	 * när sidan laddas, vid varje navigering och när nätet kommer tillbaka.
 	 */
-	import { invalidateAll } from '$app/navigation';
+	import { afterNavigate, invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { discardPendingSave, flushPendingSaves, pendingSaves, type PendingSave } from '$lib/session/outbox';
+	import { OUTBOX_EVENT, discardPendingSave, flushPendingSaves, pendingSaves, type PendingSave } from '$lib/session/outbox';
 
+	const userId = $derived((page.data.userId as string | null | undefined) ?? null);
 	let pending = $state<PendingSave[]>([]);
 	let sending = $state(false);
 
 	async function flush() {
 		if (sending) return;
-		const before = pendingSaves().length;
-		if (!before) return void (pending = []);
+		const before = pendingSaves(userId).length;
+		if (!before) return;
 		sending = true;
-		pending = await flushPendingSaves();
+		const left = await flushPendingSaves(userId);
 		sending = false;
-		if (pending.length < before) await invalidateAll();
+		pending = left;
+		if (left.length < before) await invalidateAll();
 	}
 
 	function discard(p: PendingSave) {
 		if (!confirm(`Släng ${p.workoutName}? Passet sparas inte.`)) return;
-		discardPendingSave(p.sessionId);
-		pending = pendingSaves();
+		discardPendingSave(p.key);
 	}
 
+	afterNavigate(() => void flush());
+
 	onMount(() => {
-		pending = pendingSaves();
-		void flush();
+		const refresh = () => (pending = pendingSaves(userId));
 		const online = () => void flush();
+		refresh();
+		addEventListener(OUTBOX_EVENT, refresh);
 		addEventListener('online', online);
-		return () => removeEventListener('online', online);
+		return () => {
+			removeEventListener(OUTBOX_EVENT, refresh);
+			removeEventListener('online', online);
+		};
+	});
+
+	// Byte av konto (eller inloggning) läser om kön.
+	$effect(() => {
+		pending = pendingSaves(userId);
 	});
 </script>
 
 {#if pending.length}
 	<aside class="pending" role="status">
-		{#each pending as p (p.sessionId)}
+		{#each pending as p (p.key)}
 			<p>
 				<strong>{p.workoutName}</strong>
 				{#if p.error}

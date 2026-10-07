@@ -26,10 +26,15 @@ sw.addEventListener('install', (event) => {
 });
 
 sw.addEventListener('activate', (event) => {
+	// Sparade sidor pekar på den förra versionens filer, så de slängs när
+	// en ny version tar över.
 	event.waitUntil(
 		caches
 			.keys()
-			.then((keys) => Promise.all(keys.filter((k) => k !== STATIC && k !== PAGES).map((k) => caches.delete(k))))
+			.then((keys) => {
+				const old = keys.filter((k) => k !== STATIC && k !== PAGES);
+				return Promise.all([...old.map((k) => caches.delete(k)), ...(old.length ? [caches.delete(PAGES)] : [])]);
+			})
 			.then(() => sw.clients.claim())
 	);
 });

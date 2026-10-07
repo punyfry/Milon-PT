@@ -25,7 +25,7 @@
 		type SetField
 	} from '$lib/session/active';
 	import { beep, unlockAudio } from '$lib/session/beep';
-	import { isNetworkError, queueSave } from '$lib/session/outbox';
+	import { isNetworkError, pendingKey, queueSave } from '$lib/session/outbox';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/session/storage';
 	import { createWakeLock } from '$lib/session/wakelock';
 	import type { PageProps } from './$types';
@@ -234,7 +234,9 @@
 				});
 			} catch (e) {
 				// Inget nät: lägg passet i kön, det skickas när nätet är tillbaka.
-				if (isNetworkError(e) && queueSave({ sessionId: session.sessionId, workoutName: data.workout.name, body })) {
+				const userId = page.data.userId as string | null;
+				const key = pendingKey(session.sessionId, session.startedAt);
+				if (isNetworkError(e) && userId && queueSave({ key, userId, workoutName: data.workout.name, body })) {
 					clearActiveSession();
 					await goto('/').catch(() => (location.href = '/'));
 					return;
