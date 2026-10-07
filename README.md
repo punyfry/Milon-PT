@@ -1,96 +1,99 @@
 # Milon-PT
 
-En personlig, minimalistisk träningslogg med en AI-coach, Milon, som håller tyst tills du ber om hjälp. Huvudsyftet är att logga pass snabbt.
+A personal, minimalist workout log with an AI coach, Milon, who stays quiet until you ask for help. The main goal is to log workouts quickly.
 
-Stack: SvelteKit 2 (Svelte 5) på Vercel, data som JSON-filer i Vercel Blob, Google-inloggning via Auth.js och Claude API anropat från servern.
+Stack: SvelteKit 2 (Svelte 5) on Vercel, data as JSON files in Vercel Blob, Google sign-in via Auth.js, and the Claude API called from the server.
 
-## Principer
+The app's UI and the AI coach are in Swedish; code and developer docs are in English (see `CLAUDE.md`).
 
-- Landningssidan utgår från att du är där för att logga träning: ett tryck på ett passkort startar passet.
-- Coachen är tyst under passet och svarar bara när du trycker "Hjälp".
-- Övningar är egna objekt med eget ID och egen logg. Pass refererar bara till övnings-ID.
-- Ett pågående pass lever i webbläsaren (localStorage) tills servern bekräftat sparningen.
-- Data är per användare under `users/<userId>/`. Bara den inloggade användaren når sina filer, och inga blob-URL:er lämnar servern.
+## Principles
 
-## Struktur
+- The landing page assumes you are there to log a workout: one tap on a workout card starts it.
+- The coach is silent during a workout and only answers when you tap "Hjälp".
+- Exercises are objects of their own with their own ID and log. Workouts only reference exercise IDs.
+- An ongoing workout lives in the browser (localStorage) until the server has confirmed the save.
+- Data is per user under `users/<userId>/`. Only the signed-in user can reach their files, and no blob URLs leave the server.
 
-| Fil | Vad |
+## Structure
+
+| File | What |
 | --- | --- |
-| `src/auth.ts` | Auth.js: Google-provider (explicita `GOOGLE_OAUTH_*`), allowlist i `signIn`, `userId` = Googles `sub` |
-| `src/hooks.server.ts` | Kedjar säkerhetsheaders, Auth.js och inloggningsvakten |
-| `src/lib/server/security/` | `guard.ts` (inloggning + allowlist på varje request, utom `/login` och `/auth/*`) och `headers.ts` (säkerhetsheaders). CSP ligger i `svelte.config.js` |
-| `src/lib/server/allowlist.ts` | Läser `ALLOWED_EMAILS`. Tom lista = ingen släpps in |
-| `src/lib/server/storage/` | `UserStorage`-gränssnittet: Vercel Blob (privat), lokala filer i `.data/` i dev, och minne i tester. Sökvägar valideras i `paths.ts` |
-| `src/lib/model/` | Datamodellen: typer, validering och id-hjälpare. Delas av server och klient |
-| `src/lib/server/data/` | Läs/skriv övningar, passmallar (versionerade), sparade pass och profil. `save-session.ts` sparar ett avslutat pass och går att köra om utan dubbletter |
-| `src/lib/server/import/craft.ts` | Importen från Craft: validera → planera mot befintliga data → skriv |
-| `src/lib/server/ai/` | Claude-klient, modellval, modellberoende parametrar och daglig gräns (`usage.ts`) |
-| `src/lib/server/builder/` | Pass-byggaren: systemprompt, verktygen `propose_exercise`/`set_workout` och konversationsloopen |
-| `src/lib/server/helper/` | Hjälparen under passet: systemprompt och `swap_exercise` |
-| `src/lib/session/` | Pågående pass i webbläsaren: förifyllning, −/+, timer, localStorage och kön för pass som sparats utan nät (`outbox.ts`) |
-| `src/lib/history/stats.ts` | Historiken: bästa set, beräknad 1RM, rekord, veckosammanfattning och milstolpar, uträknat ur loggarna |
-| `src/lib/markdown.ts` | Enkel markdown för pass-byggarens svar, renderas utan `{@html}` |
-| `src/service-worker.ts` | Offlinestöd: cachar appens filer och öppnade sidor |
-| `src/routes/` | `/` passkort, `/pass/[slug]` aktivt pass och avslut, `/skapa` pass-byggaren, `/historik` och `/historik/ovning/[id]`, `/konto`, `/api/*` |
-| `scripts/` | `import.ts` (importskriptet) och `make_icons.py` (PWA-ikoner) |
+| `src/auth.ts` | Auth.js: Google provider (explicit `GOOGLE_OAUTH_*`), allowlist in `signIn`, `userId` = Google's `sub` |
+| `src/hooks.server.ts` | Chains security headers, Auth.js and the sign-in guard |
+| `src/lib/server/security/` | `guard.ts` (sign-in + allowlist on every request except `/login` and `/auth/*`) and `headers.ts` (security headers). The CSP lives in `svelte.config.js` |
+| `src/lib/server/allowlist.ts` | Reads `ALLOWED_EMAILS`. An empty list lets nobody in |
+| `src/lib/server/storage/` | The `UserStorage` interface: Vercel Blob (private), local files in `.data/` in dev, and in-memory in tests. Paths are validated in `paths.ts` |
+| `src/lib/model/` | The data model: types, validation and id helpers. Shared by server and client |
+| `src/lib/server/data/` | Read/write exercises, workout templates (versioned), saved sessions and the profile. `save-session.ts` saves a finished workout and is safe to retry without duplicates |
+| `src/lib/server/import/craft.ts` | The Craft import: validate → plan against existing data → write |
+| `src/lib/server/ai/` | Claude client, model selection, per-model parameters and the daily limit (`usage.ts`) |
+| `src/lib/server/builder/` | The workout builder: system prompt, the `propose_exercise`/`set_workout` tools and the conversation loop |
+| `src/lib/server/helper/` | The in-session helper: system prompt and `swap_exercise` |
+| `src/lib/session/` | The ongoing workout in the browser: prefill, −/+, timer, localStorage and the queue for workouts saved offline (`outbox.ts`) |
+| `src/lib/history/stats.ts` | History: best set, estimated 1RM, records, weekly summary and milestones, computed from the logs |
+| `src/lib/markdown.ts` | Simple markdown for the builder's replies, rendered without `{@html}` |
+| `src/service-worker.ts` | Offline support: caches the app's files and visited pages |
+| `src/routes/` | `/` workout cards, `/pass/[slug]` active workout and finish, `/skapa` the builder, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
+| `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons) |
+| `.claude/` | Agent workflow: the `deliver` skill and the subagents Gregory (review) and Nissa (testing) |
 
-Använd lagringen från en route så här:
+Use storage from a route like this:
 
 ```ts
 import { storageFor } from '$lib/server/storage';
 
-const storage = storageFor(locals); // scopad till inloggad användare
+const storage = storageFor(locals); // scoped to the signed-in user
 const profile = await storage.readJson<Profile>('profile.json');
 await storage.writeJson('profile.json', data, { ifMatch: profile?.version });
 ```
 
-## Kom igång lokalt
+## Getting started locally
 
 1. `npm install`
-2. Kopiera `.env.example` till `.env` och fyll i värdena (se nedan).
-3. `npm run dev` och öppna http://localhost:5173
+2. Copy `.env.example` to `.env` and fill in the values (see below).
+3. `npm run dev` and open http://localhost:5173
 
-Utan `BLOB_READ_WRITE_TOKEN` sparar dev-servern data i lokala filer under `.data/` (gitignorerad). I produktion krävs token.
+Without `BLOB_READ_WRITE_TOKEN` the dev server stores data in local files under `.data/` (gitignored). Production requires the token.
 
-### Miljövariabler
+### Environment variables
 
-| Variabel | Innehåll |
+| Variable | Contents |
 | --- | --- |
-| `AUTH_SECRET` | Hemlig sträng för Auth.js sessionscookie (`npx auth secret`) |
-| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth-klient-ID. Skickas in explicit i Google-providern (Auth.js letar annars efter `AUTH_GOOGLE_ID`) |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth-hemlighet, skickas in på samma sätt |
-| `ALLOWED_EMAILS` | Kommaseparerad lista över e-postadresser som får logga in |
-| `BLOB_READ_WRITE_TOKEN` | Skapas när Blob-storen kopplas till Vercel-projektet |
-| `ANTHROPIC_API_KEY` | Claude API-nyckel. Utan den svarar pass-byggaren och hjälparen 503 |
-| `MODEL_BUILDER` | Modell för pass-byggaren (standard `claude-sonnet-5-5`) |
-| `MODEL_HELPER` | Modell för hjälparen (standard `claude-haiku-4-5`) |
-| `AI_DAILY_LIMIT` | Max antal anrop till Claude API per användare och dag, för pass-byggaren och hjälparen tillsammans (standard 200, `0` stänger av). En tur i pass-byggaren kan göra flera anrop |
+| `AUTH_SECRET` | Secret for the Auth.js session cookie (`npx auth secret`) |
+| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth client ID. Passed explicitly to the Google provider (Auth.js otherwise looks for `AUTH_GOOGLE_ID`) |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth secret, passed the same way |
+| `ALLOWED_EMAILS` | Comma-separated list of e-mail addresses allowed to sign in |
+| `BLOB_READ_WRITE_TOKEN` | Created when the Blob store is connected to the Vercel project |
+| `ANTHROPIC_API_KEY` | Claude API key. Without it the builder and helper answer 503 |
+| `MODEL_BUILDER` | Model for the builder (default `claude-sonnet-5-5`) |
+| `MODEL_HELPER` | Model for the helper (default `claude-haiku-4-5`) |
+| `AI_DAILY_LIMIT` | Max Claude API calls per user and day, builder and helper combined (default 200, `0` disables). One builder turn can make several calls |
 
-### Google OAuth-klient
+### Google OAuth client
 
-I Google Cloud Console → APIs & Services → Credentials → *Create credentials* → *OAuth client ID* (typ *Web application*):
+In Google Cloud Console → APIs & Services → Credentials → *Create credentials* → *OAuth client ID* (type *Web application*):
 
-- **Authorized JavaScript origins:** `http://localhost:5173` och din Vercel-domän, t.ex. `https://milon-pt.vercel.app`
-- **Authorized redirect URIs:** `http://localhost:5173/auth/callback/google` och `https://milon-pt.vercel.app/auth/callback/google`
+- **Authorized JavaScript origins:** `http://localhost:5173` and your Vercel domain, e.g. `https://milon-pt.vercel.app`
+- **Authorized redirect URIs:** `http://localhost:5173/auth/callback/google` and `https://milon-pt.vercel.app/auth/callback/google`
 
-Om OAuth-samtyckesskärmen står i läget *Testing* måste din e-post även läggas till som testanvändare. Preview-deployer får nya URL:er, så testa inloggningen på produktionsdomänen.
+If the OAuth consent screen is in *Testing* mode, your e-mail must also be added as a test user. Preview deployments get new URLs, so test sign-in on the production domain.
 
 ### Vercel Blob
 
-Skapa en Blob-store i Vercel-projektet (Storage → Create → Blob) med **privat** åtkomst och koppla den till projektet. Då skapas `BLOB_READ_WRITE_TOKEN`. Hämta den lokalt med `vercel env pull .env.local` eller kopiera den till `.env`.
+Create a Blob store in the Vercel project (Storage → Create → Blob) with **private** access and connect it to the project. This creates `BLOB_READ_WRITE_TOKEN`. Pull it locally with `vercel env pull .env.local` or copy it into `.env`.
 
-## Datamodell
+## Data model
 
-Fyra filtyper per användare, plus konversationer och räknare. Seten bor på övningen, passet är en mall som pekar på övnings-ID, och ett sparat pass är en lätt post som knyter ihop dem.
+Four file types per user, plus conversations and counters. Sets live on the exercise, a workout is a template pointing at exercise IDs, and a saved session is a light record tying them together.
 
-| Fil | Innehåll |
+| File | Contents |
 | --- | --- |
-| `profile.json` | Mål, regler, veckomål och kcal-uppskattning per passtyp |
-| `exercises/<exerciseId>.json` | Övning med namn, typ, instruktion, `archived` och hela loggen (nyaste först) |
-| `workouts/<slug>.v<N>.json` | Passmall. Varje ändring skapar nästa version, äldre finns kvar och kan återställas |
-| `sessions/<sessionId>.json` | Ett genomfört pass: mall och version, start och slut, avvikelser, kcal |
-| `builder/<id>.json` | Pass-byggarens konversationer |
-| `usage/<YYYY-MM-DD>.json` | Antal AI-anrop den dagen (rensas efter 30 dagar) |
+| `profile.json` | Goals, rules, weekly goal and kcal estimates per workout type |
+| `exercises/<exerciseId>.json` | Exercise with name, type, instruction, `archived` and the full log (newest first) |
+| `workouts/<slug>.v<N>.json` | Workout template. Every change creates the next version; older ones are kept and can be restored |
+| `sessions/<sessionId>.json` | A completed workout: template and version, start and end, deviations, kcal |
+| `builder/<id>.json` | Builder conversations |
+| `usage/<YYYY-MM-DD>.json` | Number of AI calls that day (pruned after 30 days) |
 
 ```json
 {
@@ -104,85 +107,85 @@ Fyra filtyper per användare, plus konversationer och räknare. Seten bor på ö
 }
 ```
 
-- `type`: `weight` (vikt × reps), `bodyweight` (reps) eller `time` (sekunder). Set per typ: `{ weight, reps }`, `{ reps }` eller `{ seconds }`.
-- `loadClass` (bara `weight`): `light` = steg 1,25 kg, `heavy` = steg 5 kg. Tidsövningar har steg 5 s.
-- Sessions-id är `s_YYYYMMDD` (svensk tid), med `_2`, `_3` … vid flera pass samma dag.
-- Pågående pass ligger i localStorage under `milonpt.activeSession`; pass som väntar på nät under `milonpt.pendingSaves`.
+- `type`: `weight` (weight × reps), `bodyweight` (reps) or `time` (seconds). Sets per type: `{ weight, reps }`, `{ reps }` or `{ seconds }`.
+- `loadClass` (`weight` only): `light` = 1.25 kg steps, `heavy` = 5 kg steps. Timed exercises step by 5 s.
+- Session ids are `s_YYYYMMDD` (Swedish time), with `_2`, `_3` … for several workouts the same day.
+- The ongoing workout is in localStorage under `milonpt.activeSession`; workouts waiting for the network under `milonpt.pendingSaves`.
 
-Volym: `weight` = summa vikt × reps, `bodyweight` = summa reps, `time` = summa sekunder. Beräknad 1RM: vikt × (1 + reps / 30). Rekord räknas för bästa set (1RM, reps eller tid) och, för viktövningar, tyngsta vikt; första passet räknas aldrig som rekord.
+Volume: `weight` = sum of weight × reps, `bodyweight` = sum of reps, `time` = sum of seconds. Estimated 1RM: weight × (1 + reps / 30). Records count for the best set (1RM, reps or time) and, for weight exercises, the heaviest weight; the first session never counts as a record.
 
-## Skärmflöden
+## Screens
 
-1. **Start:** finns ett pågående pass visas "Fortsätt pågående pass" (och "Avbryt pass", med bekräftelse) överst. Därefter senaste versionen av varje pass som kort, senast tränade först med "Senast: för 3 dagar sedan". Ett tryck startar passet direkt.
-2. **Aktivt pass:** alla övningar med infällbar instruktion. Seten förifylls från senaste loggposten, annars från passmallens mål. −/+ per värde, "klar" per set, lägg till och ta bort set. Varje ändring skrivs till localStorage. Tidsövningar har en timer i setraden som räknar ner, piper vid noll och fyller i tiden; den lagrar sluttiden (`timerEndsAt`) så att den stämmer även om skärmen låses, och skärmen hålls tänd (Wake Lock). "Hjälp" per övning öppnar hjälparen; ett byte av övning blir en avvikelse i passet, inte en ändring av mallen.
-3. **Avsluta:** sammanfattning med set, volym och nya rekord. Finns avvikelser får du frågan om de ska sparas som ny version av passet. kcal föreslås (profilens värde för passet, annars passtypens intervall) och kan justeras. "Spara" skriver övningsloggar och sessionspost; localStorage rensas först när servern bekräftat.
-4. **Skapa pass:** chatt med pass-byggaren och en lista över övningarna som diskuteras. Godkända övningar sparas (befintliga återanvänds), och "Spara pass" skapar `v1` eller nästa version. Äldre versioner kan återställas som ny version.
-5. **Historik:** vecka (dagar, pass mot veckomål, volym), milstolpar (Pull-up och Handstående, med progressionsövningar tills målet loggats), övningslista med arkiverade sist, och per övning graf och senaste passen.
-6. **Konto:** veckomål och import från Craft.
+1. **Start:** if a workout is in progress, "Fortsätt pågående pass" (and "Avbryt pass", with confirmation) is shown at the top. Then the latest version of each workout as a card, most recently trained first with "Senast: för 3 dagar sedan". One tap starts the workout.
+2. **Active workout:** every exercise with a collapsible instruction. Sets are prefilled from the latest log entry, otherwise from the template's target. −/+ per value, "done" per set, add and remove sets. Every change is written to localStorage. Timed exercises have a timer in the set row that counts down, beeps at zero and fills in the time; it stores the end time (`timerEndsAt`) so it stays correct if the screen locks, and the screen is kept awake (Wake Lock). "Hjälp" per exercise opens the helper; swapping an exercise becomes a deviation in the session, not a change to the template.
+3. **Finish:** summary with sets, volume and new records. If there are deviations you are asked whether to save them as a new version of the workout. kcal is suggested (the profile's value for the workout, otherwise the workout type's range) and can be adjusted. "Spara" writes the exercise logs and the session record; localStorage is cleared only after the server confirms.
+4. **Create workout:** chat with the builder and a list of the exercises being discussed. Approved exercises are saved (existing ones are reused), and "Spara pass" creates `v1` or the next version. Older versions can be restored as a new version.
+5. **History:** week (days, sessions vs. weekly goal, volume), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercise list with archived ones last, and per exercise a chart and the latest sessions.
+6. **Account:** weekly goal and the Craft import.
 
-## AI-coachen
+## The AI coach
 
-Två separata anrop med var sin systemprompt, båda med verktyg (tool use) så att appen aldrig tolkar JSON ur löptext. Prompterna finns i `src/lib/server/builder/prompt.ts` och `src/lib/server/helper/prompt.ts`.
+Two separate calls with their own system prompts, both using tools so the app never parses JSON out of prose. The prompts (in Swedish) are in `src/lib/server/builder/prompt.ts` and `src/lib/server/helper/prompt.ts`.
 
-- **Pass-byggaren** (`/skapa`, Sonnet): diskuterar fram övningar med katalogen, målen och passet som redigeras som kontext. Svaren visas med enkel markdown.
-- **Hjälparen** (knappen "Hjälp" under passet, Haiku): mer instruktion eller byte av övning, med passet, dagens set och övningens fem senaste loggposter som kontext. Svarar i ren text.
-- Kostnad: ungefär 4–5 kr i månaden för Haiku och 12–20 kr för Sonnet vid ca 12 pass. Utöver `AI_DAILY_LIMIT`, sätt en månadsgräns för API-nyckeln i Anthropics Console. Ett Claude-abonnemang täcker inte API-anrop.
+- **The builder** (`/skapa`, Sonnet): discusses exercises with the catalogue, goals and the workout being edited as context. Replies are rendered with simple markdown.
+- **The helper** ("Hjälp" button during a workout, Haiku): more instruction or swapping an exercise, with the workout, today's sets and the exercise's five latest log entries as context. Replies in plain text.
+- Cost: roughly SEK 4–5 a month for Haiku and SEK 12–20 for Sonnet at about 12 workouts. Besides `AI_DAILY_LIMIT`, set a monthly limit for the API key in the Anthropic Console. A Claude subscription does not cover API calls.
 
-## Import från Craft
+## Craft import
 
-**Enklast:** logga in, gå till **Konto → Importera från Craft** och välj JSON-filen. Appen visar först vad som skulle sparas och sparar först när du trycker **Importera**. Se `scripts/import-example.json` för formatet. Utöver övningar och pass kan filen ha:
+**Easiest:** sign in, go to **Konto → Importera från Craft** and pick the JSON file. The app first shows what would be saved and only saves when you press **Importera**. See `scripts/import-example.json` for the format. Besides exercises and workouts, the file can contain:
 
-- `profile`: `goals` (text eller lista), `rules`, `kcalEstimates` (`strength`/`hiit` med `min`/`max`) och `weeklySessionGoal`. Befintliga värden skrivs aldrig över; regler läggs till.
-- `note` på loggposter och `archived` på övningar.
-- `sessions`: genomförda pass `{ date, workout, kcalEstimate? }`. De blir sessionsposter kl. 12 svensk tid, och loggposterna samma dag kopplas till passet.
+- `profile`: `goals` (text or list), `rules`, `kcalEstimates` (`strength`/`hiit` with `min`/`max`) and `weeklySessionGoal`. Existing values are never overwritten; rules are appended.
+- `note` on log entries and `archived` on exercises.
+- `sessions`: completed workouts `{ date, workout, kcalEstimate? }`. They become session records at 12:00 Swedish time, and log entries from the same day are linked to them.
 
-Från kommandoraden (kräver `BLOB_READ_WRITE_TOKEN`, eller `--local` för `.data/`). Ditt användar-ID visas på `/konto`.
+From the command line (requires `BLOB_READ_WRITE_TOKEN`, or `--local` for `.data/`). Your user ID is shown on `/konto`.
 
 ```sh
-npm run import -- min-export.json --user <användar-ID>          # torrkörning: visar planen
-npm run import -- min-export.json --user <användar-ID> --apply  # skriver
+npm run import -- my-export.json --user <user-id>          # dry run: shows the plan
+npm run import -- my-export.json --user <user-id> --apply  # writes
 ```
 
-- Hela filen valideras först och alla fel listas med sökväg. Ingenting skrivs om något är fel.
-- Övningsnamn matchas mot befintliga övningar (skiftläge och blanksteg spelar ingen roll). Befintliga namn och instruktioner skrivs aldrig över.
-- Samma fil kan köras igen utan dubbletter.
+- The whole file is validated first and every error is listed with its path. Nothing is written if anything is wrong.
+- Exercise names are matched against existing exercises (case and whitespace don't matter). Existing names and instructions are never overwritten.
+- The same file can be imported again without duplicates.
 
-## Lägg på hemskärmen (PWA)
+## Add to home screen (PWA)
 
-- **Android (Chrome):** meny ⋮ → Installera app.
-- **iPhone (Safari):** Dela → Lägg till på hemskärmen (inte testat, se #17).
+- **Android (Chrome):** menu ⋮ → Install app.
+- **iPhone (Safari):** Share → Add to Home Screen (untested, see #17).
 
-Sidor du öppnat visas utan nät, annars visas en offlinesida. Sparar du ett pass utan nät läggs det i kö och skickas när nätet är tillbaka. Pass-byggaren och hjälparen kräver nät. Ikonerna ritas med `python3 scripts/make_icons.py static/icons` (kräver Pillow).
+Visited pages are available offline; otherwise an offline page is shown. A workout saved without a network is queued and sent when the network is back. The builder and helper need a network. Icons are drawn with `python3 scripts/make_icons.py static/icons` (requires Pillow).
 
-## Säkerhet
+## Security
 
-- Inloggning med Google och allowlist som kontrolleras på varje request. Tom lista släpper inte in någon.
-- Blob-filer skrivs alltid med `access: 'private'` och sökvägar valideras så att en användare aldrig når en annans filer.
-- Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS m.fl. på sidor och API-svar från servern (inte på statiska filer eller omdirigeringar till inloggningen).
-- Daglig gräns för anrop till Claude API per användare (`AI_DAILY_LIMIT`). Varje anrop räknas, och gränsen kontrolleras innan något skickas.
-- `/api/storage/selftest` finns bara i dev.
-- `.env*` är gitignorerat. Riktig användardata hör inte hemma i repot.
+- Google sign-in and an allowlist checked on every request. An empty list lets nobody in.
+- Blob files are always written with `access: 'private'`, and paths are validated so one user can never reach another's files.
+- Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS etc. on pages and API responses from the server (not on static files or redirects to the sign-in page).
+- A daily limit on Claude API calls per user (`AI_DAILY_LIMIT`). Every call counts, and the limit is checked before anything is sent.
+- `/api/storage/selftest` exists only in dev.
+- `.env*` is gitignored. Real user data does not belong in the repo.
 
-## Kvalitet och CI
+## Quality and CI
 
-| Kommando | Vad |
+| Command | What |
 | --- | --- |
-| `npm run dev` | Utvecklingsserver |
-| `npm run check` | Typkontroll (svelte-check) |
-| `npm test` | Enhetstester (vitest) |
-| `npm run test:coverage` | Tester med täckningsrapport |
-| `npm run build` | Produktionsbygge (adapter-vercel) |
-| `npm run import` | Importskriptet, se ovan |
+| `npm run dev` | Dev server |
+| `npm run check` | Type check (svelte-check) |
+| `npm test` | Unit tests (vitest) |
+| `npm run test:coverage` | Tests with a coverage report |
+| `npm run build` | Production build (adapter-vercel) |
+| `npm run import` | The import script, see above |
 
-GitHub Actions (`.github/workflows/ci.yml`) kör typkontroll, tester och bygge på varje PR och push till `main`, plus ett separat jobb med `npm audit --omit=dev --audit-level=high`. Audit-jobbet är medvetet inte ett krav för merge, så att en ny sårbarhet i ett beroende inte stoppar orelaterade PR:er; åtgärda den i en egen PR. CodeQL körs också, och Dependabot öppnar PR:er för beroenden varje vecka.
+GitHub Actions (`.github/workflows/ci.yml`) runs type check, tests and build on every PR and push to `main`, plus a separate `npm audit --omit=dev --audit-level=high` job. The audit job is deliberately not required for merge, so a new vulnerability in a dependency doesn't block unrelated PRs; fix it in its own PR. CodeQL also runs, and Dependabot opens dependency PRs weekly.
 
-**Skydda `main`** (görs en gång i GitHub): Settings → Branches → *Add branch ruleset* (eller *Add rule*) för `main` → kryssa i *Require a pull request before merging* och *Require status checks to pass*, och välj kontrollen **Typkontroll, tester och bygge**. Kryssa gärna i *Block force pushes*.
+**Protect `main`** (once, in GitHub): Settings → Branches → *Add branch ruleset* (or *Add rule*) for `main` → enable *Require a pull request before merging* and *Require status checks to pass*, and select the check **Check, test and build**. Also enable *Block force pushes*.
 
-## Utanför scope och idéer
+## Out of scope and ideas
 
-- iPhone-stöd för den installerade appen (#17)
-- Fullt offline-stöd (pass-byggaren och hjälparen utan nät)
-- Vilotimer mellan set
-- RPE per set och kroppsvikt med extra tillägg (viktväst)
-- Extern övningsdatabas
-- Fler användare: datamodellen är redan per `userId`. Det som saknas är betalning, kvot per användare och öppen inloggning i stället för allowlist.
+- iPhone support for the installed app (#17)
+- Full offline support (builder and helper without a network)
+- Rest timer between sets
+- RPE per set and bodyweight with added load (weight vest)
+- External exercise database
+- More users: the data model is already per `userId`. What's missing is payment, per-user quotas and open sign-up instead of an allowlist.

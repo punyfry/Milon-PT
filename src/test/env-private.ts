@@ -1,2 +1,2 @@
-/** Ersätter `$env/dynamic/private` i tester. Testerna sätter värden direkt på objektet. */
+/** Replaces `$env/dynamic/private` in tests. Tests set values directly on the object. */
 export const env: Record<string, string | undefined> = {};

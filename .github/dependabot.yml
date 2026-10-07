@@ -7,7 +7,7 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
-      # Små uppdateringar i en PR i stället för en per paket.
+      # Group small updates into one PR instead of one per package.
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: github-actions

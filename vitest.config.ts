@@ -7,7 +7,7 @@ export default defineConfig({
 		include: ['src/**/*.test.ts'],
 		alias: {
 			$lib: path('./src/lib'),
-			// SvelteKits virtuella moduler finns inte utanför Vite-pluginet.
+			// SvelteKit's virtual modules don't exist outside the Vite plugin.
 			'$env/dynamic/private': path('./src/test/env-private.ts'),
 			'$app/environment': path('./src/test/app-environment.ts')
 		},

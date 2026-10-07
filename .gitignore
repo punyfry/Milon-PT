@@ -20,6 +20,6 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Lokal datalagring i dev (utan Blob-token)
+# Local data storage in dev (without a Blob token)
 /.data
 coverage
