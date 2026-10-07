@@ -121,17 +121,20 @@ export function adjust(set: ActiveSet, field: SetField, direction: 1 | -1, loadC
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	const current = values[field];
 	if (current === undefined) return;
-	values[field] = Math.max(0, round2(current + direction * stepFor(field, loadClass)));
-	if (field === 'seconds') delete set.plannedSeconds;
+	const next = Math.max(0, round2(current + direction * stepFor(field, loadClass)));
+	// A time changed by hand replaces the plan from an earlier timer run.
+	if (field === 'seconds' && next !== current) delete set.plannedSeconds;
+	values[field] = next;
 }
 
 /** Sets a field to a typed value. Invalid values are ignored. */
 export function setField(set: ActiveSet, field: SetField, value: number): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	if (values[field] === undefined || !Number.isFinite(value) || value < 0) return;
-	values[field] = field === 'weight' ? round2(value) : Math.round(value);
-	// A time set by hand replaces the plan from an earlier timer run.
-	if (field === 'seconds') delete set.plannedSeconds;
+	const next = field === 'weight' ? round2(value) : Math.round(value);
+	// A time changed by hand replaces the plan from an earlier timer run.
+	if (field === 'seconds' && next !== values[field]) delete set.plannedSeconds;
+	values[field] = next;
 }
 
 /** New set with the same values as the last one, not marked as done. */

@@ -13,8 +13,8 @@ import {
 	setField,
 	startTimer,
 	stopTimer,
-	timerStartSeconds,
 	summarize,
+	timerStartSeconds,
 	type ExerciseInfo
 } from './active';
 
@@ -161,6 +161,27 @@ describe('timer', () => {
 		stopTimer(typed, at(5));
 		setField(typed, 'seconds', 20);
 		expect(timerStartSeconds(typed)).toBe(20);
+	});
+
+	it('keeps the plan when an edit leaves the time unchanged', () => {
+		const set: ActiveSet = { seconds: 30, done: false };
+		startTimer(set, t0);
+		stopTimer(set, at(5));
+		setField(set, 'seconds', 5); // e.g. −5 clamped to the 5 s minimum
+		expect(timerStartSeconds(set)).toBe(30);
+	});
+
+	it('clears the plan when a restarted timer is stopped at the full time', () => {
+		const set: ActiveSet = { seconds: 30, done: false };
+		startTimer(set, t0);
+		stopTimer(set, at(5));
+		startTimer(set, at(10));
+		stopTimer(set, at(39.6));
+		expect(set).toEqual({ seconds: 30, done: true });
+	});
+
+	it('has no timer start time for sets without seconds', () => {
+		expect(timerStartSeconds({ reps: 5, done: false })).toBe(0);
 	});
 
 	it('can restart a set that was stopped at zero seconds', () => {
