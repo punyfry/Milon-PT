@@ -152,7 +152,8 @@ describe('milstolpar med progression', () => {
 		const neg = bw('ex_neg', 'Negativa pull-ups', '2026-10-01');
 		const band = bw('ex_band', 'Pull-up med gummiband', '2026-09-20');
 		const headstand = { ...bw('ex_huvud', 'Huvudstående-progression', '2026-10-02'), type: 'time' as const };
-		const [pullup, handstand] = milestoneExercises([band, neg, bw('ex_pull_up', 'Pull-up'), headstand]);
+		const hang = bw('ex_hang', 'Dead hang i pull-up-stång', '2026-10-03');
+		const [pullup, handstand] = milestoneExercises([band, neg, hang, bw('ex_pull_up', 'Pull-up'), headstand]);
 		expect(pullup).toMatchObject({ exercise: { id: 'ex_neg' }, progress: true });
 		expect(pullup.others.map((e) => e.id)).toEqual(['ex_band']);
 		expect(handstand).toMatchObject({ exercise: { id: 'ex_huvud' }, progress: true, others: [] });

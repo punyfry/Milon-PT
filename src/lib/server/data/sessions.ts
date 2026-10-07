@@ -49,8 +49,8 @@ export async function listSessionsBetween(storage: UserStorage, from: string, to
 }
 
 /**
- * Senaste starttiden per pass (slug). Läser nyaste filerna först, i omgångar,
- * och slutar när alla `slugs` har hittats.
+ * Senaste starttiden per pass (slug). Läser nyaste filerna först, i omgångar
+ * som fördubblas (10, 20, 40 …), och slutar när alla `slugs` har hittats.
  */
 export async function lastSessionBySlug(storage: UserStorage, slugs: readonly string[]): Promise<Map<string, string>> {
 	const ids = (await listSessionIds(storage)).sort(
@@ -58,16 +58,15 @@ export async function lastSessionBySlug(storage: UserStorage, slugs: readonly st
 	);
 	const wanted = new Set(slugs);
 	const last = new Map<string, string>();
-	const BATCH = 10;
-	for (let i = 0; i < ids.length; i += BATCH) {
-		for (const s of await readSessions(storage, ids.slice(i, i + BATCH))) {
+	for (let i = 0, batch = 10; i < ids.length; i += batch, batch *= 2) {
+		const end = Math.min(i + batch, ids.length);
+		for (const s of await readSessions(storage, ids.slice(i, end))) {
 			const prev = last.get(s.workoutSlug);
 			if (!prev || Date.parse(s.startedAt) > Date.parse(prev)) last.set(s.workoutSlug, s.startedAt);
 		}
 		// Ett id säger bara datumet, så läs klart dagen innan vi slutar.
-		const nextDate = ids[i + BATCH] ? idDate(ids[i + BATCH]) : null;
-		const batchLastDate = idDate(ids[Math.min(i + BATCH, ids.length) - 1]);
-		if ([...wanted].every((slug) => last.has(slug)) && (nextDate === null || nextDate !== batchLastDate)) break;
+		const nextDate = end < ids.length ? idDate(ids[end]) : null;
+		if ([...wanted].every((slug) => last.has(slug)) && (nextDate === null || nextDate !== idDate(ids[end - 1]))) break;
 	}
 	return last;
 }

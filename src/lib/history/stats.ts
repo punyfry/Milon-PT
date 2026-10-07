@@ -198,7 +198,8 @@ export const MILESTONES = [
 		key: 'pullup',
 		title: 'Pull-up',
 		match: /^(pull[\s-]?ups?|chins?[\s-]?ups?)$/,
-		progression: /(pull[\s-]?ups?|chins?[\s-]?ups?)/
+		// Inte övningar som bara använder stången, t.ex. "Dead hang i pull-up-stång".
+		progression: /(pull[\s-]?ups?|chins?[\s-]?ups?)(?![\s-]?(stång|bar))/
 	},
 	{
 		key: 'handstand',
