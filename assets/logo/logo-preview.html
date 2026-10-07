@@ -45,30 +45,24 @@
 	<p class="lead">An M that is also a dumbbell. Drawn in currentColor so it takes the accent color.</p>
 	<main id="out"></main>
 	<script>
-		// Copy of the symbol in logo.svg. Update it here if the file changes.
-		const marks = {
-			h2: {
-				title: 'Milon-PT: ett M som är en hantel, stången böjer sig i ett V mellan skivorna under tung vikt',
-				body: '<g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M30 28V68M66 28V68" /><path d="M16 40V56M80 40V56" /><path d="M30 40L48 58L66 40" /></g>'
-			}
+		// Copy of the symbol in logo.svg (a file:// page cannot load it and keep currentColor). Keep the two in sync.
+		const LOGO = {
+			title: 'Milon-PT: ett M som är en hantel, stången böjer sig i ett V mellan skivorna under tung vikt',
+			body: '<g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M30 28V68M66 28V68" /><path d="M16 40V56M80 40V56" /><path d="M30 40L48 58L66 40" /></g>'
 		};
-		const svg = (v, size, cls = '') =>
-			`<svg class="${cls}" viewBox="0 0 96 96" width="${size}" height="${size}" role="img" aria-label="${marks[v].title}">${marks[v].body}</svg>`;
+		const svg = (size, cls = '') =>
+			`<svg class="${cls}" viewBox="0 0 96 96" width="${size}" height="${size}" role="img" aria-label="${LOGO.title}">${LOGO.body}</svg>`;
 		const fig = (inner, cap) => `<figure>${inner}<figcaption>${cap}</figcaption></figure>`;
-		const icon = (v, size) => fig(`<div class="icon" style="width:${size}px;height:${size}px">${svg(v, size)}</div>`, `icon ${size}`);
-		document.getElementById('out').innerHTML = Object.keys(marks)
-			.map(
-				(v) => `<section>
-					<h2>Milon-PT<span>logo.svg</span></h2>
-					<p class="desc">${marks[v].title.replace('Milon-PT: ', '')}</p>
-					<div class="stack">
-						<div class="row big">${fig(svg(v, 256, 'mint'), '256')}${fig(svg(v, 64, 'mint'), '64')}${fig(svg(v, 32, 'mint'), '32')}</div>
-						<div class="row">${icon(v, 180)}${icon(v, 64)}${icon(v, 32)}</div>
-						<div class="row">${fig(svg(v, 128, 'white'), 'white 128')}${fig(svg(v, 64, 'white'), 'white 64')}${fig(svg(v, 32, 'white'), 'white 32')}${fig(svg(v, 16, 'white'), 'white 16')}</div>
-					</div>
-				</section>`
-			)
-			.join('');
+		const icon = (size) => fig(`<div class="icon" style="width:${size}px;height:${size}px">${svg(size)}</div>`, `icon ${size}`);
+		document.getElementById('out').innerHTML = `<section>
+			<h2>Milon-PT<span>logo.svg</span></h2>
+			<p class="desc">${LOGO.title.replace('Milon-PT: ', '')}</p>
+			<div class="stack">
+				<div class="row big">${fig(svg(256, 'mint'), '256')}${fig(svg(64, 'mint'), '64')}${fig(svg(32, 'mint'), '32')}</div>
+				<div class="row">${icon(180)}${icon(64)}${icon(32)}</div>
+				<div class="row">${fig(svg(128, 'white'), 'white 128')}${fig(svg(64, 'white'), 'white 64')}${fig(svg(32, 'white'), 'white 32')}${fig(svg(16, 'white'), 'white 16')}</div>
+			</div>
+		</section>`;
 	</script>
 </body>
 </html>

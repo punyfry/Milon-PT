@@ -1,4 +1,4 @@
-"""Draws the Milon-PT icons: the logo (an M that is also a dumbbell, assets/logo/logo.svg) in mint on near black."""
+"""Draws the Milon-PT icons from the logo (assets/logo/logo.svg) in mint on near black."""
 import sys
 from PIL import Image, ImageDraw
 
