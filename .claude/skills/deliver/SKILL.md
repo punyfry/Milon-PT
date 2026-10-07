@@ -1,11 +1,11 @@
 ---
 name: deliver
-description: The workflow for taking a change in Milon-PT from task to merged PR - code on its own branch, check locally, open a PR, have the subagents milon-reviewer and milon-tester review and test in parallel, fix their findings and merge when everyone is satisfied. Use for features, bug fixes and issues in this repo.
+description: The workflow for taking a change in Milon-PT from task to merged PR - code on its own branch, check locally, open a PR, have the subagents gregory and nissa review and test in parallel, fix their findings and merge when everyone is satisfied. Use for features, bug fixes and issues in this repo.
 ---
 
 # Deliver a change
 
-You are the coder. Review and testing are done by two subagents: `milon-reviewer` (security, structure, comments, design) and `milon-tester` (coverage, unit tests, manual tests). Follow `CLAUDE.md` throughout.
+You are the coder. Review and testing are done by two subagents: Gregory (`gregory`, the reviewer: security, structure, comments, design) and Nissa (`nissa`, the tester: coverage, unit tests, manual tests). Follow `CLAUDE.md` throughout.
 
 ## 1. Understand and scope
 
@@ -39,8 +39,8 @@ Read your own diff critically before committing: what would make CI or the revie
 
 Start both subagents in the same message so they run at the same time:
 
-- `milon-reviewer`: give it the branch/PR number and what the change is meant to do, and point it at the risky parts of this particular change.
-- `milon-tester`: give it the branch, the affected functionality and what test data is available.
+- `gregory`: give it the branch/PR number and what the change is meant to do, and point it at the risky parts of this particular change.
+- `nissa`: give it the branch, the affected functionality and what test data is available.
 
 While they run, wait for CI (the GitHub Actions check **Typkontroll, tester och bygge**, CodeQL and Vercel).
 
