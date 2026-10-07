@@ -24,6 +24,8 @@
 	const kindFor = (type: string): 'seconds' | 'integer' | 'number' =>
 		type === 'time' ? 'seconds' : type === 'bodyweight' ? 'integer' : 'number';
 	const v = $derived(data.week.volumeByType);
+	const active = $derived(data.exercises.filter((e) => !e.archived));
+	const archived = $derived(data.exercises.filter((e) => e.archived));
 </script>
 
 <svelte:head><title>Historik · Milon-PT</title></svelte:head>
@@ -121,10 +123,9 @@
 		{/each}
 	</div>
 
-	<h2>Övningar</h2>
-	{#if data.exercises.length}
+	{#snippet exerciseList(list: typeof data.exercises)}
 		<ul class="card list">
-			{#each data.exercises as ex (ex.id)}
+			{#each list as ex (ex.id)}
 				<li>
 					<a href={`/historik/ovning/${ex.id}`}>
 						<span class="name">{ex.name}</span>
@@ -133,8 +134,19 @@
 				</li>
 			{/each}
 		</ul>
-	{:else}
+	{/snippet}
+
+	<h2>Övningar</h2>
+	{#if active.length}
+		{@render exerciseList(active)}
+	{:else if !archived.length}
 		<p class="meta">Inga loggade pass än.</p>
+	{/if}
+	{#if archived.length}
+		<details class="archived">
+			<summary>Arkiverade ({archived.length})</summary>
+			{@render exerciseList(archived)}
+		</details>
 	{/if}
 </main>
 
@@ -276,5 +288,14 @@
 	}
 	.name {
 		font-weight: 600;
+	}
+	.archived {
+		margin-top: 1rem;
+	}
+	.archived summary {
+		cursor: pointer;
+		color: var(--muted);
+		padding: 0.25rem 0;
+		margin-bottom: 0.5rem;
 	}
 </style>

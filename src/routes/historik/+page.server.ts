@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			const lastDate = e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
 			const series = progressSeries(e);
 			const best = series.reduce((b, p) => Math.max(b, p.value), 0);
-			return { id: e.id, name: e.name, type: e.type, lastDate, best, metric: metricFor(e.type).label };
+			return { id: e.id, name: e.name, type: e.type, archived: e.archived, lastDate, best, metric: metricFor(e.type).label };
 		})
 		.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'sv'));
 
