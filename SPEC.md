@@ -161,7 +161,7 @@ Fem vyer. Inloggning med Google kommer först, sedan landar du på landningssida
 
 **4. Skapa och uppdatera pass**
 
-- Chatt med pass-byggaren och en live-lista över övningarna som diskuteras.
+- Chatt med pass-byggaren och en live-lista över övningarna som diskuteras. Svaren visas med enkel markdown (fetstil, kursiv, listor, rubriker som fet rad); ingen HTML från modellen renderas.
 - När du godkänner en övning sparas den med instruktion, typ och `loadClass`. Finns den redan återanvänds den.
 - "Spara pass" skapar ett nytt pass (`v1`) eller, vid redigering, en ny version (`v2`, `v3`, ...). Äldre versioner finns kvar och kan återställas som ny version.
 
