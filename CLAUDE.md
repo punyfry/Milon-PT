@@ -15,14 +15,14 @@ npm run build   # adapter-vercel build
 npm run test:coverage
 ```
 
-CI (`.github/workflows/ci.yml`) runs check, test, build and `npm audit --omit=dev --audit-level=high` on every PR. Run the same three locally before pushing.
+CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the required check), plus a separate `npm audit --omit=dev --audit-level=high` job. Run check, test and build locally before pushing.
 
 ## Hard rules
 
 - **Never commit user data or secrets.** `.env*` (except `.env.example`) and `.data/` are gitignored. Real import files from the owner contain personal data: use them only outside the repo and delete local copies (`rm -rf .data`) after testing.
 - **Storage goes through `storageFor(locals)`** (`src/lib/server/storage`). Never call `@vercel/blob` directly, never use `access: 'public'`, and never return a blob URL to the client. Paths are validated in `paths.ts`; keep it strict.
 - **Every route except `/login` and `/auth/*` requires an allowlisted session** (`src/lib/server/security/guard.ts`). New public paths need a very good reason and a test.
-- **AI calls**: only from server routes, after input validation and after `countAiCall(storage)` (daily limit). Model names come from `MODEL_BUILDER`/`MODEL_HELPER`; parameters per model live in `src/lib/server/ai/models.ts`.
+- **AI calls**: only from server routes, after input validation. Check `assertAiCallsLeft(storage)` first and pass `limitedCreateMessage(storage)` so every Claude request counts against the daily limit. Model names come from `MODEL_BUILDER`/`MODEL_HELPER`; parameters per model live in `src/lib/server/ai/models.ts`.
 - **Writes are conflict-safe**: use `ifMatch` for updates and `createOnly` for new files; workouts are versioned (`<slug>.v<N>.json`) and never overwritten. Saving a session must stay idempotent (same id + startedAt).
 - **Never render model output as HTML.** Use `Markdown.svelte` (builder) or plain text (helper). No `{@html}`.
 - Do not put model identifiers in commit messages or PR text.

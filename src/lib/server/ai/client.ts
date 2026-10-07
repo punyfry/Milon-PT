@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
 import type { CreateMessage } from './models';
-import { consumeAiCall, dailyLimit } from './usage';
+import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls } from './usage';
 import type { UserStorage } from '../storage/types';
 import { todayInStockholm } from '../../time';
 
@@ -30,9 +30,18 @@ export const createMessage: CreateMessage = (params) => {
 };
 
 /**
- * Räknar ett anrop mot dagens gräns (AI_DAILY_LIMIT, standard 200 per
- * användare). Kastar AiLimitError när gränsen är nådd.
+ * createMessage som räknar varje anrop mot dagens gräns (AI_DAILY_LIMIT,
+ * standard 200 per användare) och kastar AiLimitError när den är nådd.
  */
-export function countAiCall(storage: UserStorage): Promise<number> {
-	return consumeAiCall(storage, todayInStockholm(), dailyLimit(env.AI_DAILY_LIMIT));
+export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage = createMessage): CreateMessage {
+	return async (params) => {
+		await consumeAiCall(storage, todayInStockholm(), dailyLimit(env.AI_DAILY_LIMIT));
+		return inner(params);
+	};
+}
+
+/** Kastar AiLimitError om dagens gräns redan är nådd. Räknar inget. */
+export async function assertAiCallsLeft(storage: UserStorage): Promise<void> {
+	const limit = dailyLimit(env.AI_DAILY_LIMIT);
+	if ((await remainingAiCalls(storage, todayInStockholm(), limit)) === 0) throw new AiLimitError(limit);
 }

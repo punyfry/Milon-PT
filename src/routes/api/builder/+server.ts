@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
 import { isObject } from '$lib/model';
-import { builderModel, countAiCall, createMessage, isAiConfigured } from '$lib/server/ai/client';
+import { assertAiCallsLeft, builderModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
 import { AiLimitError } from '$lib/server/ai/usage';
 import {
 	conversationView,
@@ -31,13 +31,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!message) error(400, 'Meddelandet är tomt');
 	if (message.length > MAX_MESSAGE) error(400, `Meddelandet är för långt (max ${MAX_MESSAGE} tecken)`);
 
-	try {
-		await countAiCall(storage);
-	} catch (e) {
-		if (e instanceof AiLimitError) error(429, e.message);
-		throw e;
-	}
-
 	let conversation: BuilderConversation;
 	let version: string | undefined;
 	if (typeof body.conversationId === 'string') {
@@ -53,12 +46,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 	}
 
+	// Kontrollera gränsen först när konversationen finns, så att ett felaktigt id inte kostar något.
+	try {
+		await assertAiCallsLeft(storage);
+	} catch (e) {
+		if (e instanceof AiLimitError) error(429, e.message);
+		throw e;
+	}
+
 	let apiError: unknown = null;
 	try {
 		await runTurn(storage, conversation, message, {
 			model: builderModel(),
 			today: todayInStockholm(),
-			createMessage
+			createMessage: limitedCreateMessage(storage)
 		});
 	} catch (e) {
 		apiError = e;
@@ -73,7 +74,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	if (apiError) {
 		console.error('Pass-byggaren:', apiError);
-		const status = apiError instanceof Anthropic.RateLimitError ? 429 : apiError instanceof Anthropic.APIError ? 502 : 500;
+		const status =
+			apiError instanceof AiLimitError || apiError instanceof Anthropic.RateLimitError ? 429 : apiError instanceof Anthropic.APIError ? 502 : 500;
 		return json({ ...(await conversationView(storage, conversation)), error: true }, { status });
 	}
 	return json(await conversationView(storage, conversation));

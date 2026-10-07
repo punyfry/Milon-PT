@@ -64,7 +64,7 @@ Utan `BLOB_READ_WRITE_TOKEN` sparar dev-servern data i lokala filer under `.data
 | `ANTHROPIC_API_KEY` | Claude API-nyckel. Utan den svarar pass-byggaren och hjälparen 503 |
 | `MODEL_BUILDER` | Modell för pass-byggaren (standard `claude-sonnet-5-5`) |
 | `MODEL_HELPER` | Modell för hjälparen (standard `claude-haiku-4-5`) |
-| `AI_DAILY_LIMIT` | Max antal anrop till pass-byggaren och hjälparen per användare och dag (standard 200, `0` stänger av) |
+| `AI_DAILY_LIMIT` | Max antal anrop till Claude API per användare och dag, för pass-byggaren och hjälparen tillsammans (standard 200, `0` stänger av). En tur i pass-byggaren kan göra flera anrop |
 
 ### Google OAuth-klient
 
@@ -90,7 +90,7 @@ Fyra filtyper per användare, plus konversationer och räknare. Seten bor på ö
 | `workouts/<slug>.v<N>.json` | Passmall. Varje ändring skapar nästa version, äldre finns kvar och kan återställas |
 | `sessions/<sessionId>.json` | Ett genomfört pass: mall och version, start och slut, avvikelser, kcal |
 | `builder/<id>.json` | Pass-byggarens konversationer |
-| `usage/<YYYY-MM-DD>.json` | Antal AI-anrop den dagen |
+| `usage/<YYYY-MM-DD>.json` | Antal AI-anrop den dagen (rensas efter 30 dagar) |
 
 ```json
 {
@@ -110,6 +110,15 @@ Fyra filtyper per användare, plus konversationer och räknare. Seten bor på ö
 - Pågående pass ligger i localStorage under `milonpt.activeSession`; pass som väntar på nät under `milonpt.pendingSaves`.
 
 Volym: `weight` = summa vikt × reps, `bodyweight` = summa reps, `time` = summa sekunder. Beräknad 1RM: vikt × (1 + reps / 30). Rekord räknas för bästa set (1RM, reps eller tid) och, för viktövningar, tyngsta vikt; första passet räknas aldrig som rekord.
+
+## Skärmflöden
+
+1. **Start:** finns ett pågående pass visas "Fortsätt pågående pass" (och "Avbryt pass", med bekräftelse) överst. Därefter senaste versionen av varje pass som kort, senast tränade först med "Senast: för 3 dagar sedan". Ett tryck startar passet direkt.
+2. **Aktivt pass:** alla övningar med infällbar instruktion. Seten förifylls från senaste loggposten, annars från passmallens mål. −/+ per värde, "klar" per set, lägg till och ta bort set. Varje ändring skrivs till localStorage. Tidsövningar har en timer i setraden som räknar ner, piper vid noll och fyller i tiden; den lagrar sluttiden (`timerEndsAt`) så att den stämmer även om skärmen låses, och skärmen hålls tänd (Wake Lock). "Hjälp" per övning öppnar hjälparen; ett byte av övning blir en avvikelse i passet, inte en ändring av mallen.
+3. **Avsluta:** sammanfattning med set, volym och nya rekord. Finns avvikelser får du frågan om de ska sparas som ny version av passet. kcal föreslås (profilens värde för passet, annars passtypens intervall) och kan justeras. "Spara" skriver övningsloggar och sessionspost; localStorage rensas först när servern bekräftat.
+4. **Skapa pass:** chatt med pass-byggaren och en lista över övningarna som diskuteras. Godkända övningar sparas (befintliga återanvänds), och "Spara pass" skapar `v1` eller nästa version. Äldre versioner kan återställas som ny version.
+5. **Historik:** vecka (dagar, pass mot veckomål, volym), milstolpar (Pull-up och Handstående, med progressionsövningar tills målet loggats), övningslista med arkiverade sist, och per övning graf och senaste passen.
+6. **Konto:** veckomål och import från Craft.
 
 ## AI-coachen
 
@@ -149,8 +158,8 @@ Sidor du öppnat visas utan nät, annars visas en offlinesida. Sparar du ett pas
 
 - Inloggning med Google och allowlist som kontrolleras på varje request. Tom lista släpper inte in någon.
 - Blob-filer skrivs alltid med `access: 'private'` och sökvägar valideras så att en användare aldrig når en annans filer.
-- Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS m.fl. på alla svar.
-- Daglig gräns för AI-anrop per användare (`AI_DAILY_LIMIT`).
+- Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS m.fl. på sidor och API-svar från servern (inte på statiska filer eller omdirigeringar till inloggningen).
+- Daglig gräns för anrop till Claude API per användare (`AI_DAILY_LIMIT`). Varje anrop räknas, och gränsen kontrolleras innan något skickas.
 - `/api/storage/selftest` finns bara i dev.
 - `.env*` är gitignorerat. Riktig användardata hör inte hemma i repot.
 
@@ -165,7 +174,7 @@ Sidor du öppnat visas utan nät, annars visas en offlinesida. Sparar du ett pas
 | `npm run build` | Produktionsbygge (adapter-vercel) |
 | `npm run import` | Importskriptet, se ovan |
 
-GitHub Actions (`.github/workflows/ci.yml`) kör typkontroll, tester, bygge och `npm audit --omit=dev --audit-level=high` på varje PR och push till `main`. CodeQL körs också, och Dependabot öppnar PR:er för beroenden varje vecka.
+GitHub Actions (`.github/workflows/ci.yml`) kör typkontroll, tester och bygge på varje PR och push till `main`, plus ett separat jobb med `npm audit --omit=dev --audit-level=high`. Audit-jobbet är medvetet inte ett krav för merge, så att en ny sårbarhet i ett beroende inte stoppar orelaterade PR:er; åtgärda den i en egen PR. CodeQL körs också, och Dependabot öppnar PR:er för beroenden varje vecka.
 
 **Skydda `main`** (görs en gång i GitHub): Settings → Branches → *Add branch ruleset* (eller *Add rule*) för `main` → kryssa i *Require a pull request before merging* och *Require status checks to pass*, och välj kontrollen **Typkontroll, tester och bygge**. Kryssa gärna i *Block force pushes*.
 

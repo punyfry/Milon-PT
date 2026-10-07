@@ -50,7 +50,12 @@
 				}
 				if (view.saved) await invalidateAll();
 			}
-			if (!res.ok && !body?.log) failure = body?.message ?? `Servern svarade ${res.status}`;
+			if (!res.ok && !body?.log) {
+				// Inget sparades: ta bort bubblan och lägg tillbaka texten så att den kan skickas igen.
+				failure = body?.message ?? `Servern svarade ${res.status}`;
+				view = view && { ...view, log: view.log.slice(0, -1) };
+				input = message;
+			}
 		} catch {
 			failure = 'Kunde inte nå servern. Försök igen.';
 			input = message;
