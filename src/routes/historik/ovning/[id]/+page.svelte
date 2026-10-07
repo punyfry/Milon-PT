@@ -23,6 +23,12 @@
 	}
 	const volumeText = (v: number) =>
 		ex.type === 'weight' ? `${formatNumber(v)} kg` : ex.type === 'time' ? formatSeconds(v) : `${v} reps`;
+	/** "Rekord", "Rekord: tyngsta vikt" eller "Rekord: 1RM och tyngsta vikt". */
+	function recordLabel(kinds: string[]) {
+		if (ex.type !== 'weight') return 'Rekord';
+		const names = kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM'));
+		return `Rekord: ${names.join(' och ')}`;
+	}
 	const best = $derived(data.points.reduce((b, p) => Math.max(b, p.value), 0));
 </script>
 
@@ -73,7 +79,7 @@
 							</td>
 							<td class="num">
 								{e.best === null ? '–' : fmt(e.best)}
-								{#if e.record}<span class="record">★ Rekord</span>{/if}
+								{#if e.record.length}<span class="record">★ {recordLabel(e.record)}</span>{/if}
 							</td>
 							<td class="num">{volumeText(e.volume)}</td>
 						</tr>

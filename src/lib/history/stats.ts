@@ -65,19 +65,48 @@ export function bestEver(exercise: Exercise, excludeSessionId?: string): number 
 	return best;
 }
 
+/** Tyngsta vikten i ett set med minst en rep (bara viktövningar). */
+export function heaviestWeight(type: ExerciseType, sets: readonly ExerciseSet[]): number | null {
+	if (type !== 'weight') return null;
+	let max = 0;
+	for (const set of sets) if ('weight' in set && set.reps > 0 && set.weight > max) max = set.weight;
+	return max > 0 ? max : null;
+}
+
+/** Tyngsta vikten någonsin, valfritt utan ett visst pass. */
+export function heaviestEver(exercise: Exercise, excludeSessionId?: string): number | null {
+	let max: number | null = null;
+	for (const entry of exercise.log) {
+		if (excludeSessionId && entry.sessionId === excludeSessionId) continue;
+		const h = heaviestWeight(exercise.type, entry.sets);
+		if (h !== null && (max === null || h > max)) max = h;
+	}
+	return max;
+}
+
+/** "best" = bästa set (1RM, reps eller tid), "heaviest" = tyngsta vikt. */
+export type RecordKind = 'best' | 'heaviest';
+
 /**
- * Loggpostens index (i övningens logg) som satte rekord: bättre än allt
- * tidigare. Den allra första posten räknas inte som rekord.
+ * Loggposterna (index i övningens logg) som satte rekord: strikt bättre än
+ * allt tidigare. Den allra första posten räknas inte som rekord.
  */
-export function recordEntries(exercise: Exercise): Set<number> {
+export function recordEntries(exercise: Exercise): Map<number, RecordKind[]> {
 	const order = exercise.log.map((e, i) => ({ e, i })).sort((a, b) => a.e.date.localeCompare(b.e.date) || b.i - a.i);
-	const records = new Set<number>();
-	let best: number | null = null;
+	const records = new Map<number, RecordKind[]>();
+	const prev: Record<RecordKind, number | null> = { best: null, heaviest: null };
 	for (const { e, i } of order) {
-		const b = bestSet(exercise.type, e.sets);
-		if (!b) continue;
-		if (best !== null && b.value > best) records.add(i);
-		if (best === null || b.value > best) best = b.value;
+		const values: Record<RecordKind, number | null> = {
+			best: bestSet(exercise.type, e.sets)?.value ?? null,
+			heaviest: heaviestWeight(exercise.type, e.sets)
+		};
+		for (const kind of ['best', 'heaviest'] as const) {
+			const v = values[kind];
+			if (v === null) continue;
+			const p = prev[kind];
+			if (p !== null && v > p) records.set(i, [...(records.get(i) ?? []), kind]);
+			if (p === null || v > p) prev[kind] = v;
+		}
 	}
 	return records;
 }
@@ -160,22 +189,49 @@ export function weekSummary(start: string, exercises: readonly Exercise[], sessi
 
 // --- milstolpar ---------------------------------------------------------
 
+/**
+ * `match` är själva målet. `progression` är övningar på vägen dit, som visas
+ * tills målövningen har loggats.
+ */
 export const MILESTONES = [
-	{ key: 'pullup', title: 'Pull-up', match: /^(pull[\s-]?ups?|chins?[\s-]?ups?)$/ },
-	{ key: 'handstand', title: 'Handstående', match: /^(handstående|handstand)/ }
+	{
+		key: 'pullup',
+		title: 'Pull-up',
+		match: /^(pull[\s-]?ups?|chins?[\s-]?ups?)$/,
+		progression: /(pull[\s-]?ups?|chins?[\s-]?ups?)/
+	},
+	{
+		key: 'handstand',
+		title: 'Handstående',
+		match: /^(handstående|handstand)/,
+		progression: /(handstående|handstand|huvudstående|headstand|wall[\s-]?walk)/
+	}
 ] as const;
 
+const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
+/** Senast tränade först, arkiverade sist. */
+const byRecent = (a: Exercise, b: Exercise) => Number(a.archived) - Number(b.archived) || lastDate(b).localeCompare(lastDate(a));
+
 /**
- * Övningarna som räknas som milstolpar (Pull-up i reps, handstående i
- * sekunder). Matchar flera övningar väljs den som tränats senast, och en
- * arkiverad bara om ingen annan matchar.
+ * Övningen som visas per milstolpe. Finns en målövning med historik visas
+ * den (senast tränade, arkiverad bara om ingen annan finns). Annars visas
+ * den senast tränade progressionsövningen, och `progress` blir true.
+ * `others` är övriga progressionsövningar med historik.
  */
 export function milestoneExercises(exercises: readonly Exercise[]) {
-	const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
 	return MILESTONES.map((m) => {
-		const matches = exercises
-			.filter((e) => m.match.test(normalizeName(e.name)))
-			.sort((a, b) => Number(a.archived) - Number(b.archived) || lastDate(b).localeCompare(lastDate(a)));
-		return { ...m, exercise: matches[0] ?? null };
+		const goals = exercises.filter((e) => m.match.test(normalizeName(e.name))).sort(byRecent);
+		const steps = exercises
+			.filter((e) => e.log.length && !m.match.test(normalizeName(e.name)) && m.progression.test(normalizeName(e.name)))
+			.sort(byRecent);
+		const goal = goals.find((e) => e.log.length) ?? null;
+		const exercise = goal ?? steps[0] ?? goals[0] ?? null;
+		const progress = !goal && exercise !== null && steps.includes(exercise);
+		return {
+			...m,
+			exercise,
+			progress,
+			others: steps.filter((e) => e !== exercise)
+		};
 	});
 }

@@ -5,7 +5,7 @@
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import { formatMetric, formatNumber, formatSeconds, timeAgo } from '$lib/format';
-	import { bestSet } from '$lib/history/stats';
+	import { bestSet, heaviestWeight } from '$lib/history/stats';
 	import type { ActiveSession } from '$lib/model';
 	import {
 		addSet,
@@ -190,14 +190,25 @@
 
 	const summary = $derived(session && mode === 'finish' ? summarize(session, infos) : null);
 
-	/** Övningar där dagens bästa set slår allt tidigare (första gången räknas inte). */
+	/**
+	 * Övningar där dagens bästa set eller tyngsta vikt slår allt tidigare
+	 * (första gången räknas inte), som text, t.ex. "1RM 55 kg, tyngsta vikt 50 kg".
+	 */
 	const records = $derived.by(() => {
-		const found = new Map<string, number>();
+		const found = new Map<string, string>();
 		if (!session || mode !== 'finish') return found;
 		for (const ex of session.exercises) {
 			const info = infos.get(ex.exerciseId);
-			const today = info && bestSet(info.type, ex.sets.filter((s) => s.done));
-			if (info?.best !== undefined && today && today.value > info.best) found.set(ex.exerciseId, today.value);
+			if (!info) continue;
+			const done = ex.sets.filter((s) => s.done);
+			const parts: string[] = [];
+			const today = bestSet(info.type, done);
+			if (info.best !== undefined && today && today.value > info.best)
+				parts.push(info.type === 'weight' ? `1RM ${formatMetric('weight', today.value)}` : formatMetric(info.type, today.value));
+			const heaviest = heaviestWeight(info.type, done);
+			if (info.heaviest !== undefined && heaviest !== null && heaviest > info.heaviest)
+				parts.push(`tyngsta vikt ${formatMetric('weight', heaviest)}`);
+			if (parts.length) found.set(ex.exerciseId, parts.join(', '));
 		}
 		return found;
 	});
@@ -334,7 +345,7 @@
 						<span>
 							{ex.name}
 							{#if records.has(ex.exerciseId)}
-								<span class="record">★ Nytt rekord: {formatMetric(ex.type, records.get(ex.exerciseId)!)}</span>
+								<span class="record">★ Nytt rekord: {records.get(ex.exerciseId)}</span>
 							{/if}
 						</span>
 						<span class="meta">

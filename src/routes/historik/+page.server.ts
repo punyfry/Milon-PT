@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { addDays, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
-import { getProfile, listExercises, listSessions } from '$lib/server/data';
+import { getProfile, listExercises, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { PageServerLoad } from './$types';
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const start = weekStartOf(param ?? today);
 	const currentStart = weekStartOf(today);
 
-	const [stored, sessions, profile] = await Promise.all([listExercises(storage), listSessions(storage), getProfile(storage)]);
+	const [stored, sessions, profile] = await Promise.all([listExercises(storage), listSessionsBetween(storage, start, addDays(start, 7)), getProfile(storage)]);
 	const exercises = stored.map((e) => e.data);
 
 	// Övningar med historik, senast tränade först. Bara sammanfattning, aldrig hela loggen.
@@ -32,9 +32,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		key: m.key,
 		title: m.title,
 		exercise: m.exercise ? { id: m.exercise.id, name: m.exercise.name, type: m.exercise.type } : null,
+		progress: m.progress,
+		others: m.others.map((e) => ({ id: e.id, name: e.name })),
 		points: m.exercise ? progressSeries(m.exercise).map((p) => ({ date: p.date, value: p.value })) : []
 	}));
-
 
 	return {
 		today,
