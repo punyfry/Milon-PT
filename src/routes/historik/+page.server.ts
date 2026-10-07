@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { addDays, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
+import { addDays, groupByWorkout, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
 import { getProfile, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
@@ -33,16 +33,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		})
 		.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'sv'));
 
-	// Exercises grouped by workout (in the workout's order). An exercise in several workouts shows in the
-	// first one; exercises not in any workout go under "Övrigt".
-	const byId = new Map(list.filter((e) => !e.archived).map((e) => [e.id, e]));
-	const groups: { name: string; exercises: typeof list }[] = [];
-	for (const w of [...workouts].sort((a, b) => a.name.localeCompare(b.name, 'sv'))) {
-		const items = w.exercises.map((we) => byId.get(we.exerciseId)).filter((e) => e !== undefined);
-		for (const e of items) byId.delete(e.id);
-		if (items.length) groups.push({ name: w.name, exercises: items });
-	}
-	if (byId.size) groups.push({ name: 'Övrigt', exercises: [...byId.values()] });
+	const groups = groupByWorkout(list, workouts);
 
 	const milestones = milestoneExercises(exercises).map((m) => ({
 		key: m.key,

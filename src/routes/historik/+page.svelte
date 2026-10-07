@@ -31,6 +31,7 @@
 			.map((g) => ({ ...g, exercises: g.exercises.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)) }))
 			.filter((g) => g.exercises.length)
 	);
+	const archived = $derived(data.archived.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)));
 </script>
 
 <svelte:head><title>Historik · Milon-PT</title></svelte:head>
@@ -145,15 +146,16 @@
 			<h3 class="group">{g.name}</h3>
 			{@render exerciseList(g.exercises)}
 		{:else}
-			<p class="muted">Ingen övning matchar ”{query}”.</p>
+			{#if !archived.length}<p class="muted">Ingen övning matchar ”{query}”.</p>{/if}
 		{/each}
 	{:else if !data.archived.length}
 		<p class="muted">Inga loggade pass än.</p>
 	{/if}
-	{#if data.archived.length}
-		<details class="archived">
-			<summary>Arkiverade ({data.archived.length})</summary>
-			{@render exerciseList(data.archived)}
+	{#if archived.length}
+		<!-- Opens by itself when a search only matches archived exercises. -->
+		<details class="archived" open={!!q && !groups.length}>
+			<summary>Arkiverade ({archived.length})</summary>
+			{@render exerciseList(archived)}
 		</details>
 	{/if}
 </main>

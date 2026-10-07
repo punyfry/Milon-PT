@@ -51,3 +51,8 @@ export function formatMetric(type: 'weight' | 'bodyweight' | 'time', value: numb
 	if (type === 'time') return formatSeconds(value);
 	return `${formatNumber(value)} reps`;
 }
+
+/** "  Sofie Andersson " → "Sofie". Null when there is no name. */
+export function firstName(name: string | null | undefined): string | null {
+	return name?.trim().split(/\s+/)[0] || null;
+}

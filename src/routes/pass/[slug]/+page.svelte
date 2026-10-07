@@ -14,6 +14,7 @@
 		applySwap,
 		anyTimerRunning,
 		cancelTimer,
+		remainingMs,
 		completeExpiredTimers,
 		createActiveSession,
 		isTimerRunning,
@@ -112,7 +113,7 @@
 
 	// --- moving between exercises -----------------------------------------
 
-	const cur = $derived(session ? Math.min(session.current ?? 0, Math.max(0, session.exercises.length - 1)) : 0);
+	const cur = $derived(session ? Math.max(0, Math.min(session.current ?? 0, session.exercises.length - 1)) : 0);
 	const ex = $derived(session?.exercises[cur]);
 	const info = $derived(ex ? infos.get(ex.exerciseId) : undefined);
 	const isLast = $derived(session ? cur === session.exercises.length - 1 : false);
@@ -128,8 +129,13 @@
 		return f !== undefined && f < sets.length ? f : firstOpen(sets);
 	};
 
-	/** If a timer is running, ask first what to do with the time. */
+	/**
+	 * If a timer is running, ask first what to do with the time. A focused
+	 * field is blurred first so a typed weight is committed (its change event)
+	 * before a swipe or navigation re-renders the set list.
+	 */
 	function guard(fn: () => void) {
+		(document.activeElement as HTMLElement | null)?.blur?.();
 		if (session && anyTimerRunning(session)) sheet = { kind: 'timer', then: fn };
 		else fn();
 	}
@@ -195,6 +201,12 @@
 				buzz([30, 80, 30]);
 				focus[cur] = firstOpen(session.exercises[cur].sets);
 				persist();
+				// The timer ran out while the user was deciding: the question is moot, carry on.
+				if (sheet?.kind === 'timer') {
+					const then = sheet.then;
+					sheet = null;
+					then();
+				}
 			}
 		}, 250);
 		const stopWatching = $effect.root(() => {
@@ -215,7 +227,12 @@
 	}
 	const running = $derived(timerRunning ? runningSet() : null);
 	const runningLeft = $derived(running?.set.timerEndsAt ? Math.max(0, Math.ceil((Date.parse(running.set.timerEndsAt) - now.getTime()) / 1000)) : 0);
-	const runningGone = $derived(running && 'seconds' in running.set ? Math.max(0, (running.set.timerDuration ?? running.set.seconds) - runningLeft) : 0);
+	// Same rounding as stopTimer, so the sheet shows the time that will be saved.
+	const runningGone = $derived(
+		running?.set.timerEndsAt && 'seconds' in running.set
+			? Math.max(0, Math.round((running.set.timerDuration ?? running.set.seconds) - remainingMs(running.set, now) / 1000))
+			: 0
+	);
 
 	function resolveTimer(keep: boolean) {
 		const r = runningSet();
@@ -437,7 +454,7 @@
 			<h1>Ett annat pass pågår</h1>
 		</div>
 		<p class="muted">Avsluta eller släng det pågående passet innan du startar ett nytt.</p>
-		<a class="btn primary full" href={`/pass/${other.workoutSlug}?v=${other.workoutVersion}`}>Fortsätt pågående pass</a>
+		<a class="btn primary full" href={`/pass/${other.workoutSlug}?v=${other.workoutVersion}`} data-sveltekit-reload>Fortsätt pågående pass</a>
 		<a class="btn ghost full" href="/">Till start</a>
 	</main>
 {:else if session && ex && mode === 'active'}
@@ -711,10 +728,12 @@
 		max-width: 30rem;
 		margin: 0 auto;
 	}
+	/* 4 px bars with a 44 px tap target; the negative margin keeps the visual spacing. */
 	.progress button {
 		flex: 1;
-		height: 24px;
-		padding: 10px 0;
+		height: 44px;
+		margin: -10px 0;
+		padding: 20px 0;
 		border: 0;
 		background: none;
 		cursor: pointer;

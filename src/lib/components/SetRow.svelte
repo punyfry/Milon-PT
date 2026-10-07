@@ -44,8 +44,8 @@
 	function onWeight(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const raw = input.value.replace(',', '.').trim();
-		const value = Number(raw);
-		if (raw !== '' && Number.isFinite(value)) onset('weight', value);
+		// Plain decimals only: Number() would also accept "1e3" or "0x10".
+		if (/^\d{1,4}(\.\d{1,2})?$/.test(raw)) onset('weight', Number(raw));
 		// Show the value that actually applies (invalid input is ignored).
 		input.value = formatNumber(values.weight ?? 0);
 	}

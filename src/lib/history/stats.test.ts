@@ -5,6 +5,7 @@ import {
 	bestEver,
 	bestSet,
 	estimated1RM,
+	groupByWorkout,
 	heaviestEver,
 	heaviestWeight,
 	isoWeek,
@@ -171,5 +172,36 @@ describe('date check', () => {
 		for (const bad of ['2026-02-30', '2026-13-01', '0001-01-01', '9999-12-31', 'abc', '2026-1-1']) {
 			expect(isValidDate(bad), bad).toBe(false);
 		}
+	});
+});
+
+describe('groupByWorkout', () => {
+	const ex = (id: string, archived = false) => ({ id, archived });
+	const workouts = [
+		{ name: 'Pass B', exercises: [{ exerciseId: 'squat' }, { exerciseId: 'plank' }] },
+		{ name: 'Pass A', exercises: [{ exerciseId: 'deadlift' }, { exerciseId: 'plank' }, { exerciseId: 'gone' }] }
+	];
+
+	it('groups by workout name, in each workout\'s own order', () => {
+		const groups = groupByWorkout([ex('plank'), ex('squat'), ex('deadlift')], workouts);
+		expect(groups.map((g) => [g.name, g.exercises.map((e) => e.id)])).toEqual([
+			['Pass A', ['deadlift', 'plank']],
+			['Pass B', ['squat']]
+		]);
+	});
+
+	it('shows an exercise in several workouts only under the first', () => {
+		const groups = groupByWorkout([ex('plank')], workouts);
+		expect(groups).toEqual([{ name: 'Pass A', exercises: [ex('plank')] }]);
+	});
+
+	it('puts exercises in no workout under Övrigt, last', () => {
+		const groups = groupByWorkout([ex('curl'), ex('squat')], workouts);
+		expect(groups.map((g) => g.name)).toEqual(['Pass B', 'Övrigt']);
+		expect(groups[1].exercises).toEqual([ex('curl')]);
+	});
+
+	it('leaves out archived exercises and empty workouts', () => {
+		expect(groupByWorkout([ex('squat', true), ex('curl', true)], workouts)).toEqual([]);
 	});
 });
