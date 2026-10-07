@@ -22,7 +22,7 @@ SvelteKit på Vercel Hobby, data som JSON-filer i Vercel Blob, Google-inloggning
 | Åtkomstskydd | Allowlist över e-postadresser i miljövariabel | Skyddar API-kostnaden så att bara du kan logga in |
 | AI | Claude API (Haiku 4.5 och Sonnet), anropas från server-routes | Nyckeln ligger i miljövariabel, aldrig i frontend |
 | Klient | PWA med manifest | Läggs på hemskärmen på mobilen |
-| Offline | Utanför scope | |
+| Offline | Enkel service worker | Öppnade sidor visas utan nät, och ett pass som sparas utan nät köas i localStorage och skickas när nätet är tillbaka |
 
 Kontrollera Vercel Blobs åtkomstmodell innan första skrivningen: filerna får inte vara publikt åtkomliga via URL. Alla läsningar ska gå via serverns API med inloggningskontroll.
 
@@ -279,7 +279,7 @@ JSON-filen tas fram ur Craft när appen är redo att ta emot den. Saknade instru
 
 **Utanför scope (MVP)**
 
-- Offline-stöd och köad sparning
+- Fullt offline-stöd (till exempel pass-byggaren och hjälparen utan nät)
 - RPE per set
 - Kroppsvikt med extra tillägg (viktväst)
 - Extern övningsdatabas eller MCP

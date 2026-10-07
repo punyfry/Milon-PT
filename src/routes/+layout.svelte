@@ -1,5 +1,6 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
+	import PendingSaves from '$lib/components/PendingSaves.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -9,6 +10,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+<PendingSaves />
 {@render children()}
 
 <style>
