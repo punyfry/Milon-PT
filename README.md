@@ -37,7 +37,8 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown` |
 | `src/lib/theme.ts` | Theme choice (system, dark, light), stored in localStorage and applied before first paint by `static/theme-init.js` |
 | `static/fonts/` | Self-hosted Bricolage Grotesque and DM Mono (latin subset, SIL Open Font License) so they work offline |
-| `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons) |
+| `assets/logo/` | The logo (`logo.svg`, an M that is also a dumbbell, drawn in `currentColor`) and `logo-preview.html`, a standalone preview at different sizes |
+| `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons and favicon, drawn from the logo) |
 | `.claude/` | Agent workflow: the `deliver` skill and the subagents Gregory (review) and Nissa (testing) |
 
 Use storage from a route like this:
