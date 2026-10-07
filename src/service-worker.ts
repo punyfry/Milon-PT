@@ -79,8 +79,8 @@ function offlinePage(): Response {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ingen anslutning · Milon-PT</title>
 <style>
-:root{--bg:#f6f6f4;--text:#1c1c1a;--muted:#6b6b66;--accent:#2f6f4f;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--text:#ecece8;--muted:#a0a09a;--accent:#5fb38a;color-scheme:dark}}
+:root{--bg:#f3f2ee;--text:#18181a;--muted:#66655f;--accent:#0d6b63;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0a0a0b;--text:#f2f2f0;--muted:#8e8e94;--accent:#5eead4;color-scheme:dark}}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.4}
 main{max-width:40rem;margin:0 auto;padding:max(1rem,env(safe-area-inset-top)) 1rem 2rem}
 p{color:var(--muted)}a{color:var(--accent)}
