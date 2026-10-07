@@ -127,6 +127,8 @@ export interface ActiveSession {
 	lastActivityAt: string;
 	exercises: { exerciseId: string; sets: ActiveSet[] }[];
 	deviations: Deviation[];
+	/** Index of the exercise shown, so a paused workout resumes where it was. */
+	current?: number;
 }
 
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';

@@ -205,10 +205,11 @@
 		border-radius: 6px;
 	}
 	.grid {
-		stroke: var(--border);
+		stroke: var(--line);
 		stroke-width: 1;
 	}
 	.tick {
+		font-family: var(--mono);
 		fill: var(--muted);
 		font-size: 11px;
 		font-variant-numeric: tabular-nums;
@@ -230,6 +231,7 @@
 		stroke-width: 2;
 	}
 	.end {
+		font-family: var(--mono);
 		fill: var(--text);
 		font-size: 12px;
 		font-weight: 600;
@@ -242,7 +244,7 @@
 		position: absolute;
 		transform: translate(-50%, -100%);
 		background: var(--surface);
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		border-radius: 8px;
 		padding: 0.3rem 0.55rem;
 		display: grid;

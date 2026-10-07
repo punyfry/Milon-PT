@@ -75,15 +75,15 @@
 
 <style>
 	.pending {
-		max-width: 40rem;
-		margin: max(0.5rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
-		padding: 0.6rem 0.85rem;
-		border: 1px solid var(--border);
+		max-width: calc(30rem - 40px);
+		margin: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
+		padding: 12px 14px;
 		border-radius: var(--radius);
-		background: var(--surface);
-		font-size: 0.9rem;
+		background: var(--surface-2);
+		box-shadow: inset 3px 0 0 var(--accent);
+		font-size: 14px;
 	}
-	@media (min-width: 42rem) {
+	@media (min-width: 30rem) {
 		.pending {
 			margin-inline: auto;
 		}

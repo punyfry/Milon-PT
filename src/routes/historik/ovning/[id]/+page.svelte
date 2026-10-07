@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LineChart from '$lib/components/LineChart.svelte';
-	import { formatMetric, formatNumber, formatSeconds, formatSet } from '$lib/format';
+	import Icon from '$lib/components/Icon.svelte';
+	import { formatMetric, formatNumber, formatSeconds } from '$lib/format';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -14,35 +15,43 @@
 			month: 'short',
 			...(d.startsWith(thisYear) ? {} : { year: 'numeric' }),
 			timeZone: 'UTC'
-		});
-	/** "62,5 kg × 8, 60 kg × 7", "9, 8 reps", "45, 60 s" */
+		}).replace('.', '');
+	/** "62,5×8 · 60×7", "9 · 8 reps", "0:45 · 1:00" */
 	function setsText(sets: { weight?: number; reps?: number; seconds?: number }[]) {
-		if (ex.type === 'weight') return sets.map((s) => formatSet('weight', s)).join(', ');
-		const unit = ex.type === 'time' ? 's' : 'reps';
-		return `${sets.map((s) => (ex.type === 'time' ? s.seconds : s.reps)).join(', ')} ${unit}`;
+		if (ex.type === 'weight') return sets.map((s) => `${formatNumber(s.weight ?? 0)}×${s.reps ?? 0}`).join(' · ');
+		if (ex.type === 'time') return sets.map((s) => formatSeconds(s.seconds ?? 0)).join(' · ');
+		return `${sets.map((s) => s.reps ?? 0).join(' · ')} reps`;
 	}
 	const volumeText = (v: number) =>
 		ex.type === 'weight' ? `${formatNumber(v)} kg` : ex.type === 'time' ? formatSeconds(v) : `${v} reps`;
-	/** "Rekord", "Rekord: tyngsta vikt" or "Rekord: 1RM och tyngsta vikt". */
+	/** Screen reader text for the PR tag: "rekord", "rekord i tyngsta vikt" or "rekord i 1RM och tyngsta vikt". */
 	function recordLabel(kinds: string[]) {
-		if (ex.type !== 'weight') return 'Rekord';
-		const names = kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM'));
-		return `Rekord: ${names.join(' och ')}`;
+		if (ex.type !== 'weight') return 'rekord';
+		return `rekord i ${kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM')).join(' och ')}`;
 	}
 	const best = $derived(data.points.reduce((b, p) => Math.max(b, p.value), 0));
+	/** Equipment or exercise type, shown above the name. */
+	const kind = $derived(ex.type === 'weight' ? (ex.loadClass === 'heavy' ? 'Skivstång' : 'Hantlar') : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
 </script>
 
 <svelte:head><title>{ex.name} · Historik · Milon-PT</title></svelte:head>
 
-<main>
-	<p><a href="/historik" class="back">← Historik</a></p>
-	<h1>{ex.name}</h1>
-	{#if ex.archived}<p class="meta archived-note">Arkiverad övning. Historiken finns kvar.</p>{/if}
+<header class="topbar">
+	<a class="icon-btn" href="/historik" aria-label="Tillbaka till historik"><Icon name="left" /></a>
+	<span class="label">Historik</span>
+	<span></span>
+</header>
 
-	<section class="card">
+<main>
+	<div class="pagehead">
+		<span class="label">{kind}{ex.archived ? ' · arkiverad' : ''}</span>
+		<h1>{ex.name}</h1>
+	</div>
+
+	<section class="chart">
 		<div class="head">
-			<span class="label">{data.metric.label}{ex.type === 'weight' ? ' (vikt × (1 + reps/30))' : ''}</span>
-			{#if data.points.length}<span class="best">Bästa: {fmt(best)}</span>{/if}
+			<span class="label">{data.metric.label}</span>
+			{#if data.points.length}<span class="best num">{fmt(best)}</span>{/if}
 		</div>
 		{#if data.points.length > 1}
 			<LineChart
@@ -52,42 +61,31 @@
 				format={fmt}
 			/>
 		{:else if data.points.length === 1}
-			<p class="meta">Ett pass hittills: {fmt(data.points[0].value)}. Grafen visas från två pass.</p>
+			<p class="muted">Ett pass hittills. Grafen visas från två pass.</p>
 		{:else}
-			<p class="meta">Inga loggade set än.</p>
+			<p class="muted">Inga loggade set än.</p>
 		{/if}
+		{#if ex.type === 'weight'}<p class="muted formula">Beräknas som vikt × (1 + reps / 30).</p>{/if}
 	</section>
 
 	{#if data.entries.length}
-		<h2>Senaste passen</h2>
-		<div class="card table-wrap">
-			<table>
-				<thead>
-					<tr>
-						<th scope="col">Datum</th>
-						<th scope="col">Set</th>
-						<th scope="col" class="num">Bästa</th>
-						<th scope="col" class="num">Volym</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each data.entries as e, i (i)}
-						<tr>
-							<td>{date(e.date)}</td>
-							<td>
-								{setsText(e.sets)}
-								{#if e.note}<span class="note">{e.note}</span>{/if}
-							</td>
-							<td class="num">
-								{e.best === null ? '–' : fmt(e.best)}
-								{#if e.record.length}<span class="record">★ {recordLabel(e.record)}</span>{/if}
-							</td>
-							<td class="num">{volumeText(e.volume)}</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
+		<div class="section-title">Senaste passen</div>
+		<ul class="entries">
+			{#each data.entries as e, i (i)}
+				<li>
+					<div class="top">
+						<span class="date">{date(e.date)}</span>
+						<span class="value num">
+							{#if e.record.length}<span class="tag" title={recordLabel(e.record)}>PR<span class="sr-only">, {recordLabel(e.record)}</span></span>{/if}
+							{e.best === null ? '–' : fmt(e.best)}
+						</span>
+					</div>
+					<div class="sets num">{setsText(e.sets)}</div>
+					{#if e.note}<p class="note">{e.note}</p>{/if}
+					<div class="vol num">Volym {volumeText(e.volume)}</div>
+				</li>
+			{/each}
+		</ul>
 	{/if}
 
 	{#if ex.instruction}
@@ -99,90 +97,103 @@
 </main>
 
 <style>
-	.back {
-		color: var(--muted);
-		text-decoration: none;
+	.topbar {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		max-width: 30rem;
+		margin: 0 auto;
+		height: calc(56px + env(safe-area-inset-top, 0px));
+		padding: env(safe-area-inset-top, 0px) 8px 0 6px;
+		display: grid;
+		grid-template-columns: 56px 1fr 56px;
+		align-items: center;
+		text-align: center;
+		background: var(--bg);
 	}
-	h1 {
-		margin: 0.25rem 0 1rem;
+	main {
+		padding-top: 0;
 	}
-	.archived-note {
-		margin: -0.5rem 0 1rem;
-	}
-	h2 {
-		font-size: 1.05rem;
-		margin: 1.5rem 0 0.5rem;
-	}
-	.card {
+	.chart {
+		margin-top: 20px;
 		background: var(--surface);
-		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		padding: 0.9rem 1rem;
+		padding: 14px 16px;
+		min-width: 0;
 	}
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.label,
-	.meta {
-		color: var(--muted);
-		font-size: 0.9rem;
+		align-items: baseline;
+		gap: 8px;
+		margin-bottom: 6px;
 	}
 	.best {
-		font-weight: 600;
+		font-size: 28px;
+		font-weight: 500;
+		letter-spacing: -0.04em;
+		color: var(--accent);
 	}
-	.table-wrap {
+	.formula {
+		margin: 8px 0 0;
+		font-size: 12px;
+	}
+	.entries {
+		list-style: none;
+		margin: 0;
 		padding: 0;
-		overflow-x: auto;
 	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
+	.entries li {
+		border-bottom: 1px solid var(--line);
+		padding: 12px 0;
+		display: grid;
+		gap: 4px;
 	}
-	td:first-child {
-		white-space: nowrap;
+	.top {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
 	}
-	th,
-	td {
-		text-align: left;
-		padding: 0.55rem 0.75rem;
-		border-bottom: 1px solid var(--border);
-		vertical-align: top;
-	}
-	tr:last-child td {
-		border-bottom: none;
-	}
-	th {
-		color: var(--muted);
+	.date {
+		font-size: 14px;
 		font-weight: 500;
 	}
-	.num {
-		text-align: right;
-		white-space: nowrap;
-		font-variant-numeric: tabular-nums;
+	.value {
+		font-size: 15px;
+		display: flex;
+		gap: 6px;
+		align-items: center;
+	}
+	.sets {
+		font-size: 13px;
+		color: var(--soft);
+		overflow-wrap: anywhere;
 	}
 	.note {
-		display: block;
-		margin-top: 0.2rem;
-		font-size: 0.8rem;
+		margin: 0;
+		font-size: 13px;
 		color: var(--muted);
+		white-space: pre-line;
 	}
-	.record {
-		display: block;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--text);
+	.vol {
+		font-size: 12px;
+		color: var(--muted);
 	}
 	details {
-		margin-top: 1.25rem;
-		color: var(--muted);
+		margin-top: 20px;
+	}
+	summary {
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		color: var(--soft);
+		cursor: pointer;
 	}
 	.instruction {
+		margin: 0 0 12px;
 		white-space: pre-line;
-		color: var(--text);
+		color: var(--soft);
+		font-size: 14px;
 	}
 </style>

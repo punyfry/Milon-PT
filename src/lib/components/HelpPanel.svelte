@@ -4,11 +4,13 @@
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
 		busy: boolean;
 		error: string | null;
+		/** "Byt övning" is only shown if the exercise is not already swapped in. */
+		canSwap: boolean;
 		onask: (question: string) => void;
 		onclose: () => void;
 	}
 
-	let { name, log, busy, error, onask, onclose }: Props = $props();
+	let { name, log, busy, error, canSwap, onask, onclose }: Props = $props();
 	let input = $state('');
 
 	function submit(e: SubmitEvent) {
@@ -20,19 +22,15 @@
 	}
 </script>
 
-<div class="panel" role="region" aria-label="Hjälp med {name}">
-	<div class="head">
-		<strong>Fråga Milon</strong>
-		<button type="button" class="close" onclick={onclose} aria-label="Stäng hjälpen">×</button>
-	</div>
+<div class="head">
+	<h2>Fråga Milon</h2>
+	<button type="button" class="icon-btn" onclick={onclose} aria-label="Stäng">
+		<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+	</button>
+</div>
+<p class="muted intro">Om {name}. Milon svarar bara på det du frågar.</p>
 
-	{#if !log.length}
-		<div class="quick">
-			<button type="button" disabled={busy} onclick={() => onask(`Ge mig mer instruktion för ${name}.`)}>Mer instruktion</button>
-			<button type="button" disabled={busy} onclick={() => onask(`Jag vill byta ut ${name}. Vad kan jag göra i stället?`)}>Byt övning</button>
-		</div>
-	{/if}
-
+{#if log.length || busy || error}
 	<div class="log" aria-live="polite">
 		{#each log as item, i (i)}
 			<p class="msg {item.role}">{item.text}</p>
@@ -40,91 +38,92 @@
 		{#if busy}<p class="msg assistant typing">Milon tänker…</p>{/if}
 		{#if error}<p class="msg error" role="alert">{error}</p>{/if}
 	</div>
+{/if}
 
-	<form onsubmit={submit}>
-		<input bind:value={input} maxlength="500" placeholder="Fråga om {name}…" aria-label="Fråga till Milon" disabled={busy} />
-		<button type="submit" disabled={busy || !input.trim()}>Skicka</button>
-	</form>
+<div class="quick">
+	<button type="button" class="btn small" disabled={busy} onclick={() => onask(`Ge mig mer instruktion för ${name}.`)}>Mer instruktion</button>
+	{#if canSwap}
+		<button type="button" class="btn small" disabled={busy} onclick={() => onask(`Jag vill byta ut ${name}. Vad kan jag göra i stället?`)}>Byt övning</button>
+	{/if}
 </div>
 
+<form onsubmit={submit}>
+	<input bind:value={input} maxlength="500" placeholder="Fråga om {name}…" aria-label="Fråga till Milon" enterkeyhint="send" disabled={busy} />
+	<button type="submit" class="btn" disabled={busy || !input.trim()}>Skicka</button>
+</form>
+
 <style>
-	.panel {
-		margin: 0.25rem 0.25rem 0.75rem;
-		padding: 0.75rem;
-		border-radius: 12px;
-		background: var(--bg);
-		border: 1px solid var(--border);
-	}
 	.head {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.5rem;
 	}
-	.close {
-		background: none;
-		border: none;
-		font-size: 1.3rem;
-		color: var(--muted);
-		cursor: pointer;
-		padding: 0 0.25rem;
+	h2 {
+		font-size: 20px;
+		font-weight: 600;
 	}
-	.quick {
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-		margin-bottom: 0.5rem;
+	svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.75;
+		stroke-linecap: round;
 	}
-	.quick button,
-	form button {
-		padding: 0.5rem 0.8rem;
-		border-radius: 10px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-		cursor: pointer;
+	.intro {
+		margin: 0;
 	}
 	.log {
 		display: grid;
-		gap: 0.4rem;
+		gap: 10px;
 	}
 	.msg {
 		margin: 0;
+		padding: 10px 14px;
+		border-radius: 14px;
+		max-width: 88%;
 		white-space: pre-line;
-		font-size: 0.95rem;
+		font-size: 15px;
 	}
 	.msg.user {
-		color: var(--muted);
-		text-align: right;
+		justify-self: end;
+		background: var(--surface-2);
+		box-shadow: inset 0 0 0 1px var(--ring);
+	}
+	.msg.assistant {
+		justify-self: start;
+		border: 1px solid var(--line);
 	}
 	.msg.event {
+		justify-self: center;
+		padding: 4px 0;
+		font-size: 13px;
+		font-weight: 500;
 		color: var(--accent);
-		font-weight: 600;
 	}
 	.msg.error {
+		justify-self: center;
 		color: var(--danger);
+		font-size: 14px;
 	}
 	.typing {
 		color: var(--muted);
 		font-style: italic;
 	}
+	.quick {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
 	form {
 		display: flex;
-		gap: 0.5rem;
-		margin-top: 0.6rem;
+		gap: 8px;
 	}
 	input {
 		flex: 1;
 		min-width: 0;
-		font: inherit;
-		padding: 0.5rem 0.7rem;
-		border-radius: 10px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-	}
-	button:disabled {
-		opacity: 0.5;
-		cursor: default;
+		min-height: 48px;
+		border-radius: 14px;
+		border: 0;
+		background: var(--surface-2);
+		padding: 0 14px;
 	}
 </style>

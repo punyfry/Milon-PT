@@ -1,12 +1,29 @@
 <script lang="ts">
-	import { dev } from '$app/environment';
+	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
+	import { applyTheme, loadTheme, type Theme } from '$lib/theme';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	let storageStatus = $state<string | null>(null);
+	// svelte-ignore state_referenced_locally
+	let goal = $state(data.weeklySessionGoal ?? 0);
+	let goalForm: HTMLFormElement | undefined = $state();
+	let theme = $state<Theme>('system');
+	onMount(() => (theme = loadTheme()));
 
-	// --- import from Craft ---------------------------------------------------
+	function setTheme(t: Theme) {
+		theme = t;
+		applyTheme(t);
+	}
+
+	function stepGoal(d: number) {
+		goal = Math.min(14, Math.max(0, (goal || 0) + d));
+		// Saved right away; the form also works without JavaScript.
+		queueMicrotask(() => goalForm?.requestSubmit());
+	}
+
+	// --- Craft import -------------------------------------------------------
 	let importData = $state<unknown>(null);
 	let importFile = $state('');
 	let importResult = $state<{ applied: boolean; writes: number; summary: string[] } | null>(null);
@@ -54,115 +71,184 @@
 		}
 		await runImport(false);
 	}
-
-	async function testStorage() {
-		storageStatus = 'Testar…';
-		const res = await fetch('/api/storage/selftest', { method: 'POST' });
-		const body = await res.json().catch(() => null);
-		storageStatus = res.ok ? `OK: ${JSON.stringify(body)}` : `Fel ${res.status}: ${body?.message ?? ''}`;
-	}
 </script>
 
 <svelte:head><title>Konto · Milon-PT</title></svelte:head>
 
 <main>
-	<p><a href="/">← Tillbaka</a></p>
-	<h1>Konto</h1>
-	<p>Inloggad som {data.user?.name ?? data.user?.email}</p>
-	<p><small>Användar-ID (för importskriptet): <code>{data.user?.id}</code></small></p>
+	<div class="pagehead">
+		<span class="label">Konto</span>
+		<h1>{data.user?.name ?? 'Konto'}</h1>
+		{#if data.user?.email}<span class="muted email">{data.user.email}</span>{/if}
+	</div>
 
-	<form method="POST" action="?/goal" class="goal">
-		<label for="goal">Veckomål (pass per vecka)</label>
-		<div class="row">
-			<input id="goal" name="weeklySessionGoal" type="number" inputmode="numeric" min="0" max="14" value={data.weeklySessionGoal ?? ''} />
-			<button type="submit">Spara</button>
-		</div>
-	</form>
-	{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
-	{#if form?.goalSaved}<p role="status">Veckomålet är sparat.</p>{/if}
-
-	{#if dev}
-		<p><button onclick={testStorage}>Testa lagring</button></p>
-		{#if storageStatus}<pre>{storageStatus}</pre>{/if}
-	{/if}
-
-	<section class="import">
-		<h2>Importera från Craft</h2>
-		<p class="meta">
-			Välj JSON-filen. Först visas vad som skulle hända; inget sparas förrän du trycker på Importera. Samma fil kan
-			köras igen utan dubbletter.
-		</p>
-		<input type="file" accept="application/json,.json" onchange={onFile} disabled={importing} aria-label="Importfil" />
-		{#if importing}<p class="meta">Arbetar…</p>{/if}
-		{#if importIssues.length}
-			<div class="error" role="alert">
-				<p>Filen kan inte importeras:</p>
-				<ul>{#each importIssues as issue, i (i)}<li>{issue}</li>{/each}</ul>
+	<div class="rows">
+		<form method="POST" action="?/goal" class="row" bind:this={goalForm} use:enhance={() => ({ update }) => update({ reset: false })}>
+			<div class="t">
+				<label for="goal">Veckomål</label>
+				<span>Pass per vecka{form?.goalSaved ? ' · sparat' : ''}</span>
 			</div>
-		{/if}
-		{#if importResult}
-			{#if importResult.applied}
-				<p role="status"><strong>Klart:</strong> {importResult.writes} filer sparades från {importFile}.</p>
-			{:else if importResult.writes === 0}
-				<p role="status">Inget att importera, allt i {importFile} finns redan.</p>
-			{:else}
-				<p><strong>{importResult.writes} filer</strong> skulle sparas från {importFile}:</p>
-			{/if}
-			<pre class="plan">{importResult.summary.join('\n')}</pre>
-			{#if !importResult.applied && importResult.writes > 0}
-				<button onclick={() => runImport(true)} disabled={importing}>Importera</button>
-			{/if}
-		{/if}
-	</section>
+			<div class="stepper">
+				<button type="button" class="step" onclick={() => stepGoal(-1)} aria-label="Minska veckomål" disabled={goal <= 0}>−</button>
+				<input id="goal" class="num" name="weeklySessionGoal" type="number" inputmode="numeric" min="0" max="14" bind:value={goal} onchange={() => goalForm?.requestSubmit()} />
+				<button type="button" class="step" onclick={() => stepGoal(1)} aria-label="Öka veckomål" disabled={goal >= 14}>+</button>
+			</div>
+		</form>
+		{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
 
-	<form method="POST" action="/signout">
+		<div class="row">
+			<div class="t">Tema<span>Följer telefonen som standard</span></div>
+			<div class="seg" role="group" aria-label="Tema">
+				{#each [['system', 'System'], ['dark', 'Mörkt'], ['light', 'Ljust']] as const as [key, label] (key)}
+					<button type="button" aria-pressed={theme === key} onclick={() => setTheme(key)}>{label}</button>
+				{/each}
+			</div>
+		</div>
+
+		<section class="import" id="import">
+			<div class="row">
+				<div class="t">Importera från Craft<span>Visas först, sparas när du trycker Importera</span></div>
+				<label class="btn small file">
+					Välj fil
+					<input type="file" accept="application/json,.json" onchange={onFile} disabled={importing} class="sr-only" />
+				</label>
+			</div>
+			{#if importing}<p class="muted">Arbetar…</p>{/if}
+			{#if importIssues.length}
+				<div class="error" role="alert">
+					<p>{importFile || 'Filen'} kan inte importeras:</p>
+					<ul>{#each importIssues as issue, i (i)}<li>{issue}</li>{/each}</ul>
+				</div>
+			{/if}
+			{#if importResult}
+				{#if importResult.applied}
+					<p role="status"><strong>Klart:</strong> {importResult.writes} filer sparades från {importFile}.</p>
+				{:else if importResult.writes === 0}
+					<p role="status">Inget att importera, allt i {importFile} finns redan.</p>
+				{:else}
+					<p><strong>{importResult.writes} filer</strong> skulle sparas från {importFile}:</p>
+				{/if}
+				<pre class="plan">{importResult.summary.join('\n')}</pre>
+				{#if !importResult.applied && importResult.writes > 0}
+					<button class="btn primary full" onclick={() => runImport(true)} disabled={importing}>Importera</button>
+				{/if}
+			{/if}
+		</section>
+	</div>
+
+	<form method="POST" action="/signout" class="logout">
 		<input type="hidden" name="redirectTo" value="/login" />
-		<button type="submit">Logga ut</button>
+		<button type="submit" class="btn full">Logga ut</button>
 	</form>
 </main>
 
 <style>
-	.goal {
-		display: grid;
-		gap: 0.25rem;
-		margin: 1rem 0;
+	.email {
+		font-size: 14px;
 	}
-	.goal .row {
+	.rows {
+		margin-top: 20px;
+		border-top: 1px solid var(--line);
+	}
+	.row {
 		display: flex;
-		gap: 0.5rem;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		min-height: 68px;
+		border-bottom: 1px solid var(--line);
 	}
-	.goal input {
-		width: 5rem;
-		font: inherit;
-		padding: 0.4rem;
+	.t {
+		display: grid;
 	}
-	.error {
-		color: var(--danger);
+	.t span {
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.stepper {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+	}
+	.stepper input {
+		width: 44px;
+		text-align: center;
+		font-size: 20px;
+		font-weight: 500;
+		background: none;
+		border: 0;
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+	.stepper input::-webkit-inner-spin-button {
+		display: none;
+	}
+	.step {
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		border: 0;
+		background: var(--step);
+		font-family: var(--mono);
+		font-size: 18px;
+		cursor: pointer;
+	}
+	.step:disabled {
+		opacity: 0.4;
+	}
+	.seg {
+		display: inline-flex;
+		background: var(--surface-2);
+		border-radius: 14px;
+		padding: 3px;
+		gap: 3px;
+	}
+	.seg button {
+		min-height: 38px;
+		border: 0;
+		background: none;
+		border-radius: 11px;
+		padding: 0 12px;
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--soft);
+		cursor: pointer;
+	}
+	.seg button[aria-pressed='true'] {
+		background: var(--bg);
+		color: var(--text);
+	}
+	.file {
+		cursor: pointer;
 	}
 	.import {
-		margin: 2rem 0;
 		display: grid;
-		gap: 0.6rem;
-		justify-items: start;
+		gap: 10px;
+		padding-bottom: 12px;
+		border-bottom: 1px solid var(--line);
 	}
-	.import h2 {
-		font-size: 1.05rem;
-		margin: 0;
+	.import .row {
+		border-bottom: 0;
 	}
-	.meta {
-		color: var(--muted);
-		font-size: 0.9rem;
+	.import p {
 		margin: 0;
 	}
 	.plan {
-		width: 100%;
 		max-height: 20rem;
 		overflow: auto;
-		font-size: 0.8rem;
+		margin: 0;
+		font-family: var(--mono);
+		font-size: 12px;
 		background: var(--surface);
-		border: 1px solid var(--border);
 		border-radius: 10px;
-		padding: 0.6rem;
+		padding: 10px;
 		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.logout {
+		margin-top: 28px;
+	}
+	.error p {
+		margin: 12px 0 4px;
 	}
 </style>

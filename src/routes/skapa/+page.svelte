@@ -2,7 +2,9 @@
 	import { invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import Sheet from '$lib/components/Sheet.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
 
@@ -14,6 +16,8 @@
 	let sending = $state(false);
 	let failure = $state<string | null>(null);
 	let logEnd: HTMLElement | undefined = $state();
+	let draftOpen = $state(false);
+	let versionsOpen = $state(false);
 
 	const title = $derived(data.editing ? `Redigera ${data.editing.name}` : 'Skapa pass');
 	const draft = $derived(view?.conversationId ? view.draft : data.initialDraft);
@@ -68,6 +72,7 @@
 	async function scrollDown() {
 		await tick();
 		logEnd?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+		draftOpen = false;
 	}
 
 	async function restore(version: number) {
@@ -77,12 +82,15 @@
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ version })
 		});
-		if (res.ok) await invalidateAll();
-		else failure = 'Kunde inte återställa versionen.';
+		if (res.ok) {
+			versionsOpen = false;
+			await invalidateAll();
+		} else failure = 'Kunde inte återställa versionen.';
 	}
 
+	/** Enter sends with a keyboard; on a phone Enter adds a new line and the send button sends. */
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
+		if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer: coarse)').matches) {
 			e.preventDefault();
 			void send(input);
 		}
@@ -91,43 +99,49 @@
 
 <svelte:head><title>{title} · Milon-PT</title></svelte:head>
 
-<main>
-	<p><a href="/" class="back">← Start</a></p>
-	<h1>{title}</h1>
-
-	{#if !data.configured}
-		<p class="warning">Pass-byggaren behöver <code>ANTHROPIC_API_KEY</code> på servern.</p>
-	{/if}
-
-	{#if !view && !data.editing && data.workouts.length}
-		<p class="meta">
-			Redigera ett befintligt pass:
-			{#each data.workouts as w, i (w.slug)}{i > 0 ? ', ' : ''}<a href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
-		</p>
-	{/if}
-
-	<section class="draft" aria-label="Övningar i passet">
-		<h2>Övningar</h2>
-		{#if draft.length}
-			<ol>
+<div class="page">
+	<header class="top">
+		<div class="row">
+			<h1>{title}</h1>
+			{#if data.versions.length}
+				<button class="btn small" onclick={() => (versionsOpen = true)}>Versioner</button>
+			{:else if data.editing}
+				<a class="btn small" href="/skapa">Nytt pass</a>
+			{/if}
+		</div>
+		<button class="draft" aria-expanded={draftOpen} aria-controls="draftlist" onclick={() => (draftOpen = !draftOpen)} disabled={!draft.length}>
+			<span>
+				{#if draft.length}<strong>{draft.length} {draft.length === 1 ? 'övning' : 'övningar'}</strong> <span class="muted">i passet</span>{:else}<span class="muted">Inga övningar än</span>{/if}
+			</span>
+			{#if draft.length}<Icon name={draftOpen ? 'up' : 'down'} />{/if}
+		</button>
+		{#if draftOpen && draft.length}
+			<ol class="draftlist" id="draftlist">
 				{#each draft as item, i (item.exerciseId)}
-					<li><span class="n">{i + 1}.</span><span class="name">{item.name}</span><span class="meta">{item.sets} × {targetText(item.target)}</span></li>
+					<li><span>{i + 1}. {item.name}</span><span class="num">{item.sets} × {targetText(item.target)}</span></li>
 				{/each}
 			</ol>
-		{:else}
-			<p class="meta">Inga än. Berätta för Milon vad passet ska träna.</p>
 		{/if}
 		{#if view?.saved}
 			<p class="saved">Sparat som version {view.saved.version}. <a href={`/pass/${view.saved.slug}`}>Starta passet</a></p>
 		{/if}
-	</section>
+	</header>
 
 	<section class="chat" aria-live="polite">
+		{#if !data.configured}
+			<p class="bubble error">Pass-byggaren behöver <code>ANTHROPIC_API_KEY</code> på servern.</p>
+		{/if}
+		{#if !view && !data.editing && data.workouts.length}
+			<div class="existing">
+				<span class="label">Eller redigera ett befintligt pass</span>
+				<div class="chips">
+					{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
+				</div>
+			</div>
+		{/if}
 		{#if !view?.log.length}
 			<p class="bubble assistant">
-				{data.editing
-					? `Vad vill du ändra i ${data.editing.name}?`
-					: 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
+				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
 			</p>
 		{/if}
 		{#each view?.log ?? [] as item, i (i)}
@@ -139,199 +153,222 @@
 		{/each}
 		{#if sending}<p class="bubble assistant typing">Milon skriver…</p>{/if}
 		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
-		<div bind:this={logEnd}></div>
+		<div class="end" bind:this={logEnd}></div>
 	</section>
 
 	<form class="composer" onsubmit={(e) => (e.preventDefault(), send(input))}>
 		<textarea
 			bind:value={input}
 			onkeydown={onKeydown}
-			rows="2"
+			rows="1"
 			maxlength="2000"
 			placeholder="Skriv till Milon…"
 			aria-label="Meddelande till Milon"
+			enterkeyhint="enter"
 			disabled={!data.configured}
 		></textarea>
 		<div class="buttons">
-			<button type="submit" class="primary" disabled={sending || !input.trim() || !data.configured}>Skicka</button>
-			<button type="button" disabled={sending || !draft.length || !data.configured} onclick={() => send('Spara passet.')}>
-				Spara pass
-			</button>
+			<button type="submit" class="btn primary" disabled={sending || !input.trim() || !data.configured}>Skicka</button>
+			<button type="button" class="btn" disabled={sending || !draft.length || !data.configured} onclick={() => send('Spara passet.')}>Spara pass</button>
 		</div>
 	</form>
+</div>
 
-	{#if data.versions.length}
-		<section class="versions">
-			<h2>Versioner</h2>
-			<ul>
-				{#each data.versions as v, i (v.version)}
-					<li>
-						<div>
-							<strong>v{v.version}</strong>
-							<span class="meta">{v.createdAt} · {v.exerciseCount} övningar</span>
-							{#if v.changeNote}<div class="meta">{v.changeNote}</div>{/if}
-						</div>
-						{#if i > 0}
-							<button class="link" onclick={() => restore(v.version)}>Återställ</button>
-						{:else}
-							<span class="meta">Aktuell</span>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/if}
-
-	<p class="model meta">Modell: {data.model}</p>
-</main>
+{#if versionsOpen && data.versions.length}
+	<Sheet title="Versioner" onclose={() => (versionsOpen = false)}>
+		<h2>Versioner av {data.editing?.name}</h2>
+		<p class="muted">Att återställa en äldre version sparar den som en ny version.</p>
+		<ul class="versions">
+			{#each data.versions as v, i (v.version)}
+				<li>
+					<div>
+						<strong class="num">v{v.version}</strong>
+						<span class="muted">{v.createdAt} · {v.exerciseCount} övningar</span>
+						{#if v.changeNote}<div class="muted note">{v.changeNote}</div>{/if}
+					</div>
+					{#if i > 0}
+						<button class="btn small" onclick={() => restore(v.version)}>Återställ</button>
+					{:else}
+						<span class="tag quiet">Aktuell</span>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+		<button class="btn ghost full" onclick={() => (versionsOpen = false)}>Stäng</button>
+	</Sheet>
+{/if}
 
 <style>
-	.back {
-		color: var(--muted);
-		text-decoration: none;
+	.page {
+		max-width: 30rem;
+		margin: 0 auto;
+		min-height: calc(100dvh - var(--tabbar-h));
+		display: flex;
+		flex-direction: column;
 	}
-	h1 {
-		margin: 0.25rem 0 1rem;
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		background: var(--bg);
+		padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 10px;
+		border-bottom: 1px solid var(--line);
+		display: grid;
+		gap: 8px;
 	}
-	h2 {
-		font-size: 1rem;
-		margin: 0 0 0.5rem;
-	}
-	.meta {
-		color: var(--muted);
-		font-size: 0.9rem;
-	}
-	.warning {
-		color: var(--danger);
-	}
-	.draft,
-	.versions {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 0.9rem 1rem;
-		margin-bottom: 1rem;
-	}
-	.draft ol {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.draft .n {
-		color: var(--muted);
-		min-width: 1.25rem;
-	}
-	.draft li {
-		padding: 0.2rem 0;
-	}
-	.draft li,
-	.versions li {
+	.row {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.75rem;
+		align-items: center;
+		gap: 8px;
 	}
-	.draft .name {
-		flex: 1;
+	h1 {
+		font-size: 24px;
+		font-weight: 600;
+		color: var(--heading);
+	}
+	.draft {
+		width: 100%;
+		min-height: 48px;
+		border: 0;
+		border-radius: var(--radius);
+		background: var(--surface);
+		padding: 0 14px;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		text-align: left;
+		font-size: 14px;
+		cursor: pointer;
+	}
+	.draft:disabled {
+		cursor: default;
+	}
+	.draftlist {
+		list-style: none;
+		margin: -10px 0 0;
+		padding: 4px 14px 10px;
+		background: var(--surface);
+		border-radius: 0 0 var(--radius) var(--radius);
+		display: grid;
+		gap: 4px;
+	}
+	.draftlist li {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		font-size: 14px;
+		padding-top: 6px;
+	}
+	.draftlist .num {
+		font-size: 13px;
+		color: var(--muted);
+		white-space: nowrap;
 	}
 	.saved {
-		margin: 0.75rem 0 0;
+		margin: 0;
+		font-size: 14px;
 		font-weight: 600;
 	}
 	.chat {
+		flex: 1;
+		padding: 16px 20px;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		margin-bottom: 1rem;
+		gap: 10px;
+	}
+	.existing {
+		display: grid;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	.bubble {
 		margin: 0;
-		padding: 0.6rem 0.85rem;
+		padding: 10px 14px;
 		border-radius: 14px;
-		max-width: 85%;
+		max-width: 88%;
 		white-space: pre-line;
 		overflow-wrap: anywhere;
 	}
 	.bubble.user {
 		align-self: flex-end;
-		background: var(--accent);
-		color: var(--on-accent);
+		background: var(--surface-2);
+		box-shadow: inset 0 0 0 1px var(--ring);
 	}
 	.bubble.assistant {
 		align-self: flex-start;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 	}
 	.bubble.event {
 		align-self: center;
-		font-size: 0.85rem;
+		font-size: 13px;
+		font-weight: 500;
 		color: var(--accent);
-		background: var(--done);
+		padding: 4px 0;
 	}
 	.bubble.error {
 		align-self: center;
-		font-size: 0.9rem;
+		font-size: 14px;
 		color: var(--danger);
 	}
 	.typing {
 		color: var(--muted);
 		font-style: italic;
 	}
+	/* The last message scrolls into view above the composer and the menu, never behind them. */
+	.end {
+		scroll-margin-bottom: calc(150px + var(--tabbar-h));
+	}
 	.composer {
 		position: sticky;
-		bottom: 0;
+		bottom: var(--tabbar-h);
+		z-index: 5;
 		background: var(--bg);
-		padding: 0.5rem 0 calc(0.75rem + env(safe-area-inset-bottom));
+		border-top: 1px solid var(--line);
+		padding: 10px 20px 12px;
 		display: grid;
-		gap: 0.5rem;
+		gap: 8px;
 	}
 	textarea {
 		width: 100%;
-		font: inherit;
-		padding: 0.6rem 0.75rem;
-		border-radius: 12px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-		resize: vertical;
+		min-height: 48px;
+		max-height: 140px;
+		field-sizing: content;
+		border-radius: var(--radius);
+		border: 0;
+		background: var(--surface-2);
+		padding: 12px 14px;
+		resize: none;
 	}
 	.buttons {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
+		grid-template-columns: 1fr auto;
+		gap: 8px;
 	}
-	.buttons button {
-		padding: 0.75rem;
-		border-radius: 12px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.buttons .primary {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--on-accent);
-	}
-	button:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.versions ul {
+	.versions {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 	}
 	.versions li {
-		padding: 0.5rem 0;
-		border-bottom: 1px solid var(--border);
+		display: flex;
+		justify-content: space-between;
 		align-items: center;
+		gap: 12px;
+		padding: 12px 0;
+		border-bottom: 1px solid var(--line);
 	}
-	.versions li:last-child {
-		border-bottom: none;
+	.versions li > div {
+		display: grid;
+		gap: 2px;
+		font-size: 14px;
 	}
-	.model {
-		text-align: center;
-		margin-top: 2rem;
+	.note {
+		font-size: 13px;
 	}
 </style>

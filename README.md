@@ -33,7 +33,10 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/history/stats.ts` | History: best set, estimated 1RM, records, weekly summary and milestones, computed from the logs |
 | `src/lib/markdown.ts` | Simple markdown for the builder's replies, rendered without `{@html}` |
 | `src/service-worker.ts` | Offline support: caches the app's files and visited pages |
-| `src/routes/` | `/` workout cards, `/pass/[slug]` active workout and finish, `/skapa` the builder, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
+| `src/routes/` | `/` workout cards, `/pass/[slug]` active workout (one exercise at a time) and finish, `/skapa` the builder, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
+| `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown` |
+| `src/lib/theme.ts` | Theme choice (system, dark, light), stored in localStorage and applied before first paint by `static/theme-init.js` |
+| `static/fonts/` | Self-hosted Bricolage Grotesque and DM Mono (latin subset, SIL Open Font License) so they work offline |
 | `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons) |
 | `.claude/` | Agent workflow: the `deliver` skill and the subagents Gregory (review) and Nissa (testing) |
 
@@ -116,12 +119,14 @@ Volume: `weight` = sum of weight × reps, `bodyweight` = sum of reps, `time` = s
 
 ## Screens
 
-1. **Start:** if a workout is in progress, "Fortsätt pågående pass" (and "Avbryt pass", with confirmation) is shown at the top. Then the latest version of each workout as a card, most recently trained first with "Senast: för 3 dagar sedan". One tap starts the workout.
-2. **Active workout:** every exercise with a collapsible instruction. Sets are prefilled from the latest log entry, otherwise from the template's target. −/+ per value, "done" per set, add and remove sets. Every change is written to localStorage. Timed exercises have a timer in the set row that counts down, beeps at zero and fills in the time; it stores the end time (`timerEndsAt`) so it stays correct if the screen locks, and the screen is kept awake (Wake Lock). "Hjälp" per exercise opens the helper; swapping an exercise becomes a deviation in the session, not a change to the template.
-3. **Finish:** summary with sets, volume and new records. If there are deviations you are asked whether to save them as a new version of the workout. kcal is suggested (the profile's value for the workout, otherwise the workout type's range) and can be adjusted. "Spara" writes the exercise logs and the session record; localStorage is cleared only after the server confirms.
-4. **Create workout:** chat with the builder and a list of the exercises being discussed. Approved exercises are saved (existing ones are reused), and "Spara pass" creates `v1` or the next version. Older versions can be restored as a new version.
-5. **History:** week (days, sessions vs. weekly goal, volume), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercise list with archived ones last, and per exercise a chart and the latest sessions.
-6. **Account:** weekly goal and the Craft import.
+The look (tokens, type, layout) is described in [DESIGN.md](DESIGN.md). A fixed main menu (Start, Historik, Skapa, Konto) sits at the bottom of every screen except the active workout and sign-in.
+
+1. **Start:** a greeting with the first name, this week's sessions against the weekly goal, a card for a workout in progress, and the latest version of each workout as a card showing its first exercises, most recently trained first. One tap starts the workout; if another workout is in progress you choose between continuing it and discarding it.
+2. **Active workout:** one exercise at a time. Move with the Next button (highlighted when every set is done), by swiping sideways or by tapping the progress segments. Sets are prefilled from the latest log entry, otherwise from the template's target, and last time's value is shown per set. Weight is typed, reps and seconds use −/+. Every set stays editable until the workout is finished; a removed set can be undone. Every change is written to localStorage, including the exercise shown, so a paused workout resumes where it was. Timed exercises have a timer in the set row that counts down, beeps at zero and fills in the time; it stores the end time (`timerEndsAt`) so it stays correct if the screen locks, and the screen is kept awake (Wake Lock). While a timer runs, changing set or exercise, leaving or finishing first asks whether to keep the time, discard it or keep the timer going. "Fråga Milon" opens the helper in a sheet; swapping an exercise becomes a deviation in the session, not a change to the template. The close button asks whether to pause (keep it on the phone) or discard.
+3. **Finish:** summary with time, done sets, new records and each exercise's sets; tap an exercise to go back and change it. If there are deviations you are asked whether to save them as a new version of the workout. kcal is suggested (the profile's value for the workout, otherwise the workout type's range) and can be adjusted. "Avsluta pass" writes the exercise logs and the session record; localStorage is cleared only after the server confirms. "Släng passet" is last, with confirmation.
+4. **Create workout:** chat with the builder and a collapsible list of the exercises being discussed at the top. Approved exercises are saved (existing ones are reused), and "Spara pass" creates `v1` or the next version. Older versions are listed in a sheet and can be restored as a new version. On a phone, Enter adds a new line and the send button sends.
+5. **History:** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercises grouped by workout with search and archived ones last, and per exercise a chart and the latest sessions as rows.
+6. **Account:** weekly goal, theme (system, dark, light), the Craft import and sign-out.
 
 ## The AI coach
 
@@ -163,7 +168,6 @@ Visited pages are available offline; otherwise an offline page is shown. A worko
 - Blob files are always written with `access: 'private'`, and paths are validated so one user can never reach another's files.
 - Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS etc. on pages and API responses from the server (not on static files or redirects to the sign-in page).
 - A daily limit on Claude API calls per user (`AI_DAILY_LIMIT`). Every call counts, and the limit is checked before anything is sent.
-- `/api/storage/selftest` exists only in dev.
 - `.env*` is gitignored. Real user data does not belong in the repo.
 
 ## Quality and CI
