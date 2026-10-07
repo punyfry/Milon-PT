@@ -19,8 +19,8 @@ const save = (sessionId: string, startedAt = '2026-10-07T07:00:00+02:00', userId
 const reply = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
 const asFetch = (f: unknown) => f as typeof fetch;
 
-describe('köad sparning', () => {
-	it('håller isär två pass samma dag och slänger på begäran', () => {
+describe('queued saving', () => {
+	it('keeps two sessions on the same day apart and discards on request', () => {
 		queueSave(save('s_20261007'));
 		queueSave(save('s_20261007'));
 		queueSave(save('s_20261007', '2026-10-07T18:00:00+02:00'));
@@ -29,7 +29,7 @@ describe('köad sparning', () => {
 		expect(pendingSaves('u1').map((p) => p.key)).toEqual([pendingKey('s_20261007', '2026-10-07T18:00:00+02:00')]);
 	});
 
-	it('visar och skickar bara kontots egna pass', async () => {
+	it('shows and sends only the sessions of the current account', async () => {
 		queueSave(save('s1'));
 		queueSave(save('s2', undefined, 'u2'));
 		expect(pendingSaves('u1').map((p) => p.userId)).toEqual(['u1']);
@@ -41,7 +41,7 @@ describe('köad sparning', () => {
 		expect(pendingSaves('u2')).toHaveLength(1);
 	});
 
-	it('behåller passen vid nätfel och sparar serverns fel', async () => {
+	it('keeps sessions on network errors and stores server errors', async () => {
 		queueSave(save('s1'));
 		const offline = vi.fn(async () => {
 			throw new TypeError('Failed to fetch');

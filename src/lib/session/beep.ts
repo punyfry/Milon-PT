@@ -1,8 +1,8 @@
 let ctx: AudioContext | null = null;
 
 /**
- * Låser upp ljudet. Webbläsare tillåter bara ljud efter en användarhandling,
- * så det här anropas när timern startas.
+ * Unlocks audio. Browsers only allow sound after a user gesture, so this is
+ * called when the timer starts.
  */
 export function unlockAudio(): void {
 	try {
@@ -13,7 +13,7 @@ export function unlockAudio(): void {
 	}
 }
 
-/** Kort signal som tystnar av sig själv. */
+/** Short beep that fades out by itself. */
 export function beep(): void {
 	if (!ctx) return;
 	try {
@@ -34,7 +34,7 @@ export function beep(): void {
 			osc.stop(t + offset + 0.2);
 		}
 	} catch {
-		// Inget ljud är bättre än en krasch.
+		// No sound is better than a crash.
 	}
 	navigator.vibrate?.(200);
 }

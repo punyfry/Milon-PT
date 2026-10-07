@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
-	 * Visar pass som väntar på att sparas (sparades utan nät) och skickar dem
-	 * när sidan laddas, vid varje navigering och när nätet kommer tillbaka.
+	 * Shows sessions waiting to be saved (saved while offline) and sends them
+	 * on page load, on every navigation and when the network comes back.
 	 */
 	import { afterNavigate, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -42,7 +42,7 @@
 		};
 	});
 
-	// Byte av konto (eller inloggning) läser om kön.
+	// Switching account (or logging in) reloads the queue.
 	$effect(() => {
 		pending = pendingSaves(userId);
 	});

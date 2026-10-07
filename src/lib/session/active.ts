@@ -1,6 +1,6 @@
 /**
- * Logik för det pågående passet. Rena funktioner som ändrar objekten de får,
- * så att de fungerar direkt på Svelte-state och går att testa utan DOM.
+ * Logic for the active session. Plain functions that mutate the objects they
+ * get, so they work directly on Svelte state and can be tested without a DOM.
  */
 import {
 	LOAD_STEP_KG,
@@ -16,7 +16,7 @@ import {
 	type WorkoutTemplate
 } from '$lib/model';
 
-/** Det klienten behöver veta om en övning under passet. Bara senaste loggposten, aldrig hela loggen. */
+/** What the client needs to know about an exercise during the session. Only the latest log entry, never the whole log. */
 export interface ExerciseInfo {
 	id: string;
 	name: string;
@@ -24,17 +24,17 @@ export interface ExerciseInfo {
 	loadClass?: LoadClass;
 	instruction: string;
 	lastEntry?: LogEntry;
-	/** Bästa värdet hittills (1RM, reps eller sekunder), för att markera rekord vid avslut. */
+	/** Best value so far (1RM, reps or seconds), to mark records when finishing. */
 	best?: number;
-	/** Tyngsta vikten hittills (bara viktövningar). */
+	/** Heaviest weight so far (weight exercises only). */
 	heaviest?: number;
 }
 
-// --- tid ----------------------------------------------------------------
+// --- time ---------------------------------------------------------------
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** Lokal tid som ISO 8601 med tidszon, t.ex. "2026-10-06T17:10:00+02:00". */
+/** Local time as ISO 8601 with time zone, e.g. "2026-10-06T17:10:00+02:00". */
 export function localIsoString(date: Date): string {
 	const offset = -date.getTimezoneOffset();
 	const sign = offset >= 0 ? '+' : '-';
@@ -46,7 +46,7 @@ export function localIsoString(date: Date): string {
 	);
 }
 
-/** Datumdelen av en lokal ISO-tid: "2026-10-06T17:10:00+02:00" → "2026-10-06". */
+/** Date part of a local ISO time: "2026-10-06T17:10:00+02:00" → "2026-10-06". */
 export function localDateOf(iso: string): string {
 	return iso.slice(0, 10);
 }
@@ -59,7 +59,7 @@ function defaultSet(type: ExerciseType, target?: Target): ExerciseSet {
 	return type === 'weight' ? { weight: 0, reps } : { reps };
 }
 
-/** Plockar ut setvärdena utan extra fält (som `done` eller timerfält). */
+/** Picks out the set values without extra fields (such as `done` or timer fields). */
 function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
 	if (type === 'weight' && 'weight' in set) return { weight: set.weight, reps: set.reps };
 	if (type === 'time' && 'seconds' in set) return { seconds: set.seconds };
@@ -68,9 +68,9 @@ function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
 }
 
 /**
- * Förifyller seten från övningens senaste loggpost, annars från passmallens
- * mål. Antalet set följer mallen; har förra gången färre set upprepas det
- * sista.
+ * Prefills the sets from the exercise's latest log entry, otherwise from the
+ * workout target. The number of sets follows the template; if last time had
+ * fewer sets, the last one is repeated.
  */
 export function prefillSets(info: ExerciseInfo, count: number, target?: Target): ActiveSet[] {
 	const previous = info.lastEntry?.sets ?? [];
@@ -104,7 +104,7 @@ export function createActiveSession(
 	};
 }
 
-// --- ändringar ----------------------------------------------------------
+// --- changes ------------------------------------------------------------
 
 export type SetField = 'weight' | 'reps' | 'seconds';
 
@@ -116,7 +116,7 @@ export function stepFor(field: SetField, loadClass?: LoadClass): number {
 	return 1;
 }
 
-/** −/+ på ett fält. Aldrig under noll. */
+/** −/+ on a field. Never below zero. */
 export function adjust(set: ActiveSet, field: SetField, direction: 1 | -1, loadClass?: LoadClass): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	const current = values[field];
@@ -124,14 +124,14 @@ export function adjust(set: ActiveSet, field: SetField, direction: 1 | -1, loadC
 	values[field] = Math.max(0, round2(current + direction * stepFor(field, loadClass)));
 }
 
-/** Sätter ett fält till ett inskrivet värde. Ogiltiga värden ignoreras. */
+/** Sets a field to a typed value. Invalid values are ignored. */
 export function setField(set: ActiveSet, field: SetField, value: number): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	if (values[field] === undefined || !Number.isFinite(value) || value < 0) return;
 	values[field] = field === 'weight' ? round2(value) : Math.round(value);
 }
 
-/** Nytt set med samma värden som det sista, inte markerat som klart. */
+/** New set with the same values as the last one, not marked as done. */
 export function addSet(sets: ActiveSet[], type: ExerciseType): void {
 	const last = sets[sets.length - 1];
 	sets.push({ ...(last ? setValues(type, last) : defaultSet(type)), done: false });
@@ -156,7 +156,7 @@ export function remainingMs(set: ActiveSet, now: Date): number {
 	return Math.max(0, Date.parse(set.timerEndsAt) - now.getTime());
 }
 
-/** Startar nedräkningen från setets nuvarande tid. */
+/** Starts the countdown from the set's current time. */
 export function startTimer(set: ActiveSet, now: Date): void {
 	if (!('seconds' in set) || set.seconds <= 0) return;
 	set.timerDuration = set.seconds;
@@ -169,7 +169,7 @@ function clearTimer(set: ActiveSet): void {
 	delete set.timerDuration;
 }
 
-/** Stopp före noll: den tid som gått sparas och setet markeras som klart. */
+/** Stop before zero: the elapsed time is saved and the set is marked as done. */
 export function stopTimer(set: ActiveSet, now: Date): void {
 	if (!isTimerRunning(set) || !('seconds' in set)) return;
 	const duration = set.timerDuration ?? set.seconds;
@@ -178,14 +178,14 @@ export function stopTimer(set: ActiveSet, now: Date): void {
 	clearTimer(set);
 }
 
-/** Avbryter utan att röra tiden eller klar-markeringen. */
+/** Cancels without touching the time or the done flag. */
 export function cancelTimer(set: ActiveSet): void {
 	clearTimer(set);
 }
 
 /**
- * Fyller i uppnådd tid för timers som nått noll, även om det hände medan
- * sidan var stängd. Returnerar antalet set som blev klara.
+ * Fills in the reached time for timers that hit zero, even if that happened
+ * while the page was closed. Returns the number of sets that became done.
  */
 export function completeExpiredTimers(session: ActiveSession, now: Date): number {
 	let completed = 0;
@@ -205,11 +205,11 @@ export function anyTimerRunning(session: ActiveSession): boolean {
 	return session.exercises.some((ex) => ex.sets.some(isTimerRunning));
 }
 
-// --- sammanfattning -----------------------------------------------------
+// --- summary -----------------------------------------------------------
 
 /**
- * Volym: weight = summa vikt × reps, bodyweight = summa reps,
- * time = summa sekunder.
+ * Volume: weight = sum of weight × reps, bodyweight = sum of reps,
+ * time = sum of seconds.
  */
 export function volume(type: ExerciseType, sets: readonly ExerciseSet[]): number {
 	let sum = 0;
@@ -233,7 +233,7 @@ export interface ExerciseSummary {
 export interface SessionSummary {
 	exercises: ExerciseSummary[];
 	doneSets: number;
-	/** Total volym per övningstyp (kg, reps, sekunder). */
+	/** Total volume per exercise type (kg, reps, seconds). */
 	volumeByType: Record<ExerciseType, number>;
 }
 
@@ -257,13 +257,13 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 	return { exercises, doneSets: exercises.reduce((n, e) => n + e.doneSets, 0), volumeByType };
 }
 
-/** Förslag: styrka ca 250–350 kcal. Profilens värde för passet går före. */
+/** Default: strength ~250–350 kcal. The profile's value for the workout takes precedence. */
 export const DEFAULT_KCAL = 300;
 
 /**
- * kcal-förslag vid avslut: profilens värde för just det här passet, annars
- * mitten av profilens intervall för passtypen (HIIT om namnet säger det,
- * annars styrka), annars DEFAULT_KCAL.
+ * Suggested kcal when finishing: the profile's value for this workout, else
+ * the middle of the profile's range for the workout type (HIIT if the name
+ * says so, otherwise strength), else DEFAULT_KCAL.
  */
 export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 'slug' | 'name'>): number {
 	const perWorkout = profile.kcalPerWorkout?.[workout.slug];
@@ -272,15 +272,15 @@ export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 
 	return range ? Math.round((range.min + range.max) / 2 / 10) * 10 : DEFAULT_KCAL;
 }
 
-// --- byte av övning -----------------------------------------------------
+// --- exercise swap ------------------------------------------------------
 
 /**
- * Byter övning i det pågående passet (från hjälparen) och lägger bytet som
- * avvikelse; passmallen rörs inte.
- * - Seten förifylls för den nya övningen med samma antal som den gamla.
- * - Har den gamla övningen klara set behålls de, och den nya läggs efter den.
- * - Byts en redan inbytt övning igen uppdateras avvikelsen (A→B→C blir A→C),
- *   och byts den tillbaka till originalet tas avvikelsen bort.
+ * Swaps an exercise in the active session (from the helper) and records the
+ * swap as a deviation; the workout template is not touched.
+ * - The new exercise gets prefilled sets, as many as the old one had.
+ * - If the old exercise has done sets they are kept, and the new one is added after it.
+ * - Swapping an already swapped-in exercise again updates the deviation (A→B→C becomes A→C),
+ *   and swapping back to the original removes the deviation.
  */
 export function applySwap(session: ActiveSession, fromId: string, to: ExerciseInfo, target?: Target): void {
 	const index = session.exercises.findIndex((e) => e.exerciseId === fromId);

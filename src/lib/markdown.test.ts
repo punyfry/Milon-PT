@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseInline, parseMarkdown } from './markdown';
 
-describe('enkel markdown', () => {
-	it('tolkar fet, kursiv och kod', () => {
+describe('simple markdown', () => {
+	it('parses bold, italic and code', () => {
 		expect(parseInline('Kör **3 set** av *Marklyft* med `heavy`')).toEqual([
 			{ text: 'Kör ' },
 			{ text: '3 set', bold: true },
@@ -17,11 +17,11 @@ describe('enkel markdown', () => {
 		]);
 	});
 
-	it('lämnar ensamma tecken och understreck i ord orörda', () => {
+	it('leaves lone markers and underscores inside words alone', () => {
 		expect(parseInline('3 * 10 reps, pass_a och 2*3')).toEqual([{ text: '3 * 10 reps, pass_a och 2*3' }]);
 	});
 
-	it('delar upp i stycken, rubriker och listor', () => {
+	it('splits into paragraphs, headings and lists', () => {
 		const text = '## Förslag\nPass A:\nfokus ben\n\n- Knäböj 3 × 8\n- Utfall\n1. Värm upp\n2) Kör\n\n---\nKlart?';
 		expect(parseMarkdown(text)).toEqual([
 			{ type: 'heading', line: [{ text: 'Förslag' }] },
@@ -32,7 +32,7 @@ describe('enkel markdown', () => {
 		]);
 	});
 
-	it('håller ihop listor med tomma rader och indragna fortsättningar', () => {
+	it('keeps lists together across blank lines and indented continuations', () => {
 		expect(parseMarkdown('1. Uppvärmning\n\n2. Knäböj\n   3 set\n\n3. Stretch\n\nKlart')).toEqual([
 			{
 				type: 'ol',
@@ -44,12 +44,12 @@ describe('enkel markdown', () => {
 		expect(parseMarkdown('3. Tredje')).toEqual([{ type: 'ol', start: 3, items: [[{ text: 'Tredje' }]] }]);
 	});
 
-	it('tolkar inte stjärnor mellan siffror som kursiv', () => {
+	it('does not treat asterisks between digits as italic', () => {
 		expect(parseInline('Knäböj 3*10 och 2*5 reps')).toEqual([{ text: 'Knäböj 3*10 och 2*5 reps' }]);
 		expect(parseInline('5*5 med *paus*')).toEqual([{ text: '5*5 med ' }, { text: 'paus', italic: true }]);
 	});
 
-	it('hanterar avdelare, tomma punkter, årtal och kursiv med mellanslag', () => {
+	it('handles rules, empty items, years and italic with spaces', () => {
 		expect(parseMarkdown('A\n* * *\n- - -\n- \n2024. Bra år')).toEqual([
 			{ type: 'p', lines: [[{ text: 'A' }]] },
 			{ type: 'p', lines: [[{ text: '- ' }], [{ text: '2024. Bra år' }]] }
@@ -57,7 +57,7 @@ describe('enkel markdown', () => {
 		expect(parseInline('*a * och _b _')).toEqual([{ text: '*a * och _b _' }]);
 	});
 
-	it('släpper igenom HTML som vanlig text', () => {
+	it('passes HTML through as plain text', () => {
 		expect(parseMarkdown('<img src=x onerror=alert(1)>')).toEqual([
 			{ type: 'p', lines: [[{ text: '<img src=x onerror=alert(1)>' }]] }
 		]);

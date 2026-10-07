@@ -1,25 +1,25 @@
 /**
- * Historiken räknas ut ur övningsloggarna och sessionsposterna; inget lagras
- * separat.
+ * History is computed from the exercise logs and session records; nothing is
+ * stored separately.
  */
 import { normalizeName, type Exercise, type ExerciseSet, type ExerciseType, type SessionRecord } from '$lib/model';
 import { volume } from '$lib/session/active';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Beräknad 1RM (Epley): vikt × (1 + reps / 30). */
+/** Estimated 1RM (Epley): weight × (1 + reps / 30). */
 export function estimated1RM(weight: number, reps: number): number {
 	return reps > 0 ? round1(weight * (1 + reps / 30)) : 0;
 }
 
-/** Vad "bästa set" mäts i per övningstyp. */
+/** What "best set" is measured in per exercise type. */
 export function metricFor(type: ExerciseType): { label: string; unit: string } {
 	if (type === 'weight') return { label: 'Beräknad 1RM', unit: 'kg' };
 	if (type === 'time') return { label: 'Längsta set', unit: 's' };
 	return { label: 'Flest reps', unit: 'reps' };
 }
 
-/** Bästa setet i en loggpost: högst 1RM, flest reps eller längst tid. */
+/** Best set in a log entry: highest 1RM, most reps or longest time. */
 export function bestSet(type: ExerciseType, sets: readonly ExerciseSet[]): { value: number; set: ExerciseSet } | null {
 	let best: { value: number; set: ExerciseSet } | null = null;
 	for (const set of sets) {
@@ -42,7 +42,7 @@ export interface SeriesPoint {
 	set: ExerciseSet;
 }
 
-/** Bästa värdet per datum, äldst först (flera pass samma dag slås ihop). */
+/** Best value per date, oldest first (several sessions on one day are merged). */
 export function progressSeries(exercise: Exercise): SeriesPoint[] {
 	const byDate = new Map<string, SeriesPoint>();
 	for (const entry of exercise.log) {
@@ -54,7 +54,7 @@ export function progressSeries(exercise: Exercise): SeriesPoint[] {
 	return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** Bästa värdet någonsin, valfritt utan ett visst pass. */
+/** Best value ever, optionally excluding a given session. */
 export function bestEver(exercise: Exercise, excludeSessionId?: string): number | null {
 	let best: number | null = null;
 	for (const entry of exercise.log) {
@@ -65,7 +65,7 @@ export function bestEver(exercise: Exercise, excludeSessionId?: string): number 
 	return best;
 }
 
-/** Tyngsta vikten i ett set med minst en rep (bara viktövningar). */
+/** Heaviest weight in a set with at least one rep (weight exercises only). */
 export function heaviestWeight(type: ExerciseType, sets: readonly ExerciseSet[]): number | null {
 	if (type !== 'weight') return null;
 	let max = 0;
@@ -73,7 +73,7 @@ export function heaviestWeight(type: ExerciseType, sets: readonly ExerciseSet[])
 	return max > 0 ? max : null;
 }
 
-/** Tyngsta vikten någonsin, valfritt utan ett visst pass. */
+/** Heaviest weight ever, optionally excluding a given session. */
 export function heaviestEver(exercise: Exercise, excludeSessionId?: string): number | null {
 	let max: number | null = null;
 	for (const entry of exercise.log) {
@@ -84,12 +84,12 @@ export function heaviestEver(exercise: Exercise, excludeSessionId?: string): num
 	return max;
 }
 
-/** "best" = bästa set (1RM, reps eller tid), "heaviest" = tyngsta vikt. */
+/** "best" = best set (1RM, reps or time), "heaviest" = heaviest weight. */
 export type RecordKind = 'best' | 'heaviest';
 
 /**
- * Loggposterna (index i övningens logg) som satte rekord: strikt bättre än
- * allt tidigare. Den allra första posten räknas inte som rekord.
+ * Log entries (indexes into the exercise log) that set a record: strictly
+ * better than everything before. The very first entry is not a record.
  */
 export function recordEntries(exercise: Exercise): Map<number, RecordKind[]> {
 	const order = exercise.log.map((e, i) => ({ e, i })).sort((a, b) => a.e.date.localeCompare(b.e.date) || b.i - a.i);
@@ -111,13 +111,13 @@ export function recordEntries(exercise: Exercise): Map<number, RecordKind[]> {
 	return records;
 }
 
-// --- vecka --------------------------------------------------------------
+// --- week ---------------------------------------------------------------
 
 const DAY = 86_400_000;
 const toDate = (d: string) => new Date(`${d}T12:00:00Z`);
 const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Ett riktigt datum YYYY-MM-DD inom rimliga år (t.ex. inte 2026-02-30). */
+/** A real YYYY-MM-DD date within reasonable years (e.g. not 2026-02-30). */
 export function isValidDate(date: string): boolean {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
 	const year = Number(date.slice(0, 4));
@@ -129,13 +129,13 @@ export function addDays(date: string, days: number): string {
 	return fmt(new Date(toDate(date).getTime() + days * DAY));
 }
 
-/** Måndagen i datumets vecka (svensk vecka, måndag–söndag). */
+/** Monday of the date's week (Swedish week, Monday–Sunday). */
 export function weekStartOf(date: string): string {
-	const weekday = (toDate(date).getUTCDay() + 6) % 7; // 0 = måndag
+	const weekday = (toDate(date).getUTCDay() + 6) % 7; // 0 = Monday
 	return addDays(date, -weekday);
 }
 
-/** ISO-veckonummer. */
+/** ISO week number. */
 export function isoWeek(date: string): number {
 	const d = toDate(weekStartOf(date));
 	const thursday = new Date(d.getTime() + 3 * DAY);
@@ -152,7 +152,7 @@ export interface WeekSummary {
 	start: string;
 	week: number;
 	days: WeekDay[];
-	/** Sparade pass, plus importerade träningsdagar utan sessionspost. */
+	/** Saved sessions, plus imported training days without a session record. */
 	sessionCount: number;
 	volumeByType: Record<ExerciseType, number>;
 }
@@ -187,18 +187,18 @@ export function weekSummary(start: string, exercises: readonly Exercise[], sessi
 	};
 }
 
-// --- milstolpar ---------------------------------------------------------
+// --- milestones ---------------------------------------------------------
 
 /**
- * `match` är själva målet. `progression` är övningar på vägen dit, som visas
- * tills målövningen har loggats.
+ * `match` is the goal itself. `progression` are exercises on the way there,
+ * shown until the goal exercise has been logged.
  */
 export const MILESTONES = [
 	{
 		key: 'pullup',
 		title: 'Pull-up',
 		match: /^(pull[\s-]?ups?|chins?[\s-]?ups?)$/,
-		// Inte övningar som bara använder stången, t.ex. "Dead hang i pull-up-stång".
+		// Not exercises that merely use the bar, e.g. "Dead hang i pull-up-stång".
 		progression: /(pull[\s-]?ups?|chins?[\s-]?ups?)(?![\s-]?(stång|bar))/
 	},
 	{
@@ -210,14 +210,15 @@ export const MILESTONES = [
 ] as const;
 
 const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
-/** Senast tränade först, arkiverade sist. */
+/** Most recently trained first, archived last. */
 const byRecent = (a: Exercise, b: Exercise) => Number(a.archived) - Number(b.archived) || lastDate(b).localeCompare(lastDate(a));
 
 /**
- * Övningen som visas per milstolpe. Finns en målövning med historik visas
- * den (senast tränade, arkiverad bara om ingen annan finns). Annars visas
- * den senast tränade progressionsövningen, och `progress` blir true.
- * `others` är övriga progressionsövningar med historik.
+ * The exercise shown per milestone. If a goal exercise has history, it is
+ * shown (most recently trained, archived only if there is no other).
+ * Otherwise the most recently trained progression exercise is shown and
+ * `progress` is true. `others` are the remaining progression exercises with
+ * history.
  */
 export function milestoneExercises(exercises: readonly Exercise[]) {
 	return MILESTONES.map((m) => {

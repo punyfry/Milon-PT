@@ -16,7 +16,7 @@ import {
 	weekSummary
 } from './stats';
 
-const marklyft: Exercise = {
+const deadlift: Exercise = {
 	id: 'ex_marklyft',
 	name: 'Marklyft',
 	type: 'weight',
@@ -29,7 +29,7 @@ const marklyft: Exercise = {
 		{ date: '2026-09-29', sets: [{ weight: 40, reps: 8 }] }
 	]
 };
-const plankan: Exercise = {
+const plank: Exercise = {
 	id: 'ex_plankan',
 	name: 'Plankan',
 	type: 'time',
@@ -38,59 +38,59 @@ const plankan: Exercise = {
 	log: [{ sessionId: 's3', date: '2026-10-06', sets: [{ seconds: 45 }, { seconds: 60 }] }]
 };
 
-describe('bästa set och rekord', () => {
-	it('räknar 1RM enligt specen', () => {
+describe('best set and records', () => {
+	it('computes 1RM per the spec', () => {
 		expect(estimated1RM(40, 8)).toBe(50.7);
 		expect(estimated1RM(100, 0)).toBe(0);
 	});
 
-	it('väljer bästa set per typ', () => {
-		expect(bestSet('weight', marklyft.log[0].sets)).toEqual({ value: 54, set: { weight: 45, reps: 6 } });
-		expect(bestSet('time', plankan.log[0].sets)?.value).toBe(60);
+	it('picks the best set per type', () => {
+		expect(bestSet('weight', deadlift.log[0].sets)).toEqual({ value: 54, set: { weight: 45, reps: 6 } });
+		expect(bestSet('time', plank.log[0].sets)?.value).toBe(60);
 		expect(bestSet('bodyweight', [{ reps: 5 }, { reps: 8 }])?.value).toBe(8);
 		expect(bestSet('weight', [])).toBeNull();
 	});
 
-	it('ger en serie per datum, äldst först', () => {
-		expect(progressSeries(marklyft).map((p) => [p.date, p.value])).toEqual([
+	it('gives one series point per date, oldest first', () => {
+		expect(progressSeries(deadlift).map((p) => [p.date, p.value])).toEqual([
 			['2026-09-29', 50.7],
 			['2026-10-01', 55],
 			['2026-10-06', 54]
 		]);
 	});
 
-	it('hittar rekord och bästa värde utan ett visst pass', () => {
-		// 2026-10-01 (55) slog 2026-09-29 (50,7); 2026-10-06 (54) gjorde det inte.
-		expect([...recordEntries(marklyft)]).toEqual([[1, ['best', 'heaviest']]]);
-		expect(bestEver(marklyft)).toBe(55);
-		expect(bestEver(marklyft, 's2')).toBe(54);
+	it('finds records and the best value excluding a given session', () => {
+		// 2026-10-01 (55) beat 2026-09-29 (50.7); 2026-10-06 (54) did not.
+		expect([...recordEntries(deadlift)]).toEqual([[1, ['best', 'heaviest']]]);
+		expect(bestEver(deadlift)).toBe(55);
+		expect(bestEver(deadlift, 's2')).toBe(54);
 	});
 });
 
-describe('tyngsta vikt', () => {
-	it('räknar bara viktövningar och set med reps', () => {
+describe('heaviest weight', () => {
+	it('counts only weight exercises and sets with reps', () => {
 		expect(heaviestWeight('weight', [{ weight: 40, reps: 8 }, { weight: 60, reps: 0 }, { weight: 45, reps: 2 }])).toBe(45);
 		expect(heaviestWeight('bodyweight', [{ reps: 8 }])).toBeNull();
-		expect(heaviestEver(marklyft)).toBe(50);
-		expect(heaviestEver(marklyft, 's2')).toBe(45);
+		expect(heaviestEver(deadlift)).toBe(50);
+		expect(heaviestEver(deadlift, 's2')).toBe(45);
 	});
 
-	it('ger rekord för tyngre vikt även när 1RM inte slås', () => {
+	it('gives a record for a heavier weight even when 1RM is not beaten', () => {
 		const ex: Exercise = {
-			...marklyft,
+			...deadlift,
 			log: [
 				{ date: '2026-10-06', sets: [{ weight: 52.5, reps: 1 }] },
 				{ date: '2026-10-01', sets: [{ weight: 50, reps: 3 }] }
 			]
 		};
-		// 52,5 × 1 ger 1RM 54,3 < 55, men vikten är ny högsta.
+		// 52.5 × 1 gives 1RM 54.3 < 55, but the weight is a new high.
 		expect([...recordEntries(ex)]).toEqual([[0, ['heaviest']]]);
-		expect(recordEntries(plankan).size).toBe(0);
+		expect(recordEntries(plank).size).toBe(0);
 	});
 });
 
-describe('vecka', () => {
-	it('börjar på måndag och har rätt veckonummer', () => {
+describe('week', () => {
+	it('starts on Monday and has the right week number', () => {
 		expect(weekStartOf('2026-10-06')).toBe('2026-10-05');
 		expect(weekStartOf('2026-10-11')).toBe('2026-10-05');
 		expect(weekStartOf('2026-10-05')).toBe('2026-10-05');
@@ -99,7 +99,7 @@ describe('vecka', () => {
 		expect(addDays('2026-10-31', 1)).toBe('2026-11-01');
 	});
 
-	it('sammanfattar dagar, pass och volym', () => {
+	it('summarises days, sessions and volume', () => {
 		const sessions: SessionRecord[] = [
 			{
 				id: 's3',
@@ -111,44 +111,44 @@ describe('vecka', () => {
 				deviations: []
 			}
 		];
-		const week = weekSummary('2026-09-28', [marklyft, plankan], sessions);
-		// 09-29 importerad dag (utan session), 10-01 loggad med sessionId utan sessionspost i listan.
+		const week = weekSummary('2026-09-28', [deadlift, plank], sessions);
+		// 09-29 is an imported day (no session), 10-01 is logged with a sessionId that has no session record in the list.
 		expect(week.days.filter((d) => d.trained).map((d) => d.date)).toEqual(['2026-09-29', '2026-10-01']);
 		expect(week.sessionCount).toBe(1);
 		expect(week.volumeByType).toEqual({ weight: 470, bodyweight: 0, time: 0 });
 
-		const next = weekSummary('2026-10-05', [marklyft, plankan], sessions);
+		const next = weekSummary('2026-10-05', [deadlift, plank], sessions);
 		expect(next.days[1]).toEqual({ date: '2026-10-06', trained: true });
 		expect(next.sessionCount).toBe(1);
 		expect(next.volumeByType).toEqual({ weight: 590, bodyweight: 0, time: 105 });
 	});
 });
 
-describe('milstolpar', () => {
-	it('känner igen pull-up och handstående på namn', () => {
-		const ex = (name: string): Exercise => ({ ...plankan, id: name, name });
+describe('milestones', () => {
+	it('recognises pull-up and handstand by name', () => {
+		const ex = (name: string): Exercise => ({ ...plank, id: name, name });
 		const found = milestoneExercises([ex('Pull-ups'), ex('Handstående mot vägg'), ex('Pull-up med gummiband')]);
 		expect(found.map((m) => m.exercise?.name ?? null)).toEqual(['Pull-ups', 'Handstående mot vägg']);
 	});
 
-	it('väljer den matchande övningen som tränats senast', () => {
-		const empty: Exercise = { ...plankan, id: 'ex_chin_ups', name: 'Chin-ups', log: [] };
-		const used: Exercise = { ...plankan, id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', log: [{ date: '2026-10-01', sets: [{ reps: 5 }] }] };
+	it('picks the most recently trained matching exercise', () => {
+		const empty: Exercise = { ...plank, id: 'ex_chin_ups', name: 'Chin-ups', log: [] };
+		const used: Exercise = { ...plank, id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', log: [{ date: '2026-10-01', sets: [{ reps: 5 }] }] };
 		const archived: Exercise = { ...used, id: 'ex_pullup_old', name: 'Pullup', archived: true, log: [{ date: '2026-10-05', sets: [{ reps: 6 }] }] };
 		expect(milestoneExercises([empty, archived, used])[0].exercise?.id).toBe('ex_pull_up');
 	});
 });
 
-describe('milstolpar med progression', () => {
+describe('milestones with progression', () => {
 	const bw = (id: string, name: string, date?: string): Exercise => ({
-		...plankan,
+		...plank,
 		id,
 		name,
 		type: 'bodyweight',
 		log: date ? [{ date, sets: [{ reps: 5 }] }] : []
 	});
 
-	it('visar senaste progressionsövningen tills målet har loggats', () => {
+	it('shows the latest progression exercise until the goal has been logged', () => {
 		const neg = bw('ex_neg', 'Negativa pull-ups', '2026-10-01');
 		const band = bw('ex_band', 'Pull-up med gummiband', '2026-09-20');
 		const headstand = { ...bw('ex_huvud', 'Huvudstående-progression', '2026-10-02'), type: 'time' as const };
@@ -164,8 +164,8 @@ describe('milstolpar med progression', () => {
 	});
 });
 
-describe('datumkontroll', () => {
-	it('godtar bara riktiga datum inom rimliga år', () => {
+describe('date check', () => {
+	it('accepts only real dates within reasonable years', () => {
 		expect(isValidDate('2026-10-06')).toBe(true);
 		expect(isValidDate('2028-02-29')).toBe(true);
 		for (const bad of ['2026-02-30', '2026-13-01', '0001-01-01', '9999-12-31', 'abc', '2026-1-1']) {

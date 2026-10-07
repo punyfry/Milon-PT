@@ -1,6 +1,6 @@
 const rtf = new Intl.RelativeTimeFormat('sv', { numeric: 'always' });
 
-/** Kalenderdagar mellan två datum (YYYY-MM-DD eller ISO-tid), i lokal tid. */
+/** Calendar days between two dates (YYYY-MM-DD or ISO time), in local time. */
 export function daysBetween(fromIso: string, now: Date): number {
 	const from = new Date(fromIso.slice(0, 10) + 'T00:00:00');
 	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -38,14 +38,14 @@ export function formatSeconds(total: number): string {
 
 /** "40 kg × 8", "8 reps", "45 s" */
 export function formatSet(type: 'weight' | 'bodyweight' | 'time', set: { weight?: number; reps?: number; seconds?: number }): string {
-	// Hårda mellanslag: ett set bryts aldrig mitt i ("62,5 kg × 8").
+	// Non-breaking spaces: a set never wraps in the middle ("62,5 kg × 8").
 	if (type === 'weight' && set.weight !== undefined) return `${formatNumber(set.weight)}\u00a0kg\u00a0×\u00a0${set.reps ?? 0}`;
 	if (type === 'time' && set.seconds !== undefined) return `${set.seconds} s`;
 	if (set.reps !== undefined) return `${set.reps} reps`;
 	return '?';
 }
 
-/** Värde i en övningstyps mått: "54 kg", "12 reps", "1:05". */
+/** Value in an exercise type's unit: "54 kg", "12 reps", "1:05". */
 export function formatMetric(type: 'weight' | 'bodyweight' | 'time', value: number): string {
 	if (type === 'weight') return `${formatNumber(value)} kg`;
 	if (type === 'time') return formatSeconds(value);

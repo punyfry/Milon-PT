@@ -1,5 +1,5 @@
 <script lang="ts">
-	/** Visar ett chattsvar med enkel markdown (se $lib/markdown). Ingen HTML från texten. */
+	/** Shows a chat reply with simple markdown (see $lib/markdown). No HTML from the text. */
 	import { parseMarkdown, type Line } from '$lib/markdown';
 
 	let { text }: { text: string } = $props();

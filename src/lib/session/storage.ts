@@ -1,8 +1,8 @@
 import { ACTIVE_SESSION_KEY, isObject, type ActiveSession } from '$lib/model';
 
 /**
- * Det pågående passet lever i localStorage tills det sparats. Läsning och
- * skrivning tål att localStorage saknas eller kastar (privat läge m.m.).
+ * The active session lives in localStorage until it is saved. Reads and
+ * writes tolerate localStorage being missing or throwing (private mode etc.).
  */
 export function loadActiveSession(): ActiveSession | null {
 	try {
@@ -22,7 +22,7 @@ export function loadActiveSession(): ActiveSession | null {
 			return parsed as unknown as ActiveSession;
 		}
 	} catch {
-		// Trasigt eller otillgängligt: behandla som inget pågående pass.
+		// Broken or unavailable: treat as no active session.
 	}
 	return null;
 }
@@ -40,6 +40,6 @@ export function clearActiveSession(): void {
 	try {
 		localStorage.removeItem(ACTIVE_SESSION_KEY);
 	} catch {
-		// ignoreras
+		// ignored
 	}
 }

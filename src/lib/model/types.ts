@@ -1,7 +1,7 @@
 /**
- * Datamodellen (se README.md, "Datamodell"). Delas av server och klient.
+ * The data model (see README.md). Shared by server and client.
  *
- * Per användare finns fyra filtyper under `users/<userId>/`:
+ * Each user has four file types under `users/<userId>/`:
  * - `profile.json`
  * - `exercises/<exerciseId>.json`
  * - `workouts/<slug>.v<N>.json`
@@ -10,7 +10,7 @@
 
 export type ExerciseType = 'weight' | 'bodyweight' | 'time';
 
-/** `light` = steg 1,25 kg, `heavy` = steg 5 kg. Gäller bara `weight`. */
+/** `light` = 1.25 kg steps, `heavy` = 5 kg steps. Only for `weight`. */
 export type LoadClass = 'light' | 'heavy';
 
 export interface WeightSet {
@@ -26,12 +26,12 @@ export interface TimeSet {
 export type ExerciseSet = WeightSet | RepsSet | TimeSet;
 
 export interface LogEntry {
-	/** Saknas för poster som importerats utan pass. */
+	/** Missing for entries imported without a session. */
 	sessionId?: string;
 	/** YYYY-MM-DD */
 	date: string;
 	sets: ExerciseSet[];
-	/** Fri anteckning, t.ex. "Nästa gång: prova 25 kg". */
+	/** Free-text note, e.g. "Nästa gång: prova 25 kg". */
 	note?: string;
 }
 
@@ -39,11 +39,11 @@ export interface Exercise {
 	id: string;
 	name: string;
 	type: ExerciseType;
-	/** Finns bara när `type` är `weight`. */
+	/** Only present when `type` is `weight`. */
 	loadClass?: LoadClass;
 	instruction: string;
 	archived: boolean;
-	/** Nyaste post först. "Förra gången" är `log[0]`. */
+	/** Newest entry first. "Last time" is `log[0]`. */
 	log: LogEntry[];
 }
 
@@ -76,7 +76,7 @@ export interface SessionRecord {
 	id: string;
 	workoutSlug: string;
 	workoutVersion: number;
-	/** ISO 8601 med tidszon */
+	/** ISO 8601 with time zone */
 	startedAt: string;
 	endedAt: string;
 	exerciseIds: string[];
@@ -91,34 +91,34 @@ export interface KcalRange {
 }
 
 export interface Profile {
-	/** Fritext om mål. */
+	/** Free-text goals. */
 	goals?: string;
-	/** Antal pass per vecka, för veckovyn. */
+	/** Sessions per week, for the week view. */
 	weeklySessionGoal?: number;
-	/** Träningsregler som coachen ska känna till. */
+	/** Training rules the coach should know about. */
 	rules?: string[];
-	/** kcal-uppskattning per pass, nyckel = workout-slug. Går före kcalEstimates. */
+	/** kcal estimate per workout, keyed by workout slug. Takes precedence over kcalEstimates. */
 	kcalPerWorkout?: Record<string, number>;
-	/** kcal-uppskattning per passtyp (standard: styrka ca 250–350, HIIT ca 300–450). */
+	/** kcal estimate per workout type (default: strength ~250–350, HIIT ~300–450). */
 	kcalEstimates?: Partial<Record<KcalWorkoutType, KcalRange>>;
-	/** Övrig kontext till coachen. */
+	/** Other context for the coach. */
 	coachContext?: string;
 }
 
 /**
- * Ett set i det pågående passet. För tidsövningar kan en timer gå: den
- * lagrar sluttidpunkten (inte ett intervall), så den stämmer även om skärmen
- * låses eller fliken byts.
+ * A set in the active session. Timed exercises can run a timer: it stores
+ * the end time (not an interval), so it stays correct if the screen locks
+ * or the tab changes.
  */
 export type ActiveSet = ExerciseSet & {
 	done: boolean;
-	/** ISO-tid när nedräkningen når noll. Finns bara medan timern går. */
+	/** ISO time when the countdown reaches zero. Only present while the timer runs. */
 	timerEndsAt?: string;
-	/** Nedräkningens längd i sekunder, för att räkna ut tiden vid tidig stopp. */
+	/** Countdown length in seconds, to compute the time on an early stop. */
 	timerDuration?: number;
 };
 
-/** Pågående pass i localStorage under nyckeln `milonpt.activeSession`. */
+/** Active session in localStorage under the key `milonpt.activeSession`. */
 export interface ActiveSession {
 	sessionId: string;
 	workoutSlug: string;
@@ -132,5 +132,5 @@ export interface ActiveSession {
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
 
 export const LOAD_STEP_KG: Record<LoadClass, number> = { light: 1.25, heavy: 5 };
-/** Steg för tidsövningar (±5 s). */
+/** Step for timed exercises (±5 s). */
 export const TIME_STEP_SECONDS = 5;
