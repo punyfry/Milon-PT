@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { daysAgo, timeAgo } from '$lib/format';
+	import Sheet from '$lib/components/Sheet.svelte';
+	import { daysAgo, formatSeconds } from '$lib/format';
 	import type { ActiveSession } from '$lib/model';
 	import { clearActiveSession, loadActiveSession } from '$lib/session/storage';
 	import type { PageProps } from './$types';
@@ -10,136 +12,229 @@
 
 	let active = $state<ActiveSession | null>(null);
 	let now = $state(new Date());
+	/** The workout waiting for a decision when another one is already in progress. */
+	let pendingStart = $state<string | null>(null);
 
 	onMount(() => {
 		active = loadActiveSession();
-		const t = setInterval(() => (now = new Date()), 30_000);
+		const t = setInterval(() => (now = new Date()), 1000);
 		return () => clearInterval(t);
 	});
 
 	const activeName = $derived(
 		active ? (data.cards.find((c) => c.slug === active!.workoutSlug)?.name ?? active.workoutSlug) : ''
 	);
+	const dateLabel = $derived(
+		new Date(`${data.today}T12:00:00Z`).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+	);
+	const greeting = $derived(page.data.firstName ? `Hej ${page.data.firstName}` : 'Hej');
+	const goal = $derived(data.week.goal);
 
 	function continueHref(a: ActiveSession) {
 		return `/pass/${a.workoutSlug}?v=${a.workoutVersion}`;
 	}
 
-	function abort() {
-		if (!confirm('Avbryta passet? Inget av det loggas.')) return;
-		clearActiveSession();
-		active = null;
-	}
-
-	/** The cards are plain links; if a session is in progress we ask first. */
+	/** The cards are plain links; if another workout is in progress we ask first. */
 	function start(e: MouseEvent, slug: string) {
 		if (!active) return;
 		e.preventDefault();
 		if (active.workoutSlug === slug) return void goto(continueHref(active));
-		if (!confirm(`Du har ett pågående pass (${activeName}). Avbryta det och starta ett nytt?`)) return;
+		pendingStart = slug;
+	}
+
+	function discardAndStart() {
+		const slug = pendingStart;
 		clearActiveSession();
 		active = null;
-		void goto(`/pass/${slug}`);
+		pendingStart = null;
+		if (slug) void goto(`/pass/${slug}`);
+	}
+
+	function preview(names: string[]) {
+		return names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ');
 	}
 </script>
 
 <svelte:head><title>Milon-PT</title></svelte:head>
 
 <main>
+	<header class="greet">
+		<span class="label date">{dateLabel}</span>
+		<h1>{greeting}</h1>
+	</header>
+
+	<div class="weekline">
+		{#if goal}
+			<span class="weekbar" aria-hidden="true">
+				{#each Array.from({ length: goal }, (_, i) => i) as i (i)}<i class:on={i < data.week.sessions}></i>{/each}
+			</span>
+			<span>Vecka {data.week.number} · {data.week.sessions} av {goal} pass</span>
+		{:else}
+			<span>Vecka {data.week.number} · {data.week.sessions} pass</span>
+		{/if}
+	</div>
+
 	{#if active}
-		<section class="continue">
-			<a class="card primary" href={continueHref(active)}>
-				<span class="eyebrow">Fortsätt pågående pass</span>
-				<strong>{activeName}</strong>
-				<span class="meta">Senaste aktivitet {timeAgo(active.lastActivityAt, now)}</span>
-			</a>
-			<button class="link danger" onclick={abort}>Avbryt pass</button>
-		</section>
+		<a class="continue" href={continueHref(active)}>
+			<span class="eyebrow">Pågående pass</span>
+			<strong>{activeName}</strong>
+			<span class="meta">
+				Övning {(active.current ?? 0) + 1} av {active.exercises.length} ·
+				<span class="num">{formatSeconds((now.getTime() - Date.parse(active.startedAt)) / 1000)}</span>
+			</span>
+		</a>
 	{/if}
 
 	{#if data.cards.length === 0}
-		<p class="empty">Inga pass än. Skapa ett pass eller importera dina pass från Craft.</p>
+		<section class="empty">
+			<h2>Inga pass än</h2>
+			<p class="muted">Bygg ditt första pass tillsammans med Milon, eller importera dina pass från Craft.</p>
+			<a class="btn primary full" href="/skapa">Skapa pass</a>
+			<a class="btn full" href="/konto#import">Importera från Craft</a>
+		</section>
 	{:else}
+		<div class="section-title">Dina pass</div>
 		<ul class="cards">
 			{#each data.cards as card (card.slug)}
+				{@const running = active?.workoutSlug === card.slug}
 				<li>
-					<a class="card" href={`/pass/${card.slug}`} onclick={(e) => start(e, card.slug)}>
-						<strong>{card.name}</strong>
-						<span class="meta">
-							{card.exerciseCount} övningar
-							{#if card.lastTrainedAt}· Senast: {daysAgo(card.lastTrainedAt, now)}{/if}
+					<a class="card" href={running && active ? continueHref(active) : `/pass/${card.slug}`} onclick={(e) => start(e, card.slug)}>
+						<span class="top">
+							<strong>{card.name}</strong>
+							{#if !running && card.lastTrainedAt}<span class="when">{daysAgo(card.lastTrainedAt, now)}</span>{/if}
 						</span>
+						{#if running}<span class="running">Pågår · tryck för att fortsätta</span>{/if}
+						<span class="exs">{preview(card.exerciseNames)}</span>
 					</a>
 				</li>
 			{/each}
 		</ul>
 	{/if}
-
-	<nav class="secondary">
-		<a href="/historik">Historik</a>
-		<a href="/skapa">Skapa pass</a>
-		<a href="/konto">Konto</a>
-	</nav>
 </main>
 
+{#if pendingStart}
+	<Sheet title="Ett annat pass pågår" onclose={() => (pendingStart = null)}>
+		<h2 class="sheet-title">Ett annat pass pågår</h2>
+		<p class="muted">{activeName} är inte avslutat. Startar du ett nytt pass slängs det utan att något loggas.</p>
+		<button class="btn primary full" onclick={() => active && goto(continueHref(active))}>Fortsätt {activeName}</button>
+		<button class="btn full" onclick={discardAndStart}>Släng och starta nytt</button>
+		<button class="btn ghost full" onclick={() => (pendingStart = null)}>Avbryt</button>
+	</Sheet>
+{/if}
+
 <style>
-	.continue {
+	.greet {
+		padding-top: 16px;
 		display: grid;
-		gap: 0.5rem;
-		margin-bottom: 1.5rem;
+		gap: 4px;
+	}
+	.date::first-letter {
+		text-transform: uppercase;
+	}
+	.greet h1 {
+		font-size: 40px;
+		font-weight: 600;
+		line-height: 1.05;
+		letter-spacing: 0.01em;
+		color: var(--heading);
+	}
+	.weekline {
+		margin-top: 18px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		font-size: 14px;
+		color: var(--soft);
+	}
+	.weekbar {
+		display: flex;
+		gap: 4px;
+	}
+	.weekbar i {
+		width: 22px;
+		height: 4px;
+		border-radius: 2px;
+		background: var(--seg);
+	}
+	.weekbar i.on {
+		background: var(--accent);
+	}
+	.continue {
+		margin-top: 24px;
+		display: grid;
+		gap: 2px;
+		border-radius: var(--radius);
+		background: var(--accent);
+		color: var(--on-accent);
+		padding: 16px 18px;
+		text-decoration: none;
+	}
+	.continue .eyebrow,
+	.continue .meta {
+		font-size: 14px;
+		opacity: 0.85;
+	}
+	.continue strong {
+		font-size: 22px;
+		font-weight: 600;
+	}
+	.continue .num {
+		font-size: 13px;
 	}
 	.cards {
 		list-style: none;
-		padding: 0;
 		margin: 0;
+		padding: 0;
 		display: grid;
-		gap: 0.75rem;
+		gap: 10px;
 	}
 	.card {
 		display: grid;
-		gap: 0.25rem;
-		width: 100%;
-		text-align: left;
-		padding: 1.1rem 1.2rem;
-		border-radius: var(--radius);
-		border: 1px solid var(--border);
+		gap: 4px;
+		border: 1px solid var(--line);
 		background: var(--surface);
+		border-radius: var(--radius);
+		padding: 16px 18px;
 		color: var(--text);
-		font: inherit;
 		text-decoration: none;
-		cursor: pointer;
+	}
+	.card:active {
+		background: var(--surface-2);
+	}
+	.card .top {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
 	}
 	.card strong {
-		font-size: 1.25rem;
+		font-size: 20px;
+		font-weight: 600;
 	}
-	.card.primary {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--on-accent);
-	}
-	.card.primary .meta {
-		color: inherit;
-		opacity: 0.85;
-	}
-	.eyebrow {
-		font-size: 0.8rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-	.meta {
+	.when {
+		font-size: 13px;
 		color: var(--muted);
-		font-size: 0.9rem;
+		white-space: nowrap;
+	}
+	.exs {
+		font-size: 14px;
+		color: var(--soft);
+	}
+	.running {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--accent);
 	}
 	.empty {
-		color: var(--muted);
+		margin-top: 28px;
+		display: grid;
+		gap: 10px;
 	}
-	.secondary {
-		display: flex;
-		gap: 1.25rem;
-		margin-top: 2rem;
-		justify-content: center;
+	.empty h2 {
+		font-size: 20px;
+		font-weight: 600;
 	}
-	.secondary a {
-		color: var(--muted);
+	.empty p {
+		margin: 0 0 8px;
 	}
 </style>

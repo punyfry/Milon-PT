@@ -65,6 +65,6 @@
 		font-size: 0.9em;
 		padding: 0.05em 0.3em;
 		border-radius: 4px;
-		background: var(--border);
+		background: var(--line);
 	}
 </style>

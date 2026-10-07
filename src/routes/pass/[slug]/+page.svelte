@@ -1,25 +1,28 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
-	import { formatMetric, formatNumber, formatSeconds, timeAgo } from '$lib/format';
+	import Sheet from '$lib/components/Sheet.svelte';
+	import { formatNumber, formatSeconds } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import type { ActiveSession } from '$lib/model';
+	import type { ActiveSession, ActiveSet, ExerciseType } from '$lib/model';
 	import {
 		addSet,
-		adjust,
 		applySwap,
 		anyTimerRunning,
+		cancelTimer,
+		remainingMs,
 		completeExpiredTimers,
 		createActiveSession,
+		isTimerRunning,
 		localIsoString,
 		removeSet,
 		setField,
 		startTimer,
 		stopTimer,
-		summarize,
 		touch,
 		type ExerciseInfo,
 		type SetField
@@ -32,16 +35,25 @@
 
 	let { data }: PageProps = $props();
 
-	/** Exercises swapped in during the session that weren't in the page data. */
+	/** Exercises swapped in during the workout that were not in the page data. */
 	let swappedIn = $state<ExerciseInfo[]>([]);
 	const infos = $derived(new Map<string, ExerciseInfo>([...data.exercises, ...swappedIn].map((e) => [e.id, e])));
 
 	let session = $state<ActiveSession | null>(null);
-	/** Another session is already in progress; shown instead of overwriting it. */
+	/** Another workout is already in progress; shown instead of overwriting it. */
 	let other = $state<ActiveSession | null>(null);
 	let mode = $state<'active' | 'finish'>('active');
 	let now = $state(new Date());
 	let storageWarning = $state(false);
+	/** Active set per exercise (by index in the workout). Missing = first set not done. */
+	let focus = $state<Record<number, number>>({});
+	let showInstruction = $state<Record<string, boolean>>({});
+	let slide = $state<'' | 'in-left' | 'in-right'>('');
+
+	type SheetState = { kind: 'timer'; then: () => void } | { kind: 'close' } | { kind: 'discard' } | { kind: 'help'; exerciseId: string };
+	let sheet = $state<SheetState | null>(null);
+	let undo = $state<{ text: string; run: () => void } | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Finish view
 	let kcal = $state(0);
@@ -57,7 +69,7 @@
 			return;
 		}
 		if (stored) {
-			// The right version and all swapped-in exercises must be loaded.
+			// The right version and every swapped-in exercise must be loaded.
 			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id));
 			if (stored.workoutVersion !== data.workout.version || missing.length) {
 				const params = new URLSearchParams({ v: String(stored.workoutVersion) });
@@ -65,7 +77,7 @@
 				const target = `/pass/${stored.workoutSlug}?${params}`;
 				if (target !== page.url.pathname + page.url.search) {
 					// Full reload: client-side navigation to the same route reuses the
-					// component, and then this initialization doesn't run again.
+					// component, and this initialisation would not run again.
 					location.replace(target);
 					return;
 				}
@@ -84,39 +96,243 @@
 		storageWarning = !saveActiveSession($state.snapshot(session));
 	}
 
-	/** Applies a change and saves to localStorage right away. */
+	/** Runs a change and saves to localStorage right away. */
 	function change(fn: (s: ActiveSession) => void) {
 		if (!session) return;
 		fn(session);
 		persist();
 	}
 
-	// Timer: count down, fill in the time at zero and keep the screen on.
+	function buzz(pattern: number | number[] = 12) {
+		try {
+			navigator.vibrate?.(pattern);
+		} catch {
+			// No vibration support, nothing to do.
+		}
+	}
+
+	// --- moving between exercises -----------------------------------------
+
+	const cur = $derived(session ? Math.max(0, Math.min(session.current ?? 0, session.exercises.length - 1)) : 0);
+	const ex = $derived(session?.exercises[cur]);
+	const info = $derived(ex ? infos.get(ex.exerciseId) : undefined);
+	const isLast = $derived(session ? cur === session.exercises.length - 1 : false);
+
+	const allDone = (sets: ActiveSet[]) => sets.length > 0 && sets.every((s) => s.done);
+	const firstOpen = (sets: ActiveSet[]) => {
+		const i = sets.findIndex((s) => !s.done);
+		return i === -1 ? sets.length - 1 : i;
+	};
+	const focusOf = (i: number) => {
+		const sets = session?.exercises[i]?.sets ?? [];
+		const f = focus[i];
+		return f !== undefined && f < sets.length ? f : firstOpen(sets);
+	};
+
+	/**
+	 * If a timer is running, ask first what to do with the time. A focused
+	 * field is blurred first so a typed weight is committed (its change event)
+	 * before a swipe or navigation re-renders the set list.
+	 */
+	function guard(fn: () => void) {
+		(document.activeElement as HTMLElement | null)?.blur?.();
+		if (session && anyTimerRunning(session)) sheet = { kind: 'timer', then: fn };
+		else fn();
+	}
+
+	function goTo(i: number) {
+		guard(async () => {
+			if (!session || i < 0 || i >= session.exercises.length) return;
+			slide = i > cur ? 'in-right' : i < cur ? 'in-left' : '';
+			change((s) => (s.current = i));
+			mode = 'active';
+			await tick();
+			scrollTo({ top: 0 });
+		});
+	}
+
+	function openFinish() {
+		guard(() => {
+			saveError = null;
+			mode = 'finish';
+			scrollTo({ top: 0 });
+		});
+	}
+
+	// A sideways swipe changes exercise. touch-action: pan-y on the area keeps
+	// Chrome on Android from taking over horizontal movement.
+	let sx: number | null = null;
+	let sy = 0;
+	let swiped = false;
+	function swipeStart(e: TouchEvent) {
+		const t = e.changedTouches[0];
+		if ((e.target as Element).closest('input, textarea')) return;
+		sx = t.clientX;
+		sy = t.clientY;
+	}
+	function swipeEnd(e: TouchEvent) {
+		if (sx === null) return;
+		const t = e.changedTouches[0];
+		const dx = t.clientX - sx;
+		const dy = t.clientY - sy;
+		sx = null;
+		if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+			swiped = true;
+			setTimeout(() => (swiped = false), 350);
+			goTo(cur + (dx < 0 ? 1 : -1));
+		}
+	}
+	/** A swipe that ends on a button must not also count as a tap. */
+	function eatClickAfterSwipe(e: MouseEvent) {
+		if (!swiped) return;
+		e.stopPropagation();
+		e.preventDefault();
+	}
+
+	// --- timer -------------------------------------------------------------
+
 	const timerRunning = $derived(session ? anyTimerRunning(session) : false);
 	onMount(() => {
 		const wakeLock = createWakeLock();
-		const tick = setInterval(() => {
+		const ticker = setInterval(() => {
 			now = new Date();
 			if (session && anyTimerRunning(session) && completeExpiredTimers(session, now)) {
 				beep();
+				buzz([30, 80, 30]);
+				focus[cur] = firstOpen(session.exercises[cur].sets);
 				persist();
+				// The timer ran out while the user was deciding: the question is moot, carry on.
+				if (sheet?.kind === 'timer') {
+					const then = sheet.then;
+					sheet = null;
+					then();
+				}
 			}
 		}, 250);
 		const stopWatching = $effect.root(() => {
 			$effect(() => wakeLock.set(timerRunning));
 		});
 		return () => {
-			clearInterval(tick);
+			clearInterval(ticker);
 			stopWatching();
 			wakeLock.destroy();
 		};
 	});
 
-	// --- helper -------------------------------------------------------------
+	function runningSet(): { set: ActiveSet; exIndex: number; setIndex: number } | null {
+		if (!session) return null;
+		for (const [exIndex, e] of session.exercises.entries())
+			for (const [setIndex, set] of e.sets.entries()) if (isTimerRunning(set)) return { set, exIndex, setIndex };
+		return null;
+	}
+	const running = $derived(timerRunning ? runningSet() : null);
+	const runningLeft = $derived(running?.set.timerEndsAt ? Math.max(0, Math.ceil((Date.parse(running.set.timerEndsAt) - now.getTime()) / 1000)) : 0);
+	// Same rounding as stopTimer, so the sheet shows the time that will be saved.
+	const runningGone = $derived(
+		running?.set.timerEndsAt && 'seconds' in running.set
+			? Math.max(0, Math.round((running.set.timerDuration ?? running.set.seconds) - remainingMs(running.set, now) / 1000))
+			: 0
+	);
+
+	function resolveTimer(keep: boolean) {
+		const r = runningSet();
+		if (!r || sheet?.kind !== 'timer') return;
+		const then = sheet.then;
+		change(() => (keep ? stopTimer(r.set, new Date()) : cancelTimer(r.set)));
+		if (keep) focus[r.exIndex] = firstOpen(session!.exercises[r.exIndex].sets);
+		sheet = null;
+		then();
+	}
+
+	// --- set ---------------------------------------------------------------
+
+	function check(setIndex: number) {
+		const set = ex!.sets[setIndex];
+		if (isTimerRunning(set)) return guard(() => {});
+		change(() => (set.done = !set.done));
+		if (set.done) {
+			buzz();
+			focus[cur] = firstOpen(ex!.sets);
+			if (allDone(ex!.sets)) buzz([12, 60, 12]);
+		}
+	}
+
+	function step(setIndex: number, field: SetField, delta: number) {
+		const set = ex!.sets[setIndex] as unknown as Partial<Record<SetField, number>>;
+		const value = set[field];
+		if (value === undefined) return;
+		change((s) => setField(s.exercises[cur].sets[setIndex], field, Math.max(field === 'seconds' ? 5 : 0, value + delta)));
+	}
+
+	function remove(setIndex: number) {
+		const exIndex = cur;
+		const removed = $state.snapshot(ex!.sets[setIndex]);
+		change((s) => removeSet(s.exercises[exIndex].sets, setIndex));
+		focus[exIndex] = Math.min(focusOf(exIndex), Math.max(0, session!.exercises[exIndex].sets.length - 1));
+		showUndo('Set borttaget', () => change((s) => s.exercises[exIndex].sets.splice(setIndex, 0, removed)));
+	}
+
+	function showUndo(text: string, run: () => void) {
+		clearTimeout(undoTimer);
+		undo = { text, run };
+		undoTimer = setTimeout(() => (undo = null), 4000);
+	}
+
+	function add() {
+		change((s) => addSet(s.exercises[cur].sets, info!.type));
+		focus[cur] = ex!.sets.length - 1;
+	}
+
+	/** New record for a done set: best set (1RM, reps, time) or heaviest weight. */
+	function isRecord(i: ExerciseInfo | undefined, set: ActiveSet): boolean {
+		if (!i || !set.done) return false;
+		const best = bestSet(i.type, [set]);
+		if (i.best !== undefined && best && best.value > i.best) return true;
+		const heaviest = heaviestWeight(i.type, [set]);
+		return i.heaviest !== undefined && heaviest !== null && heaviest > i.heaviest;
+	}
+
+	function previous(i: ExerciseInfo | undefined, setIndex: number): string {
+		const sets = i?.lastEntry?.sets;
+		const s = sets?.[setIndex];
+		if (!s) return '–';
+		if ('weight' in s) return `${formatNumber(s.weight)}×${s.reps}`;
+		if ('seconds' in s) return formatSeconds(s.seconds);
+		return String(s.reps);
+	}
+
+	function setText(type: ExerciseType, s: ActiveSet): string {
+		if ('weight' in s) return `${formatNumber(s.weight)}×${s.reps}`;
+		if ('seconds' in s) return formatSeconds(s.seconds);
+		return type === 'bodyweight' ? `${s.reps}` : '?';
+	}
+
+	/** The template target for the original exercise in this position. */
+	function templateTarget(exerciseId: string) {
+		const original = session?.deviations.find((d) => d.to === exerciseId)?.from ?? exerciseId;
+		return data.workout.exercises.find((e) => e.exerciseId === original)?.target;
+	}
+
+	const isSwappedIn = (exerciseId: string) => session?.deviations.some((d) => d.to === exerciseId) ?? false;
+
+	function targetText(exerciseId: string, sets: number) {
+		const t = templateTarget(exerciseId);
+		if (!t) return null;
+		return 'seconds' in t ? `${sets} × ${t.seconds} s` : `${sets} × ${t.reps}`;
+	}
+
+	function lastText(i: ExerciseInfo | undefined) {
+		const s = i?.lastEntry?.sets[0];
+		if (!s) return null;
+		if ('weight' in s) return `${formatNumber(s.weight)} kg × ${s.reps}`;
+		if ('seconds' in s) return formatSeconds(s.seconds);
+		return `${s.reps} reps`;
+	}
+
+	// --- helper --------------------------------------------------------------
 
 	interface HelpState {
-		open: boolean;
-		/** Questions and answers sent along as history (always pairs). */
+		/** Questions and answers sent as history (always in pairs). */
 		turns: { role: 'user' | 'assistant'; text: string }[];
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
 		busy: boolean;
@@ -124,17 +340,9 @@
 	}
 	let help = $state<Record<string, HelpState>>({});
 
-	function toggleHelp(exerciseId: string) {
-		const current = help[exerciseId];
-		help[exerciseId] = current
-			? { ...current, open: !current.open }
-			: { open: true, turns: [], log: [], busy: false, error: null };
-	}
-
-	/** The template target for the original exercise in this slot. */
-	function templateTarget(exerciseId: string) {
-		const original = session?.deviations.find((d) => d.to === exerciseId)?.from ?? exerciseId;
-		return data.workout.exercises.find((e) => e.exerciseId === original)?.target;
+	function openHelp(exerciseId: string) {
+		help[exerciseId] ??= { turns: [], log: [], busy: false, error: null };
+		sheet = { kind: 'help', exerciseId };
 	}
 
 	async function ask(exerciseId: string, question: string) {
@@ -164,9 +372,12 @@
 				swappedIn.push(to);
 				change((s) => applySwap(s, from, to, target));
 				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
-				// The helper thread follows along to the new exercise.
+				// The help follows the new exercise, which is also shown.
 				help[to.id] = state;
 				delete help[from];
+				const index = session.exercises.findIndex((e) => e.exerciseId === to.id);
+				if (index >= 0) change((s) => (s.current = index));
+				sheet = { kind: 'help', exerciseId: to.id };
 			}
 		} catch (e) {
 			state.error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
@@ -175,44 +386,14 @@
 		}
 	}
 
-	function onAdjust(exIndex: number, setIndex: number, field: SetField, dir: 1 | -1) {
-		const loadClass = infos.get(session!.exercises[exIndex].exerciseId)?.loadClass;
-		change((s) => adjust(s.exercises[exIndex].sets[setIndex], field, dir, loadClass));
-	}
+	// --- finish -----------------------------------------------------------
 
-	function startFinish() {
-		change((s) => {
-			for (const ex of s.exercises) for (const set of ex.sets) stopTimer(set, new Date());
-		});
-		saveError = null;
-		mode = 'finish';
-		scrollTo(0, 0);
-	}
-
-	const summary = $derived(session && mode === 'finish' ? summarize(session, infos) : null);
-
-	/**
-	 * Exercises where today's best set or heaviest weight beats everything before
-	 * (the first time doesn't count), as text, e.g. "1RM 55 kg, tyngsta vikt 50 kg".
-	 */
-	const records = $derived.by(() => {
-		const found = new Map<string, string>();
-		if (!session || mode !== 'finish') return found;
-		for (const ex of session.exercises) {
-			const info = infos.get(ex.exerciseId);
-			if (!info) continue;
-			const done = ex.sets.filter((s) => s.done);
-			const parts: string[] = [];
-			const today = bestSet(info.type, done);
-			if (info.best !== undefined && today && today.value > info.best)
-				parts.push(info.type === 'weight' ? `1RM ${formatMetric('weight', today.value)}` : formatMetric(info.type, today.value));
-			const heaviest = heaviestWeight(info.type, done);
-			if (info.heaviest !== undefined && heaviest !== null && heaviest > info.heaviest)
-				parts.push(`tyngsta vikt ${formatMetric('weight', heaviest)}`);
-			if (parts.length) found.set(ex.exerciseId, parts.join(', '));
-		}
-		return found;
-	});
+	const doneSets = $derived(session ? session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0) : 0);
+	const totalSets = $derived(session ? session.exercises.reduce((n, e) => n + e.sets.length, 0) : 0);
+	const recordCount = $derived(
+		session ? session.exercises.filter((e) => e.sets.some((s) => isRecord(infos.get(e.exerciseId), s))).length : 0
+	);
+	const elapsed = $derived(session ? formatSeconds((now.getTime() - Date.parse(session.startedAt)) / 1000) : '');
 
 	async function save() {
 		if (!session) return;
@@ -233,7 +414,7 @@
 					body: JSON.stringify(body)
 				});
 			} catch (e) {
-				// Offline: queue the session, it is sent when the network is back.
+				// No network: queue the workout; it is sent when the network is back.
 				const userId = page.data.userId as string | null;
 				const key = pendingKey(session.sessionId, session.startedAt);
 				if (isNetworkError(e) && userId && queueSave({ key, userId, workoutName: data.workout.name, body })) {
@@ -247,310 +428,584 @@
 				const body = await res.json().catch(() => null);
 				throw new Error(body?.message ?? `Servern svarade ${res.status}`);
 			}
-			// The local session is cleared only after the server has confirmed.
+			// The local workout is cleared only once the server has confirmed.
 			clearActiveSession();
 			await goto('/', { invalidateAll: true });
 		} catch (e) {
-			saveError = `${e instanceof Error ? e.message : 'Okänt fel'}. Passet ligger kvar lokalt, försök igen.`;
+			saveError = `${e instanceof Error ? e.message : 'Okänt fel'}. Passet ligger kvar i telefonen, försök igen.`;
 		} finally {
 			saving = false;
 		}
 	}
 
-	function abort() {
-		if (!confirm('Avbryta passet? Inget av det loggas.')) return;
+	function discard() {
 		clearActiveSession();
+		sheet = null;
 		void goto('/');
-	}
-
-	const unitFor = { weight: 'kg', bodyweight: 'reps', time: '' } as const;
-	function formatVolume(type: 'weight' | 'bodyweight' | 'time', v: number) {
-		return type === 'time' ? formatSeconds(v) : `${formatNumber(v)} ${unitFor[type]}`;
 	}
 </script>
 
 <svelte:head><title>{data.workout.name} · Milon-PT</title></svelte:head>
 
-<main>
-	{#if other}
-		<p><a href="/">← Tillbaka</a></p>
-		<h1>Ett annat pass pågår</h1>
-		<p>Du har redan ett pågående pass. Fortsätt det eller avbryt det från startsidan.</p>
-		<p><a href={`/pass/${other.workoutSlug}?v=${other.workoutVersion}`}>Fortsätt pågående pass</a></p>
-	{:else if session && mode === 'active'}
-		<header>
-			<a href="/" class="back">← Start</a>
-			<h1>{data.workout.name}</h1>
-			<span class="meta">Startade {timeAgo(session.startedAt, now)}</span>
-		</header>
+{#if other}
+	<main>
+		<div class="pagehead">
+			<span class="label">{data.workout.name}</span>
+			<h1>Ett annat pass pågår</h1>
+		</div>
+		<p class="muted">Avsluta eller släng det pågående passet innan du startar ett nytt.</p>
+		<a class="btn primary full" href={`/pass/${other.workoutSlug}?v=${other.workoutVersion}`} data-sveltekit-reload>Fortsätt pågående pass</a>
+		<a class="btn ghost full" href="/">Till start</a>
+	</main>
+{:else if session && ex && mode === 'active'}
+	<header class="topbar">
+		<button class="icon-btn" onclick={() => guard(() => (sheet = { kind: 'close' }))} aria-label="Stäng passet"><Icon name="x" /></button>
+		<div class="mid">
+			<span>{data.workout.name}</span>
+			<span class="num">{elapsed}</span>
+		</div>
+		<button class="end" onclick={openFinish}>Avsluta</button>
+	</header>
 
-		{#if storageWarning}
-			<p class="warning">Kunde inte spara lokalt i webbläsaren. Stäng inte sidan innan passet är sparat.</p>
-		{/if}
+	<div class="progress" role="group" aria-label="Övningar">
+		{#each session.exercises as e, i (e.exerciseId + i)}
+			<button
+				class:current={i === cur}
+				class:done={i !== cur && allDone(e.sets)}
+				onclick={() => goTo(i)}
+				aria-label="Övning {i + 1}: {infos.get(e.exerciseId)?.name ?? e.exerciseId}{allDone(e.sets) ? ', klar' : ''}{i === cur ? ', visas nu' : ''}"
+			><i></i></button>
+		{/each}
+	</div>
 
-		{#each session.exercises as ex, exIndex (ex.exerciseId + exIndex)}
-			{@const info = infos.get(ex.exerciseId)}
-			{@const helpState = help[ex.exerciseId]}
-			<section class="exercise">
-				<div class="exercise-head">
-					<h2>{info?.name ?? ex.exerciseId}</h2>
-					{#if data.helperAvailable && info}
-						<button class="help" aria-expanded={helpState?.open ?? false} onclick={() => toggleHelp(ex.exerciseId)}>Hjälp</button>
+	{#key cur}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<section class="exercise {slide}" ontouchstart={swipeStart} ontouchend={swipeEnd} ontouchcancel={() => (sx = null)} onclickcapture={eatClickAfterSwipe}>
+			{#if storageWarning}
+				<p class="error warning">Kunde inte spara i telefonen. Stäng inte sidan innan passet är sparat.</p>
+			{/if}
+			<div class="overline">
+				Övning {cur + 1} av {session.exercises.length}
+				{#if isSwappedIn(ex.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
+			</div>
+			<h1 class="exname">{info?.name ?? ex.exerciseId}</h1>
+			{#if info}
+				{@const target = targetText(ex.exerciseId, ex.sets.length)}
+				{@const last = lastText(info)}
+				<p class="subline">
+					{#if target}Mål <span class="num">{target}</span>{/if}{#if target && last}&nbsp;·&nbsp;{/if}{#if last}förra <span class="num">{last}</span>{/if}
+				</p>
+				<div class="actions">
+					{#if info.instruction}
+						<button class="btn small" aria-expanded={!!showInstruction[ex.exerciseId]} onclick={() => (showInstruction[ex.exerciseId] = !showInstruction[ex.exerciseId])}>
+							Instruktion <Icon name={showInstruction[ex.exerciseId] ? 'up' : 'down'} />
+						</button>
+					{/if}
+					{#if data.helperAvailable}
+						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
 					{/if}
 				</div>
-				{#if helpState?.open && info}
-					<HelpPanel
-						name={info.name}
-						log={helpState.log}
-						busy={helpState.busy}
-						error={helpState.error}
-						onask={(q) => ask(ex.exerciseId, q)}
-						onclose={() => (helpState.open = false)}
-					/>
+				{#if showInstruction[ex.exerciseId]}<p class="instruction">{info.instruction}</p>{/if}
+				{#if info.lastEntry?.note}
+					<p class="lastnote"><span>Förra gången:</span> {info.lastEntry.note}</p>
 				{/if}
-				{#if info?.lastEntry?.note}
-					<p class="last-note"><span>Förra gången:</span> {info.lastEntry.note}</p>
-				{/if}
-				{#if info?.instruction}
-					<details>
-						<summary>Instruktion</summary>
-						<p class="instruction">{info.instruction}</p>
-					</details>
-				{/if}
-				{#if info}
+
+				<div class="sets">
+					<div class="sethead" class:one={info.type !== 'weight'}>
+						<span>Set</span><span>Förra</span>
+						{#if info.type === 'weight'}<span>Kg</span><span>Reps</span>{:else}<span>{info.type === 'time' ? 'Tid' : 'Reps'}</span>{/if}
+						<span></span>
+					</div>
 					{#each ex.sets as set, setIndex (setIndex)}
 						<SetRow
 							{set}
 							type={info.type}
 							index={setIndex}
+							previous={previous(info, setIndex)}
+							active={setIndex === focusOf(cur)}
+							record={isRecord(info, set)}
 							{now}
-							onadjust={(field, dir) => onAdjust(exIndex, setIndex, field, dir)}
-							onset={(field, value) => change((s) => setField(s.exercises[exIndex].sets[setIndex], field, value))}
-							ontoggle={() => change((s) => (s.exercises[exIndex].sets[setIndex].done = !s.exercises[exIndex].sets[setIndex].done))}
-							onremove={() => change((s) => removeSet(s.exercises[exIndex].sets, setIndex))}
+							onfocus={() => guard(() => (focus[cur] = setIndex))}
+							oncheck={() => check(setIndex)}
+							onstep={(field, delta) => step(setIndex, field, delta)}
+							onset={(field, value) => change((s) => setField(s.exercises[cur].sets[setIndex], field, value))}
+							onremove={() => remove(setIndex)}
 							onstarttimer={() => {
 								unlockAudio();
-								change((s) => startTimer(s.exercises[exIndex].sets[setIndex], new Date()));
+								change((s) => startTimer(s.exercises[cur].sets[setIndex], new Date()));
 							}}
-							onstoptimer={() => change((s) => stopTimer(s.exercises[exIndex].sets[setIndex], new Date()))}
+							onstoptimer={() => {
+								change((s) => stopTimer(s.exercises[cur].sets[setIndex], new Date()));
+								focus[cur] = firstOpen(ex.sets);
+							}}
 						/>
 					{/each}
-					<button class="add" onclick={() => change((s) => addSet(s.exercises[exIndex].sets, info.type))}>+ Lägg till set</button>
-				{:else}
-					<p class="warning">Övningen {ex.exerciseId} finns inte längre.</p>
+				</div>
+				<button class="btn full add" onclick={add}><Icon name="plus" /> Lägg till set</button>
+				{@const upcoming = session.exercises.slice(cur + 1).map((e) => infos.get(e.exerciseId)?.name ?? e.exerciseId)}
+				{#if upcoming.length}
+					<p class="nextline">
+						<span class="label">Nästa</span>
+						<span>{upcoming.slice(0, 2).join(', ')}{upcoming.length > 2 ? ` +${upcoming.length - 2}` : ''}</span>
+					</p>
 				{/if}
-			</section>
-		{/each}
-
-		<div class="actions">
-			<button class="primary" onclick={startFinish}>Avsluta pass</button>
-			<button class="link danger" onclick={abort}>Avbryt pass</button>
-		</div>
-	{:else if session && summary}
-		<header>
-			<button class="link back" onclick={() => (mode = 'active')}>← Tillbaka till passet</button>
-			<h1>Avsluta {data.workout.name}</h1>
-		</header>
-
-		<section class="summary">
-			<h2>Sammanfattning</h2>
-			<ul>
-				{#each summary.exercises as ex (ex.exerciseId)}
-					<li class:skipped={ex.doneSets === 0}>
-						<span>
-							{ex.name}
-							{#if records.has(ex.exerciseId)}
-								<span class="record">★ Nytt rekord: {records.get(ex.exerciseId)}</span>
-							{/if}
-						</span>
-						<span class="meta">
-							{ex.doneSets}/{ex.totalSets} set
-							{#if ex.doneSets > 0}· {formatVolume(ex.type, ex.volume)}{/if}
-						</span>
-					</li>
-				{/each}
-			</ul>
-			<p class="totals">
-				Total volym:
-				{#each (['weight', 'bodyweight', 'time'] as const).filter((t) => summary.volumeByType[t] > 0) as t, i (t)}
-					{i > 0 ? ' · ' : ''}{formatVolume(t, summary.volumeByType[t])}
-				{:else}
-					–
-				{/each}
-			</p>
+			{:else}
+				<p class="error">Övningen {ex.exerciseId} finns inte längre. Hoppa till nästa övning.</p>
+			{/if}
 		</section>
+	{/key}
+
+	<div class="actionbar">
+		<button class="btn" onclick={() => goTo(cur - 1)} disabled={cur === 0} aria-label="Föregående övning"><Icon name="left" /></button>
+		{#if isLast}
+			<button class="btn" class:primary={allDone(ex.sets)} onclick={openFinish}>Sammanfattning <Icon name="right" /></button>
+		{:else}
+			{@const next = session.exercises[cur + 1]}
+			<button class="btn" class:primary={allDone(ex.sets)} onclick={() => goTo(cur + 1)}>
+				<span class="ellipsis">Nästa: {infos.get(next.exerciseId)?.name ?? next.exerciseId}</span>
+				<Icon name="right" />
+			</button>
+		{/if}
+	</div>
+{:else if session && mode === 'finish'}
+	<header class="topbar">
+		<button class="icon-btn" onclick={() => (mode = 'active')} aria-label="Tillbaka till passet"><Icon name="left" /></button>
+		<div class="mid">
+			<span>{data.workout.name}</span>
+			<span class="num">{elapsed}</span>
+		</div>
+		<span></span>
+	</header>
+	<main class="finish">
+		<div class="pagehead">
+			<span class="label">Sammanfattning</span>
+			<h1>{doneSets ? 'Snyggt jobbat' : 'Inget avbockat än'}</h1>
+		</div>
+		<div class="stats">
+			<div class="stat"><span class="num">{elapsed}</span><span class="label">Tid</span></div>
+			<div class="stat"><span class="num">{doneSets}<small>/{totalSets}</small></span><span class="label">Set klara</span></div>
+			<div class="stat"><span class="num">{recordCount}</span><span class="label">Rekord</span></div>
+		</div>
+
+		<ul class="sumlist">
+			{#each session.exercises as e, i (e.exerciseId + i)}
+				{@const ei = infos.get(e.exerciseId)}
+				{@const done = e.sets.filter((s) => s.done)}
+				<li>
+					<button class="sumrow" class:skipped={!done.length} onclick={() => goTo(i)} aria-label="{ei?.name ?? e.exerciseId}: ändra">
+						<span class="name">
+							{ei?.name ?? e.exerciseId}
+							{#if e.sets.some((s) => isRecord(ei, s))}<span class="tag">PR</span>{/if}
+							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
+						</span>
+						<span class="setsline num">{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : 'Inga set klara'}</span>
+						<span class="go"><Icon name="right" /></span>
+					</button>
+				</li>
+			{/each}
+		</ul>
 
 		{#if session.deviations.length}
-			<fieldset>
-				<legend>Spara ändringarna som ny version av passet?</legend>
-				<label><input type="radio" bind:group={saveAsNewVersion} value={true} /> Ja, skapa nästa version</label>
-				<label><input type="radio" bind:group={saveAsNewVersion} value={false} /> Nej, lämna passet som det är</label>
-			</fieldset>
+			<div class="question">
+				<p>Du bytte övning. Spara ändringen i {data.workout.name} till nästa gång?</p>
+				<div class="seg2">
+					<button class="btn" aria-pressed={saveAsNewVersion} onclick={() => (saveAsNewVersion = true)}>Ja, ny version</button>
+					<button class="btn" aria-pressed={!saveAsNewVersion} onclick={() => (saveAsNewVersion = false)}>Nej, bara idag</button>
+				</div>
+			</div>
 		{/if}
 
 		<label class="kcal">
-			Uppskattad förbränning
-			<span>
-				<input type="number" inputmode="numeric" min="0" step="10" bind:value={kcal} /> kcal
-			</span>
+			<span>Uppskattad förbränning</span>
+			<span><input class="num" type="number" inputmode="numeric" min="0" step="10" bind:value={kcal} /> <span class="muted">kcal</span></span>
 		</label>
 
-		{#if saveError}<p class="warning" role="alert">{saveError}</p>{/if}
-		{#if summary.doneSets === 0}
-			<p class="warning">Inga set är markerade som klara, så det finns inget att spara.</p>
-		{/if}
-
-		<div class="actions">
-			<button class="primary" onclick={save} disabled={saving || summary.doneSets === 0}>
-				{saving ? 'Sparar…' : 'Spara'}
-			</button>
+		{#if saveError}<p class="error" role="alert">{saveError}</p>{/if}
+		<div class="final">
+			<button class="btn primary full" onclick={save} disabled={saving || doneSets === 0}>{saving ? 'Sparar…' : 'Avsluta pass'}</button>
+			{#if doneSets === 0}<p class="muted center">Bocka av minst ett set för att kunna spara.</p>{/if}
+			<button class="btn ghost full" onclick={() => (sheet = { kind: 'discard' })}>Släng passet</button>
 		</div>
-	{/if}
-</main>
+	</main>
+{/if}
+
+{#if sheet?.kind === 'timer' && running}
+	{@const rex = session?.exercises[running.exIndex]}
+	<Sheet title="Timern går" onclose={() => (sheet = null)}>
+		<h2 class="sheet-title">Timern går</h2>
+		<p class="muted">
+			{infos.get(rex?.exerciseId ?? '')?.name}, set {running.setIndex + 1}: <span class="num">{formatSeconds(runningLeft)}</span> kvar. Vad vill du göra med tiden?
+		</p>
+		<button class="btn primary full" onclick={() => resolveTimer(true)}>Stoppa och spara <span class="num">{formatSeconds(runningGone)}</span></button>
+		<button class="btn full" onclick={() => resolveTimer(false)}>Släng tiden</button>
+		<button class="btn ghost full" onclick={() => (sheet = null)}>Fortsätt timern</button>
+	</Sheet>
+{:else if sheet?.kind === 'close'}
+	<Sheet title="Lämna passet?" onclose={() => (sheet = null)}>
+		<h2 class="sheet-title">Lämna passet?</h2>
+		<p class="muted">Pausa sparar allt i telefonen så att du kan fortsätta senare. Släng tar bort passet utan att logga något.</p>
+		<button class="btn primary full" onclick={() => goto('/')}>Pausa och gå till start</button>
+		<button class="btn full" onclick={() => (sheet = { kind: 'discard' })}>Släng passet</button>
+		<button class="btn ghost full" onclick={() => (sheet = null)}>Stanna kvar</button>
+	</Sheet>
+{:else if sheet?.kind === 'discard'}
+	<Sheet title="Släng passet?" onclose={() => (sheet = null)}>
+		<h2 class="sheet-title">Släng passet?</h2>
+		<p class="muted">Inget av passet loggas. Det går inte att ångra.</p>
+		<button class="btn primary full" onclick={discard}>Släng passet</button>
+		<button class="btn ghost full" onclick={() => (sheet = null)}>Avbryt</button>
+	</Sheet>
+{:else if sheet?.kind === 'help' && help[sheet.exerciseId]}
+	{@const id = sheet.exerciseId}
+	{@const state = help[id]}
+	<Sheet title="Fråga Milon" onclose={() => (sheet = null)}>
+		<HelpPanel
+			name={infos.get(id)?.name ?? id}
+			log={state.log}
+			busy={state.busy}
+			error={state.error}
+			canSwap={!isSwappedIn(id)}
+			onask={(q) => ask(id, q)}
+			onclose={() => (sheet = null)}
+		/>
+	</Sheet>
+{/if}
+
+{#if undo}
+	<div class="toast" role="status">
+		{undo.text}
+		<button
+			onclick={() => {
+				undo?.run();
+				undo = null;
+			}}>Ångra</button
+		>
+	</div>
+{/if}
 
 <style>
-	header {
-		margin-bottom: 1rem;
+	.topbar {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		height: calc(56px + env(safe-area-inset-top, 0px));
+		padding: env(safe-area-inset-top, 0px) 8px 0 6px;
+		display: grid;
+		grid-template-columns: 56px 1fr 56px;
+		align-items: center;
+		background: var(--bg);
+		max-width: 30rem;
+		margin: 0 auto;
 	}
-	header h1 {
-		margin: 0.25rem 0 0;
+	.mid {
+		display: grid;
+		text-align: center;
+		line-height: 1.2;
 	}
-	.back {
+	.mid span:first-child {
+		font-size: 13px;
+		font-weight: 500;
 		color: var(--muted);
-		text-decoration: none;
-		padding-left: 0;
 	}
-	.meta {
-		color: var(--muted);
-		font-size: 0.9rem;
+	.mid .num {
+		font-size: 15px;
+	}
+	.end {
+		background: none;
+		border: 0;
+		min-height: 44px;
+		border-radius: 14px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		justify-self: end;
+		padding: 0 6px;
+	}
+	.progress {
+		display: flex;
+		gap: 4px;
+		padding: 0 20px;
+		max-width: 30rem;
+		margin: 0 auto;
+	}
+	/* 4 px bars with a 44 px tap target; the negative margin keeps the visual spacing. */
+	.progress button {
+		flex: 1;
+		height: 44px;
+		margin: -10px 0;
+		padding: 20px 0;
+		border: 0;
+		background: none;
+		cursor: pointer;
+	}
+	.progress i {
+		display: block;
+		height: 4px;
+		border-radius: 2px;
+		background: var(--seg);
+	}
+	.progress .done i {
+		background: var(--accent);
+	}
+	.progress .current i {
+		background: var(--text);
 	}
 	.exercise {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 0.9rem 0.75rem;
-		margin-bottom: 1rem;
+		max-width: 30rem;
+		margin: 0 auto;
+		padding: 0 20px 24px;
+		touch-action: pan-y;
+		min-height: calc(100dvh - 160px);
 	}
-	.exercise-head {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 0.5rem;
-		margin: 0 0.25rem 0.25rem;
+	.in-left {
+		animation: inleft 220ms ease-out;
 	}
-	.exercise h2 {
-		font-size: 1.15rem;
-		margin: 0;
+	.in-right {
+		animation: inright 220ms ease-out;
 	}
-	.help {
-		padding: 0.35rem 0.8rem;
-		border-radius: 999px;
-		border: 1px solid var(--border);
-		background: var(--bg);
-		color: var(--text);
-		font-size: 0.9rem;
-		cursor: pointer;
+	@keyframes inleft {
+		from {
+			transform: translateX(-28px);
+			opacity: 0.2;
+		}
 	}
-	.last-note {
-		margin: 0 0.25rem 0.5rem;
-		font-size: 0.9rem;
-		white-space: pre-line;
+	@keyframes inright {
+		from {
+			transform: translateX(28px);
+			opacity: 0.2;
+		}
 	}
-	.last-note span {
-		color: var(--muted);
-	}
-	details {
-		margin: 0 0.25rem 0.5rem;
-		color: var(--muted);
-	}
-	summary {
-		cursor: pointer;
-		font-size: 0.9rem;
-	}
-	.instruction {
-		white-space: pre-line;
-		color: var(--text);
-		margin: 0.5rem 0;
-	}
-	.add {
-		margin: 0.5rem 0.25rem 0;
-		background: none;
-		border: 1px dashed var(--border);
-		border-radius: 10px;
-		padding: 0.5rem 0.9rem;
-		color: var(--muted);
-		cursor: pointer;
-	}
-	.actions {
-		display: grid;
-		gap: 0.75rem;
-		margin-top: 1.5rem;
-		justify-items: center;
-	}
-	.primary {
-		width: 100%;
-		padding: 1rem;
-		border-radius: var(--radius);
-		border: none;
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: 1.1rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.primary:disabled {
-		opacity: 0.5;
-		cursor: default;
+	@media (prefers-reduced-motion: reduce) {
+		.in-left,
+		.in-right {
+			animation: none;
+		}
 	}
 	.warning {
-		color: var(--danger);
+		margin: 12px 0 0;
+		font-size: 14px;
 	}
-	.summary ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-	.summary li {
+	.overline {
+		margin-top: 20px;
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--muted);
 		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.5rem 0;
-		border-bottom: 1px solid var(--border);
+		gap: 8px;
+		align-items: center;
 	}
-	.record {
-		display: block;
-		font-size: 0.85rem;
+	.exname {
+		margin-top: 6px;
+		font-size: clamp(34px, 11vw, 48px);
 		font-weight: 600;
+		line-height: 1.05;
+		letter-spacing: 0.01em;
+		color: var(--heading);
+		overflow-wrap: anywhere;
 	}
-	.summary li.skipped {
+	.subline {
+		margin: 8px 0 0;
+		font-size: 14px;
 		color: var(--muted);
 	}
-	.totals {
-		font-weight: 600;
+	.subline .num {
+		font-size: 13px;
 	}
-	fieldset {
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 0.75rem 1rem;
-		margin: 1rem 0;
+	.actions {
+		margin-top: 12px;
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.instruction {
+		margin: 12px 0 0;
+		padding: 12px 14px;
+		border-radius: 14px;
+		background: var(--surface);
+		font-size: 14px;
+		color: var(--soft);
+		white-space: pre-line;
+	}
+	.lastnote {
+		margin: 12px 0 0;
+		padding-left: 10px;
+		border-left: 2px solid var(--line);
+		font-size: 14px;
+		color: var(--soft);
+		white-space: pre-line;
+	}
+	.lastnote span {
+		color: var(--muted);
+	}
+	.sets {
+		margin-top: 24px;
+	}
+	.sethead {
 		display: grid;
-		gap: 0.5rem;
+		grid-template-columns: 28px 64px 1fr 1fr 44px;
+		gap: 8px;
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--muted);
+		padding-bottom: 8px;
+		border-bottom: 1px solid var(--line);
+	}
+	.sethead.one {
+		grid-template-columns: 28px 64px 1fr 44px;
+	}
+	.add {
+		margin-top: 14px;
+	}
+	.nextline {
+		margin: 12px 0 0;
+		padding: 14px 0;
+		border-top: 1px solid var(--line);
+		display: flex;
+		gap: 10px;
+		font-size: 14px;
+		color: var(--soft);
+	}
+	.actionbar {
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
+		display: grid;
+		grid-template-columns: 48px 1fr;
+		gap: 8px;
+		padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+		background: var(--bg);
+		border-top: 1px solid var(--line);
+		max-width: 30rem;
+		margin: 0 auto;
+	}
+	.actionbar .btn:first-child {
+		padding: 0;
+	}
+	.ellipsis {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.finish {
+		padding-top: 0;
+	}
+	.stats {
+		margin-top: 20px;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+	}
+	.stat {
+		background: var(--surface);
+		border-radius: 14px;
+		padding: 12px 14px;
+		display: grid;
+		gap: 2px;
+	}
+	.stat .num {
+		font-size: 24px;
+		font-weight: 500;
+		letter-spacing: -0.03em;
+	}
+	.stat small {
+		font-size: 14px;
+		color: var(--muted);
+	}
+	.stat .label {
+		font-size: 12px;
+	}
+	.sumlist {
+		list-style: none;
+		margin: 20px 0 0;
+		padding: 0;
+		border-top: 1px solid var(--line);
+	}
+	.sumrow {
+		width: 100%;
+		background: none;
+		border: 0;
+		border-bottom: 1px solid var(--line);
+		padding: 14px 0;
+		text-align: left;
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 4px 12px;
+		align-items: center;
+		cursor: pointer;
+	}
+	.sumrow .name {
+		font-size: 17px;
+		font-weight: 600;
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.setsline {
+		font-size: 13px;
+		color: var(--soft);
+	}
+	.skipped .name,
+	.skipped .setsline {
+		color: var(--dim);
+	}
+	.go {
+		grid-row: 1 / span 2;
+		grid-column: 2;
+		color: var(--muted);
+	}
+	.question {
+		margin-top: 24px;
+		display: grid;
+		gap: 10px;
+	}
+	.question p {
+		margin: 0;
+	}
+	.seg2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+	.seg2 [aria-pressed='true'] {
+		background: var(--text);
+		color: var(--bg);
 	}
 	.kcal {
+		margin-top: 20px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 1rem;
-		margin: 1rem 0;
+		gap: 12px;
 	}
 	.kcal input {
-		width: 5.5rem;
-		padding: 0.5rem;
-		font: inherit;
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		background: var(--surface);
-		color: var(--text);
+		width: 96px;
+		min-height: 48px;
+		border-radius: 14px;
+		border: 0;
+		background: var(--surface-2);
 		text-align: right;
+		padding: 0 14px;
+		font-size: 18px;
+	}
+	.final {
+		margin-top: 24px;
+		display: grid;
+		gap: 4px;
+	}
+	.center {
+		text-align: center;
+		font-size: 13px;
+		margin: 4px 0;
+	}
+	.sheet-title {
+		font-size: 20px;
+		font-weight: 600;
+	}
+	main p {
+		margin: 12px 0;
+	}
+	main > .btn {
+		margin-top: 8px;
 	}
 </style>

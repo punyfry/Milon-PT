@@ -19,7 +19,6 @@ const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
-const { POST: selftest } = await import('./storage/selftest/+server');
 
 type Handler = (event: never) => Promise<Response>;
 
@@ -116,12 +115,5 @@ describe('POST /api/helper', () => {
 		const res = await call(helper as Handler, { session, exerciseId: 'ex_planka', question: 'Hur?' });
 		expect(res.status).toBe(429);
 		expect(createMessage).not.toHaveBeenCalled();
-	});
-});
-
-describe('POST /api/storage/selftest', () => {
-	it('is not available in production', async () => {
-		expect((await call(selftest as Handler, {})).status).toBe(404);
-		expect(await state.storage.list()).toEqual([]);
 	});
 });

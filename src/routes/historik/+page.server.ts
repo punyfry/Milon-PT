@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { addDays, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
-import { getProfile, listExercises, listSessionsBetween } from '$lib/server/data';
+import { addDays, groupByWorkout, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
+import { getProfile, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { PageServerLoad } from './$types';
@@ -14,7 +14,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const start = weekStartOf(param ?? today);
 	const currentStart = weekStartOf(today);
 
-	const [stored, sessions, profile] = await Promise.all([listExercises(storage), listSessionsBetween(storage, start, addDays(start, 7)), getProfile(storage)]);
+	const [stored, sessions, profile, workouts] = await Promise.all([
+		listExercises(storage),
+		listSessionsBetween(storage, start, addDays(start, 7)),
+		getProfile(storage),
+		listLatestWorkouts(storage)
+	]);
 	const exercises = stored.map((e) => e.data);
 
 	// Exercises with history, most recently trained first. Summary only, never the whole log.
@@ -27,6 +32,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			return { id: e.id, name: e.name, type: e.type, archived: e.archived, lastDate, best, metric: metricFor(e.type).label };
 		})
 		.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'sv'));
+
+	const groups = groupByWorkout(list, workouts);
 
 	const milestones = milestoneExercises(exercises).map((m) => ({
 		key: m.key,
@@ -44,7 +51,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		prevWeek: isValidDate(addDays(start, -7)) ? addDays(start, -7) : null,
 		nextWeek: start < currentStart ? addDays(start, 7) : null,
 		isCurrentWeek: start === currentStart,
-		exercises: list,
+		groups,
+		archived: list.filter((e) => e.archived),
 		milestones
 	};
 };
