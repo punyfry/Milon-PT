@@ -97,10 +97,17 @@ const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+/** Ett datum YYYY-MM-DD som finns i kalendern (inte t.ex. 2024-02-30). */
+export function isCalendarDate(v: string): boolean {
+	if (!DATE.test(v)) return false;
+	const d = new Date(`${v}T12:00:00Z`);
+	return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
 function date(o: Obj, key: string, issues: Issues, path: string): string | undefined {
 	const v = str(o, key, issues, path);
 	if (v === undefined) return undefined;
-	if (!DATE.test(v) || Number.isNaN(Date.parse(v))) issues.add(join(path, key), 'måste vara ett datum YYYY-MM-DD');
+	if (!isCalendarDate(v)) issues.add(join(path, key), 'måste vara ett datum YYYY-MM-DD');
 	return v;
 }
 
@@ -162,8 +169,10 @@ export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues,
 	const d = date(v, 'date', issues, path);
 	const rawSets = arr(v, 'sets', issues, path) ?? [];
 	const sets = rawSets.map((s, i) => validateSet(s, type, issues, join(join(path, 'sets'), i)));
+	const note = str(v, 'note', issues, path, { optional: true, allowEmpty: true })?.trim();
+	if (note && note.length > 1000) issues.add(join(path, 'note'), 'får vara högst 1000 tecken');
 	if (issues.list.length !== before || d === undefined) return null;
-	return { ...(sessionId ? { sessionId } : {}), date: d, sets: sets as ExerciseSet[] };
+	return { ...(sessionId ? { sessionId } : {}), date: d, sets: sets as ExerciseSet[], ...(note ? { note } : {}) };
 }
 
 export function validateExercise(v: unknown, issues: Issues, path: string): Exercise | null {
@@ -333,12 +342,48 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 			}
 		}
 	}
+	let kcalEstimates: Profile['kcalEstimates'];
+	if (v.kcalEstimates !== undefined) {
+		kcalEstimates = validateKcalEstimates(v.kcalEstimates, issues, join(path, 'kcalEstimates')) ?? undefined;
+	}
 	if (issues.list.length !== before) return null;
 	return {
+		...(kcalEstimates ? { kcalEstimates } : {}),
 		...(goals !== undefined ? { goals } : {}),
 		...(weeklySessionGoal !== undefined ? { weeklySessionGoal } : {}),
 		...(rules ? { rules } : {}),
 		...(kcalPerWorkout ? { kcalPerWorkout } : {}),
 		...(coachContext !== undefined ? { coachContext } : {})
 	};
+}
+
+const KCAL_TYPES = ['strength', 'hiit'] as const;
+
+/** { strength: { min, max }, hiit: { min, max } }, båda valfria. */
+export function validateKcalEstimates(v: unknown, issues: Issues, path: string): Profile['kcalEstimates'] | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const out: NonNullable<Profile['kcalEstimates']> = {};
+	for (const key of Object.keys(v)) {
+		const p = join(path, key);
+		const range = v[key];
+		if (!(KCAL_TYPES as readonly string[]).includes(key)) {
+			issues.add(p, `okänd passtyp (${KCAL_TYPES.join(' eller ')})`);
+			continue;
+		}
+		if (!isObject(range)) {
+			issues.add(p, 'måste vara { min, max }');
+			continue;
+		}
+		const min = num(range, 'min', issues, p, { min: 0 });
+		const max = num(range, 'max', issues, p, { min: 0 });
+		if (min !== undefined && max !== undefined) {
+			if (min > max) issues.add(p, 'min får inte vara större än max');
+			else out[key as (typeof KCAL_TYPES)[number]] = { min, max };
+		}
+	}
+	return issues.list.length === before ? out : null;
 }

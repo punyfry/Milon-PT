@@ -13,7 +13,7 @@ import { BlobUserStorage } from '../src/lib/server/storage/blob';
 import { LocalFileUserStorage } from '../src/lib/server/storage/local';
 import { ValidationError } from '../src/lib/model';
 import { todayInStockholm } from '../src/lib/time';
-import { applyImport, parseImportFile, planImportFor, summarizePlan } from '../src/lib/server/import/craft';
+import { applyImport, countWrites, parseImportFile, planImportFor, summarizePlan } from '../src/lib/server/import/craft';
 
 function usage(message?: string): never {
 	if (message) console.error(message + '\n');
@@ -58,9 +58,7 @@ async function main() {
 	const plan = await planImportFor(storage, input, todayInStockholm());
 
 	console.log(summarizePlan(plan));
-	const writes =
-		plan.exercises.filter((p) => p.action !== 'unchanged').length +
-		plan.workouts.filter((p) => p.action !== 'unchanged').length;
+	const writes = countWrites(plan);
 
 	if (!apply) {
 		console.log(`\nTorrkörning: ${writes} filer skulle skrivas. Kör igen med --apply för att importera.`);

@@ -3,7 +3,7 @@ import { getExercise, getLatestWorkout, getProfile, getWorkout } from '$lib/serv
 import { isAiConfigured } from '$lib/server/ai/client';
 import { toInfo } from '$lib/server/helper/swap';
 import { storageFor } from '$lib/server/storage';
-import { DEFAULT_KCAL, type ExerciseInfo } from '$lib/session/active';
+import { kcalSuggestion, type ExerciseInfo } from '$lib/session/active';
 import type { PageServerLoad } from './$types';
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -38,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	return {
 		workout,
 		exercises,
-		kcalSuggestion: profile.kcalPerWorkout?.[workout.slug] ?? DEFAULT_KCAL,
+		kcalSuggestion: kcalSuggestion(profile, workout),
 		helperAvailable: isAiConfigured()
 	};
 };

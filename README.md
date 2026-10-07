@@ -60,7 +60,15 @@ Skapa en Blob-store i Vercel-projektet (Storage → Create → Blob) med **priva
 
 ## Import från Craft
 
-Importfilen har formatet i SPEC.md, se `scripts/import-example.json`. Ditt användar-ID (Googles `sub`) visas på startsidan när du är inloggad.
+**Enklast:** logga in, gå till **Konto → Importera från Craft** och välj JSON-filen. Appen visar först vad som skulle sparas och sparar först när du trycker **Importera**. Importen körs på servern med din inloggning, så ingen token behövs.
+
+Importfilen har formatet i SPEC.md, se `scripts/import-example.json`. Utöver övningar och pass kan den ha:
+
+- `profile`: `goals` (text eller lista), `rules`, `kcalEstimates` (`strength`/`hiit` med `min`/`max`) och `weeklySessionGoal`. Befintliga värden skrivs aldrig över; regler läggs till.
+- `note` på loggposter och `archived` på övningar.
+- `sessions`: genomförda pass `{ date, workout, kcalEstimate? }`. De blir sessionsposter (kl. 12 svensk tid, eftersom klockslag saknas) och loggposterna samma dag kopplas till passet.
+
+Från kommandoraden (kräver `BLOB_READ_WRITE_TOKEN`, eller `--local` för `.data/`). Ditt användar-ID (Googles `sub`) visas på `/konto`.
 
 ```sh
 npm run import -- min-export.json --user <användar-ID>          # torrkörning: visar planen

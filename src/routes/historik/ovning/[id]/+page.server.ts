@@ -20,6 +20,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		entries: ex.log.slice(0, 15).map((e, i) => ({
 			date: e.date,
 			sets: e.sets,
+			note: e.note ?? null,
 			best: bestSet(ex.type, e.sets)?.value ?? null,
 			volume: volume(ex.type, e.sets),
 			record: records.has(i)

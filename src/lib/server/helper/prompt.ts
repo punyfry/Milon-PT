@@ -41,7 +41,9 @@ export function formatHistory(exercise: Exercise | undefined): string {
 	if (!entries.length) return `${exercise.name}: ingen historik än`;
 	return (
 		`${exercise.name}:\n` +
-		entries.map((e) => `- ${e.date}: ${e.sets.map((s) => formatSet(exercise.type, s)).join(', ')}`).join('\n')
+		entries
+			.map((e) => `- ${e.date}: ${e.sets.map((s) => formatSet(exercise.type, s)).join(', ')}${e.note ? ` (anteckning: ${e.note})` : ''}`)
+			.join('\n')
 	);
 }
 
