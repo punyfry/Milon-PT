@@ -17,6 +17,8 @@
 		left: 0;
 		right: 0;
 		z-index: 20;
+		/* Taller than it looks under a notch (safe-area padding): never catch taps. */
+		pointer-events: none;
 		height: 3px;
 		padding-top: env(safe-area-inset-top, 0px);
 		background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat;

@@ -27,14 +27,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	const extra = (url.searchParams.get('ex') ?? '').split(',').filter((id) => ID.test(id));
 	const ids = [...new Set([...workout.exercises.map((e) => e.exerciseId), ...extra])];
-	const exercises: ExerciseInfo[] = [];
-	for (const id of ids) {
-		const stored = await getExercise(storage, id);
-		if (!stored) continue;
-		exercises.push(toInfo(stored.data));
-	}
-
-	const profile = (await getProfile(storage)).data;
+	const [stored, { data: profile }] = await Promise.all([Promise.all(ids.map((id) => getExercise(storage, id))), getProfile(storage)]);
+	const exercises: ExerciseInfo[] = stored.filter((e) => e !== null).map((e) => toInfo(e.data));
 	return {
 		workout,
 		exercises,

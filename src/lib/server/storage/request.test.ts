@@ -56,7 +56,18 @@ describe('RequestStorage', () => {
 		await expect(storage.writeJson('profile.json', { goal: 4 }, { ifMatch: fresh!.version })).resolves.toBeDefined();
 	});
 
-	it('does not keep a failed read', async () => {
+	it('shares the old read while a write is in flight, and reads again once it is done', async () => {
+		const { inner, spies, storage } = setup();
+		await inner.writeJson('profile.json', { goal: 3 });
+		await storage.readJson('profile.json');
+		const write = storage.writeJson('profile.json', { goal: 4 });
+		expect((await storage.readJson<{ goal: number }>('profile.json'))!.data.goal).toBe(3);
+		await write;
+		expect((await storage.readJson<{ goal: number }>('profile.json'))!.data.goal).toBe(4);
+		expect(spies.read).toHaveBeenCalledTimes(2);
+	});
+
+		it('does not keep a failed read', async () => {
 		const { spies, storage } = setup();
 		spies.read.mockRejectedValueOnce(new Error('network'));
 		await expect(storage.readJson('profile.json')).rejects.toThrow('network');

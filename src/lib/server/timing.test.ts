@@ -94,7 +94,35 @@ describe('serverTiming', () => {
 		expect(log).not.toHaveBeenCalled();
 	});
 
-	it('leaves responses with immutable headers alone', async () => {
+	it('names requests without a route', async () => {
+		env.BLOB_READ_WRITE_TOKEN = 'test-token';
+		const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const ev = { ...event('GET'), route: { id: null }, isDataRequest: false } as unknown as RequestEvent;
+		await serverTiming({
+			event: ev,
+			resolve: async (e: RequestEvent) => {
+				(storageFor(e.locals) as RequestStorage).stats.lists = 1;
+				return new Response('ok');
+			}
+		});
+		expect(log.mock.calls[0][0]).toMatch(/^\[timing\] GET \(no route\) 200 /);
+	});
+
+	it('lets errors from later hooks (e.g. the guard redirect) pass through without logging', async () => {
+		const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const redirect = { status: 303, location: '/login' };
+		await expect(
+			serverTiming({
+				event: event('GET'),
+				resolve: async () => {
+					throw redirect;
+				}
+			})
+		).rejects.toBe(redirect);
+		expect(log).not.toHaveBeenCalled();
+	});
+
+		it('leaves responses with immutable headers alone', async () => {
 		const immutable = Response.redirect('https://example.com/', 302);
 		const response = await serverTiming({ event: event('GET'), resolve: async () => immutable });
 		expect(response).toBe(immutable);
