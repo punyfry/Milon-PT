@@ -1,38 +1,43 @@
-"""Draws the Milon-PT icon: a white dumbbell on the app's green accent color."""
+"""Draws the Milon-PT icons: the logo (an M that is also a dumbbell, assets/logo/logo.svg) in mint on near black."""
 import sys
 from PIL import Image, ImageDraw
 
 OUT = sys.argv[1]
-GREEN = (47, 111, 79, 255)   # --accent (light mode)
-WHITE = (255, 255, 255, 255)
+BG = (10, 10, 11, 255)        # --bg #0A0A0B
+MINT = (94, 234, 212, 255)    # --accent #5EEAD4
 N = 1024
 
-def dumbbell(draw, scale=1.0):
-    c = N / 2
-    def rect(cx, w, h, r):
-        x0, x1 = c + (cx - w / 2) * scale, c + (cx + w / 2) * scale
-        y0, y1 = c - h / 2 * scale, c + h / 2 * scale
-        draw.rounded_rectangle([x0, y0, x1, y1], radius=r * scale, fill=WHITE)
-    rect(0, 520, 64, 20)              # bar
-    for side in (-1, 1):
-        rect(side * 175, 84, 340, 26)  # inner plate
-        rect(side * 262, 64, 240, 24)  # outer plate
+# Same geometry as logo.svg (viewBox 0 0 96 96): vertical strokes and the V, round caps.
+BARS = [(30, 28, 68), (66, 28, 68), (16, 40, 56), (80, 40, 56)]
+V = [(30, 40), (48, 58), (66, 40)]
 
-def icon(rounded: bool, scale: float):
+def logo(draw, scale, stroke):
+    k = N / 96 * scale
+    p = lambda x, y: (N / 2 + (x - 48) * k, N / 2 + (y - 48) * k)
+    r = stroke / 2 * k
+    for x, y0, y1 in BARS:
+        (cx, a), (_, b) = p(x, y0), p(x, y1)
+        draw.rounded_rectangle([cx - r, a - r, cx + r, b + r], radius=r, fill=MINT)
+    pts = [p(x, y) for x, y in V]
+    draw.line(pts, fill=MINT, width=round(2 * r), joint='curve')
+    for x, y in pts:
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=MINT)
+
+def icon(rounded: bool, scale: float, stroke: float = 8):
     img = Image.new('RGBA', (N, N), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     if rounded:
-        d.rounded_rectangle([0, 0, N - 1, N - 1], radius=int(N * 0.22), fill=GREEN)
+        d.rounded_rectangle([0, 0, N - 1, N - 1], radius=int(N * 0.22), fill=BG)
     else:
-        d.rectangle([0, 0, N, N], fill=GREEN)
-    dumbbell(d, scale)
+        d.rectangle([0, 0, N, N], fill=BG)
+    logo(d, scale, stroke)
     return img
 
-# "any": rounded corners. maskable: fully filled, dumbbell inside the safe zone (80 % circle).
+# "any": rounded corners. maskable: fully filled, logo inside the safe zone (80 % circle).
 icon(True, 1.0).resize((512, 512), Image.LANCZOS).save(f'{OUT}/icon-512.png')
 icon(True, 1.0).resize((192, 192), Image.LANCZOS).save(f'{OUT}/icon-192.png')
-icon(False, 0.82).resize((512, 512), Image.LANCZOS).save(f'{OUT}/maskable-512.png')
-# Favicon: larger dumbbell so it reads in a tab at 16 px. favicon.ico for tools that request it directly.
-icon(True, 1.3).save(f'{OUT}/../favicon.ico', sizes=[(16, 16), (32, 32), (48, 48)])
+icon(False, 0.85).resize((512, 512), Image.LANCZOS).save(f'{OUT}/maskable-512.png')
+# Favicon: larger and slightly thicker so it reads in a tab at 16 px. favicon.ico for tools that request it directly.
+icon(True, 1.12, 9).save(f'{OUT}/../favicon.ico', sizes=[(16, 16), (32, 32), (48, 48)])
 # iOS rounds the corners itself and doesn't want transparency.
 icon(False, 0.9).convert('RGB').resize((180, 180), Image.LANCZOS).save(f'{OUT}/apple-touch-icon.png')

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+	<title id="title">Milon-PT: ett M som är en hantel, stången böjer sig i ett V mellan skivorna under tung vikt</title>
+	<g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M30 28V68M66 28V68" />
+		<path d="M16 40V56M80 40V56" />
+		<path d="M30 40L48 58L66 40" />
+	</g>
+</svg>
