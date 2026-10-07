@@ -91,7 +91,7 @@
 			<section class="card">
 				<h3>
 					{m.title}
-					{#if m.exercise && m.exercise.name !== m.title}<span class="meta">· {m.exercise.name}</span>{/if}
+					{#if m.exercise && m.exercise.name !== m.title}<span class="meta">· {m.progress ? 'på väg: ' : ''}{m.exercise.name}</span>{/if}
 				</h3>
 				{#if m.exercise && m.points.length > 1}
 					<LineChart
@@ -110,6 +110,12 @@
 					<p class="meta">Ingen historik för {m.exercise.name} än.</p>
 				{:else}
 					<p class="meta">Ingen övning som heter {m.title} än.</p>
+				{/if}
+				{#if m.others.length}
+					<p class="meta others">
+						Även:
+						{#each m.others as o, i (o.id)}{i ? ', ' : ''}<a href={`/historik/ovning/${o.id}`}>{o.name}</a>{/each}
+					</p>
 				{/if}
 			</section>
 		{/each}

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { MemoryUserStorage } from '../storage/memory';
 import { StorageConflictError } from '../storage/types';
 import {
+	createSession,
+	lastSessionBySlug,
+	listSessionsBetween,
 	createExercise,
 	getExercise,
 	getProfile,
@@ -56,5 +59,45 @@ describe('datalagret', () => {
 	it('vägrar läsa en annan användares filer via sökvägen', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await expect(storage.readJson('../u2/profile.json')).rejects.toThrow(/Ogiltig sökväg/);
+	});
+});
+
+describe('sessioner', () => {
+	const session = (id: string, slug: string, startedAt: string) => ({
+		id,
+		workoutSlug: slug,
+		workoutVersion: 1,
+		startedAt,
+		endedAt: startedAt,
+		exerciseIds: [],
+		deviations: []
+	});
+
+	async function setup() {
+		const storage = new MemoryUserStorage('u1');
+		await createSession(storage, session('s_20260921', 'pass-a', '2026-09-21T12:00:00+02:00'));
+		await createSession(storage, session('s_20260929', 'pass-b', '2026-09-29T08:00:00+02:00'));
+		await createSession(storage, session('s_20260929_2', 'pass-a', '2026-09-29T18:00:00+02:00'));
+		await createSession(storage, session('s_20261006', 'pass-a', '2026-10-06T18:00:00+02:00'));
+		const reads: string[] = [];
+		const read = storage.readJson.bind(storage);
+		storage.readJson = (path) => (reads.push(path), read(path));
+		return { storage, reads };
+	}
+
+	it('läser bara veckans sessionsfiler', async () => {
+		const { storage, reads } = await setup();
+		const week = await listSessionsBetween(storage, '2026-09-29', '2026-10-06');
+		expect(week.map((s) => s.id)).toEqual(['s_20260929_2', 's_20260929']);
+		expect(reads).toHaveLength(2);
+	});
+
+	it('hittar senaste passet per mall', async () => {
+		const { storage } = await setup();
+		const last = await lastSessionBySlug(storage, ['pass-a', 'pass-b', 'pass-c']);
+		expect(Object.fromEntries(last)).toEqual({
+			'pass-a': '2026-10-06T18:00:00+02:00',
+			'pass-b': '2026-09-29T08:00:00+02:00'
+		});
 	});
 });

@@ -5,6 +5,8 @@ import {
 	bestEver,
 	bestSet,
 	estimated1RM,
+	heaviestEver,
+	heaviestWeight,
 	isoWeek,
 	isValidDate,
 	milestoneExercises,
@@ -59,9 +61,31 @@ describe('bästa set och rekord', () => {
 
 	it('hittar rekord och bästa värde utan ett visst pass', () => {
 		// 2026-10-01 (55) slog 2026-09-29 (50,7); 2026-10-06 (54) gjorde det inte.
-		expect([...recordEntries(marklyft)]).toEqual([1]);
+		expect([...recordEntries(marklyft)]).toEqual([[1, ['best', 'heaviest']]]);
 		expect(bestEver(marklyft)).toBe(55);
 		expect(bestEver(marklyft, 's2')).toBe(54);
+	});
+});
+
+describe('tyngsta vikt', () => {
+	it('räknar bara viktövningar och set med reps', () => {
+		expect(heaviestWeight('weight', [{ weight: 40, reps: 8 }, { weight: 60, reps: 0 }, { weight: 45, reps: 2 }])).toBe(45);
+		expect(heaviestWeight('bodyweight', [{ reps: 8 }])).toBeNull();
+		expect(heaviestEver(marklyft)).toBe(50);
+		expect(heaviestEver(marklyft, 's2')).toBe(45);
+	});
+
+	it('ger rekord för tyngre vikt även när 1RM inte slås', () => {
+		const ex: Exercise = {
+			...marklyft,
+			log: [
+				{ date: '2026-10-06', sets: [{ weight: 52.5, reps: 1 }] },
+				{ date: '2026-10-01', sets: [{ weight: 50, reps: 3 }] }
+			]
+		};
+		// 52,5 × 1 ger 1RM 54,3 < 55, men vikten är ny högsta.
+		expect([...recordEntries(ex)]).toEqual([[0, ['heaviest']]]);
+		expect(recordEntries(plankan).size).toBe(0);
 	});
 });
 
@@ -112,6 +136,31 @@ describe('milstolpar', () => {
 		const used: Exercise = { ...plankan, id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', log: [{ date: '2026-10-01', sets: [{ reps: 5 }] }] };
 		const archived: Exercise = { ...used, id: 'ex_pullup_old', name: 'Pullup', archived: true, log: [{ date: '2026-10-05', sets: [{ reps: 6 }] }] };
 		expect(milestoneExercises([empty, archived, used])[0].exercise?.id).toBe('ex_pull_up');
+	});
+});
+
+describe('milstolpar med progression', () => {
+	const bw = (id: string, name: string, date?: string): Exercise => ({
+		...plankan,
+		id,
+		name,
+		type: 'bodyweight',
+		log: date ? [{ date, sets: [{ reps: 5 }] }] : []
+	});
+
+	it('visar senaste progressionsövningen tills målet har loggats', () => {
+		const neg = bw('ex_neg', 'Negativa pull-ups', '2026-10-01');
+		const band = bw('ex_band', 'Pull-up med gummiband', '2026-09-20');
+		const headstand = { ...bw('ex_huvud', 'Huvudstående-progression', '2026-10-02'), type: 'time' as const };
+		const hang = bw('ex_hang', 'Dead hang i pull-up-stång', '2026-10-03');
+		const [pullup, handstand] = milestoneExercises([band, neg, hang, bw('ex_pull_up', 'Pull-up'), headstand]);
+		expect(pullup).toMatchObject({ exercise: { id: 'ex_neg' }, progress: true });
+		expect(pullup.others.map((e) => e.id)).toEqual(['ex_band']);
+		expect(handstand).toMatchObject({ exercise: { id: 'ex_huvud' }, progress: true, others: [] });
+
+		const done = milestoneExercises([neg, bw('ex_pull_up', 'Pull-up', '2026-10-05')])[0];
+		expect(done).toMatchObject({ exercise: { id: 'ex_pull_up' }, progress: false });
+		expect(done.others.map((e) => e.id)).toEqual(['ex_neg']);
 	});
 });
 

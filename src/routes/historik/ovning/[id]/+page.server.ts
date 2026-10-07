@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			note: e.note ?? null,
 			best: bestSet(ex.type, e.sets)?.value ?? null,
 			volume: volume(ex.type, e.sets),
-			record: records.has(i)
+			record: records.get(i) ?? []
 		}))
 	};
 };

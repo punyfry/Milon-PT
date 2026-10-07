@@ -1,4 +1,4 @@
-import { listLatestWorkouts, listSessions } from '$lib/server/data';
+import { lastSessionBySlug, listLatestWorkouts } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
 
@@ -13,13 +13,8 @@ export interface WorkoutCard {
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const storage = storageFor(locals);
-	const [workouts, sessions] = await Promise.all([listLatestWorkouts(storage), listSessions(storage)]);
-
-	const lastBySlug = new Map<string, string>();
-	for (const s of sessions) {
-		const prev = lastBySlug.get(s.workoutSlug);
-		if (!prev || Date.parse(s.startedAt) > Date.parse(prev)) lastBySlug.set(s.workoutSlug, s.startedAt);
-	}
+	const workouts = await listLatestWorkouts(storage);
+	const lastBySlug = await lastSessionBySlug(storage, workouts.map((w) => w.slug));
 
 	const cards: WorkoutCard[] = workouts.map((w) => ({
 		slug: w.slug,

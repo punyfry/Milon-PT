@@ -26,6 +26,8 @@ export interface ExerciseInfo {
 	lastEntry?: LogEntry;
 	/** Bästa värdet hittills (1RM, reps eller sekunder), för att markera rekord vid avslut. */
 	best?: number;
+	/** Tyngsta vikten hittills (bara viktövningar). */
+	heaviest?: number;
 }
 
 // --- tid ----------------------------------------------------------------
