@@ -14,15 +14,15 @@ const blob = vi.hoisted(() => ({
 
 vi.mock('@vercel/blob', async (original) => ({ ...(await original<typeof import('@vercel/blob')>()), ...blob }));
 
-describe('sökvägar', () => {
-	it('lägger allt under användarens egen mapp', () => {
+describe('paths', () => {
+	it('puts everything under the user\'s own folder', () => {
 		expect(userRoot('u1')).toBe('users/u1/');
 		expect(resolvePath('u1', 'exercises/ex_a.json')).toBe('users/u1/exercises/ex_a.json');
 		expect(resolvePath('u1', 'exercises/', { file: false })).toBe('users/u1/exercises/');
 		expect(resolvePath('u1', '', { file: false })).toBe('users/u1/');
 	});
 
-	it('avvisar sökvägar som kan nå en annan användare eller något annat än JSON', () => {
+	it('rejects paths that could reach another user or anything but JSON', () => {
 		for (const bad of ['../u2/profile.json', 'a/../../u2/profile.json', './profile.json', '/users/u2/profile.json', 'exercises//x.json', 'profile.txt', 'profile', '.hidden.json', 'a\\b.json', 'å.json', '%2e%2e/x.json']) {
 			expect(() => resolvePath('u1', bad), bad).toThrow();
 		}
@@ -30,8 +30,8 @@ describe('sökvägar', () => {
 	});
 });
 
-describe('minneslagring', () => {
-	it('håller isär användare även när de delar samma filkarta', async () => {
+describe('memory storage', () => {
+	it('keeps users apart even when they share the same file map', async () => {
 		const files = new Map();
 		const a = new MemoryUserStorage('a', files);
 		const b = new MemoryUserStorage('b', files);
@@ -40,7 +40,7 @@ describe('minneslagring', () => {
 		expect((await b.list()).length).toBe(0);
 	});
 
-	it('följer ifMatch och createOnly', async () => {
+	it('honours ifMatch and createOnly', async () => {
 		const s = new MemoryUserStorage('a');
 		const { version } = await s.writeJson('x.json', 1);
 		await expect(s.writeJson('x.json', 2, { createOnly: true })).rejects.toBeInstanceOf(StorageConflictError);
@@ -50,16 +50,16 @@ describe('minneslagring', () => {
 	});
 });
 
-describe('Vercel Blob-lagring', () => {
+describe('Vercel Blob storage', () => {
 	beforeEach(() => {
 		for (const fn of Object.values(blob)) fn.mockReset();
 	});
 
-	it('kräver token', () => {
+	it('requires a token', () => {
 		expect(() => new BlobUserStorage('u1', undefined)).toThrow(/BLOB_READ_WRITE_TOKEN/);
 	});
 
-	it('skriver alltid privat, under användarens mapp och med token', async () => {
+	it('always writes privately, under the user\'s folder and with the token', async () => {
 		blob.put.mockResolvedValue({ etag: 'e1', url: 'https://hemlig.blob/x' });
 		const s = new BlobUserStorage('u1', 'token');
 		expect(await s.writeJson('profile.json', { a: 1 }, { ifMatch: 'e0' })).toEqual({ version: 'e1' });
@@ -70,7 +70,7 @@ describe('Vercel Blob-lagring', () => {
 		expect(blob.put.mock.calls[1][2].allowOverwrite).toBe(false);
 	});
 
-	it('läser privat och returnerar aldrig blobbens URL', async () => {
+	it('reads privately and never returns the blob URL', async () => {
 		blob.get.mockResolvedValue({
 			statusCode: 200,
 			stream: new Response(JSON.stringify({ goals: 'x' })).body,
@@ -83,7 +83,7 @@ describe('Vercel Blob-lagring', () => {
 		expect(blob.get.mock.calls[0]).toEqual(['users/u1/profile.json', { access: 'private', useCache: false, token: 'token' }]);
 	});
 
-	it('listar bara användarens prefix och tar bort det ur sökvägen', async () => {
+	it('lists only the user\'s prefix and strips it from the path', async () => {
 		blob.list.mockResolvedValue({
 			blobs: [{ pathname: 'users/u1/exercises/ex_a.json', size: 2, uploadedAt: new Date(0), etag: 'e', url: 'https://hemlig.blob/a' }],
 			hasMore: false
@@ -94,7 +94,7 @@ describe('Vercel Blob-lagring', () => {
 		expect(JSON.stringify(files)).not.toContain('hemlig');
 	});
 
-	it('vägrar sökvägar utanför användarens mapp innan något anrop görs', async () => {
+	it('refuses paths outside the user\'s folder before any call is made', async () => {
 		const s = new BlobUserStorage('u1', 'token');
 		await expect(s.readJson('../u2/profile.json')).rejects.toThrow();
 		await expect(s.writeJson('../u2/profile.json', {})).rejects.toThrow();

@@ -1,6 +1,6 @@
 import { StorageConflictError, type UserStorage } from '../storage/types';
 
-/** Standard för AI_DAILY_LIMIT: anrop till Claude API per användare och dag (en tur i pass-byggaren kan göra flera). */
+/** Default for AI_DAILY_LIMIT: Claude API calls per user and day (one builder turn can make several). */
 export const DEFAULT_DAILY_LIMIT = 200;
 
 export class AiLimitError extends Error {
@@ -10,16 +10,16 @@ export class AiLimitError extends Error {
 	}
 }
 
-/** Läser gränsen ur miljövariabeln. Saknas eller är den ogiltig gäller standard. */
+/** Reads the limit from the environment variable; falls back to the default if missing or invalid. */
 export function dailyLimit(raw: string | undefined): number {
 	const n = Number(raw?.trim());
 	return raw?.trim() && Number.isInteger(n) && n >= 0 ? n : DEFAULT_DAILY_LIMIT;
 }
 
 /**
- * Räknar ett AI-anrop för dagen (`usage/<YYYY-MM-DD>.json`) och kastar
- * AiLimitError när gränsen är nådd. Skrivningen skyddas med ifMatch, så
- * samtidiga anrop inte kan räkna fel; vid konflikt görs ett nytt försök.
+ * Counts one AI call for the day (`usage/<YYYY-MM-DD>.json`) and throws
+ * AiLimitError once the limit is reached. The write is guarded with ifMatch
+ * so concurrent calls can't miscount; on conflict it retries.
  */
 export async function consumeAiCall(storage: UserStorage, today: string, limit: number): Promise<number> {
 	const path = `usage/${today}.json`;
@@ -38,7 +38,7 @@ export async function consumeAiCall(storage: UserStorage, today: string, limit: 
 	throw new StorageConflictError(path);
 }
 
-/** Hur många anrop som återstår i dag. Räknar inget. */
+/** How many calls are left today. Counts nothing. */
 export async function remainingAiCalls(storage: UserStorage, today: string, limit: number): Promise<number> {
 	const current = await storage.readJson<{ count?: unknown }>(`usage/${today}.json`);
 	const count = typeof current?.data.count === 'number' ? current.data.count : 0;
@@ -47,7 +47,7 @@ export async function remainingAiCalls(storage: UserStorage, today: string, limi
 
 const KEEP_DAYS = 30;
 
-/** Tar bort räknare äldre än 30 dagar. Körs en gång per dag (när dagens fil skapas). */
+/** Deletes counters older than 30 days. Runs once a day (when today's file is created). */
 async function pruneUsage(storage: UserStorage, today: string): Promise<void> {
 	const cutoff = new Date(Date.parse(`${today}T12:00:00Z`) - KEEP_DAYS * 86_400_000).toISOString().slice(0, 10);
 	try {
@@ -56,7 +56,7 @@ async function pruneUsage(storage: UserStorage, today: string): Promise<void> {
 			if (date && date < cutoff) await storage.delete(file.path);
 		}
 	} catch (e) {
-		// Städningen får aldrig stoppa ett anrop.
-		console.error('Kunde inte rensa gamla AI-räknare:', e);
+		// Cleanup must never block a call.
+		console.error('Could not prune old AI usage counters:', e);
 	}
 }

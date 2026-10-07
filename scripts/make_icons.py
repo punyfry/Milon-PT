@@ -1,9 +1,9 @@
-"""Ritar Milon-PT:s ikon: en vit hantel på appens gröna accentfärg."""
+"""Draws the Milon-PT icon: a white dumbbell on the app's green accent colour."""
 import sys
 from PIL import Image, ImageDraw
 
 OUT = sys.argv[1]
-GREEN = (47, 111, 79, 255)   # --accent (ljust läge)
+GREEN = (47, 111, 79, 255)   # --accent (light mode)
 WHITE = (255, 255, 255, 255)
 N = 1024
 
@@ -13,10 +13,10 @@ def dumbbell(draw, scale=1.0):
         x0, x1 = c + (cx - w / 2) * scale, c + (cx + w / 2) * scale
         y0, y1 = c - h / 2 * scale, c + h / 2 * scale
         draw.rounded_rectangle([x0, y0, x1, y1], radius=r * scale, fill=WHITE)
-    rect(0, 520, 64, 20)              # stången
+    rect(0, 520, 64, 20)              # bar
     for side in (-1, 1):
-        rect(side * 175, 84, 340, 26)  # inre vikt
-        rect(side * 262, 64, 240, 24)  # yttre vikt
+        rect(side * 175, 84, 340, 26)  # inner plate
+        rect(side * 262, 64, 240, 24)  # outer plate
 
 def icon(rounded: bool, scale: float):
     img = Image.new('RGBA', (N, N), (0, 0, 0, 0))
@@ -28,11 +28,11 @@ def icon(rounded: bool, scale: float):
     dumbbell(d, scale)
     return img
 
-# "any": rundade hörn. maskable: helt fyllt, hanteln inom säkra zonen (80 % cirkel).
+# "any": rounded corners. maskable: fully filled, dumbbell inside the safe zone (80 % circle).
 icon(True, 1.0).resize((512, 512), Image.LANCZOS).save(f'{OUT}/icon-512.png')
 icon(True, 1.0).resize((192, 192), Image.LANCZOS).save(f'{OUT}/icon-192.png')
 icon(False, 0.82).resize((512, 512), Image.LANCZOS).save(f'{OUT}/maskable-512.png')
-# Favikon: större hantel så den syns i en flik vid 16 px. favicon.ico för verktyg som frågar efter den direkt.
+# Favicon: larger dumbbell so it reads in a tab at 16 px. favicon.ico for tools that request it directly.
 icon(True, 1.3).save(f'{OUT}/../favicon.ico', sizes=[(16, 16), (32, 32), (48, 48)])
-# iOS rundar själv och vill inte ha genomskinlighet.
+# iOS rounds the corners itself and doesn't want transparency.
 icon(False, 0.9).convert('RGB').resize((180, 180), Image.LANCZOS).save(f'{OUT}/apple-touch-icon.png')

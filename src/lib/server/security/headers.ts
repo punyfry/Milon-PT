@@ -1,9 +1,9 @@
 import type { Handle } from '@sveltejs/kit';
 
 /**
- * Säkerhetsheaders på alla svar från servern. Content-Security-Policy sätts
- * av SvelteKit (`kit.csp` i svelte.config.js), eftersom den behöver hashar
- * för SvelteKits egna inline-skript.
+ * Security headers on every server response. Content-Security-Policy is set
+ * by SvelteKit (`kit.csp` in svelte.config.js), since it needs hashes for
+ * SvelteKit's own inline scripts.
  */
 export const SECURITY_HEADERS: Record<string, string> = {
 	'X-Frame-Options': 'DENY',
@@ -17,7 +17,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
 export const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
 	for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-		// Svar med låsta headers (t.ex. omdirigeringar från fetch) lämnas som de är.
+		// Responses with immutable headers (e.g. redirects from fetch) are left as is.
 		try {
 			if (!response.headers.has(name)) response.headers.set(name, value);
 		} catch {

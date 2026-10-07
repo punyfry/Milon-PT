@@ -1,17 +1,17 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
-/** Anropet mot Messages API, utbytbart i tester. */
+/** The Messages API call, replaceable in tests. */
 export type CreateMessage = (
 	params: Anthropic.Beta.MessageCreateParamsNonStreaming
 ) => Promise<Anthropic.Beta.BetaMessage>;
 
-/** Modeller som tar emot `fallbacks: "default"` (server-side fallback vid avböjt svar). */
+/** Models that accept `fallbacks: "default"` (server-side fallback on a declined response). */
 const FALLBACK_MODELS = new Set(['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1']);
 
 /**
- * Modellberoende parametrar. Haiku 4.5 har inte adaptivt tänkande eller
- * effort; övriga aktuella modeller får adaptivt tänkande med angiven effort.
- * Server-side fallback begärs bara där modellen stöder det.
+ * Model-specific parameters. Haiku 4.5 has no adaptive thinking or effort;
+ * the other current models get adaptive thinking with the given effort.
+ * Server-side fallback is only requested where the model supports it.
  */
 export function modelOptions(
 	model: string,

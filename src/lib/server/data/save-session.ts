@@ -1,10 +1,10 @@
 /**
- * Sparar ett avslutat pass:
- * övningsloggar, eventuellt en ny passversion och sist sessionsposten.
+ * Saves a finished session: exercise logs, optionally a new workout version,
+ * and finally the session record.
  *
- * Sparningen går att köra om: misslyckas den halvvägs och klienten försöker
- * igen hoppas redan skrivna loggposter (samma sessionId) och en redan skapad
- * passversion över. Sessionsposten skrivs sist och markerar att allt är klart.
+ * Saving is idempotent: if it fails halfway and the client retries, log
+ * entries already written (same sessionId) and an already created workout
+ * version are skipped. The session record is written last and marks completion.
  */
 import {
 	Issues,
@@ -30,7 +30,7 @@ export interface SaveSessionInput {
 	session: ActiveSession;
 	endedAt: string;
 	kcalEstimate?: number;
-	/** Spara avvikelserna som ny version av passet. */
+	/** Save the deviations as a new version of the workout. */
 	saveAsNewVersion: boolean;
 }
 
@@ -44,8 +44,8 @@ const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
- * Grundkontroll av ett pågående pass från klienten (localStorage), innan
- * något läses från lagringen. Lägger fel i `issues` och returnerar passet.
+ * Basic check of an active session from the client (localStorage), before
+ * anything is read from storage. Pushes errors to `issues` and returns the session.
  */
 export function checkActiveSession(raw: unknown, issues: string[]): ActiveSession | null {
 	if (!isObject(raw)) {
@@ -75,7 +75,7 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 	return s as unknown as ActiveSession;
 }
 
-/** Grundkontroll av indata för sparning innan något läses från lagringen. */
+/** Basic check of the save input before anything is read from storage. */
 export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 	const issues: string[] = [];
 	if (!isObject(raw) || !isObject(raw.session)) throw new ValidationError('sparning', ['session saknas']);
@@ -94,9 +94,9 @@ export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 }
 
 /**
- * Bygger nästa version av passet med avvikelserna inlagda: varje bytt
- * övning ersätts på sin plats. Byts typ (t.ex. reps → tid) tas målet från
- * setet som gjordes under passet.
+ * Builds the next workout version with the deviations applied: each swapped
+ * exercise is replaced in place. If the type changes (e.g. reps → time), the
+ * target is taken from the set done during the session.
  */
 export function applyDeviations(
 	base: WorkoutTemplate,
@@ -128,7 +128,7 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	const base = (await getWorkout(storage, session.workoutSlug, session.workoutVersion))?.data;
 	if (!base) throw new ValidationError('sparning', [`Passet ${session.workoutSlug} v${session.workoutVersion} finns inte`]);
 
-	// Läs övningarna och validera de klara seten mot respektive typ.
+	// Read the exercises and validate the done sets against their type.
 	const exercises = new Map<string, Exercise>();
 	const doneSets = new Map<string, ExerciseSet[]>();
 	const issues = new Issues();
@@ -149,8 +149,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (doneSets.size === 0) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
 
-	// Bestäm sessions-id. Finns redan en post med samma id och starttid är
-	// det en omkörning; annars väljs ett ledigt id för dagen.
+	// Pick the session id. An existing record with the same id and start time
+	// means a retry; otherwise a free id for the day is chosen.
 	let sessionId = session.sessionId;
 	let alreadySaved = false;
 	const existing = await getSession(storage, sessionId);
@@ -159,13 +159,13 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 		else sessionId = sessionIdFor(date, new Set(await listSessionIds(storage)));
 	}
 
-	// Övningsloggar, utan dubbletter vid omkörning.
+	// Exercise logs, without duplicates on retry.
 	for (const [exerciseId, sets] of doneSets) {
 		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId)) continue;
 		await prependLogEntry(storage, exerciseId, { sessionId, date, sets });
 	}
 
-	// Ny passversion med avvikelserna, om användaren vill.
+	// New workout version with the deviations, if the user wants it.
 	let newWorkoutVersion: number | undefined;
 	if (input.saveAsNewVersion && session.deviations.length) {
 		const next = applyDeviations(base, session.deviations, exercises, doneSets);

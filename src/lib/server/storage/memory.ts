@@ -8,9 +8,8 @@ import {
 } from './types';
 
 /**
- * In-memory implementation med samma semantik som Blob-implementationen
- * (sökvägsvalidering, ifMatch, createOnly). Används i tester och för
- * torrkörning av importen.
+ * In-memory implementation with the same semantics as the Blob implementation
+ * (path validation, ifMatch, createOnly). Used in tests and for import dry runs.
  */
 export class MemoryUserStorage implements UserStorage {
 	readonly userId: string;
@@ -57,7 +56,7 @@ export class MemoryUserStorage implements UserStorage {
 		this.#files.delete(resolvePath(this.userId, path));
 	}
 
-	/** En kopia att torrköra mot: skrivningar påverkar inte originalet. */
+	/** A copy for dry runs: writes don't affect the original. */
 	clone(): MemoryUserStorage {
 		return new MemoryUserStorage(this.userId, new Map(this.#files));
 	}

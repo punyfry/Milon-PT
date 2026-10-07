@@ -1,19 +1,19 @@
 /**
- * Engångsimport från Craft (se README.md, "Import från Craft").
+ * One-off import from Craft (see README.md, "Import från Craft").
  *
- * Flödet är uppdelat så att det kan torrköras och testas:
- * 1. `parseImportFile` validerar hela filen och samlar alla fel.
- * 2. `planImport` jämför mot befintliga data och räknar ut vad som ska
- *    skapas eller ändras, utan att skriva något.
- * 3. `applyImport` skriver planen via lagringsgränssnittet.
+ * The flow is split so it can be dry-run and tested:
+ * 1. `parseImportFile` validates the whole file and collects all errors.
+ * 2. `planImport` compares against existing data and works out what to
+ *    create or change, without writing anything.
+ * 3. `applyImport` writes the plan through the storage interface.
  *
- * Övningsnamn matchas mot befintliga övningar (skiftläges- och
- * blankstegsokänsligt) innan nya skapas. Utöver övningar och pass kan filen
- * ha en profil (mål, regler, kcal per passtyp), anteckningar på loggposter,
- * arkiverade övningar och genomförda pass (`sessions`), som blir
- * sessionsposter med loggposterna samma dag kopplade. Importen går att köra
- * om med samma fil: identiska loggposter, pass och sessioner hoppas över,
- * och befintliga värden i profilen skrivs aldrig över.
+ * Exercise names are matched against existing exercises (ignoring case and
+ * whitespace) before new ones are created. Besides exercises and workouts the
+ * file may contain a profile (goals, rules, kcal per workout type), notes on
+ * log entries, archived exercises and completed sessions (`sessions`), which
+ * become session records with that day's log entries linked. The import can
+ * be rerun with the same file: identical log entries, workouts and sessions
+ * are skipped, and existing profile values are never overwritten.
  */
 import {
 	Issues,
@@ -49,7 +49,7 @@ import { createSession, listSessions } from '../data/sessions';
 import { listLatestWorkouts } from '../data/workouts';
 import type { StoredJson, UserStorage } from '../storage/types';
 
-// --- filformat ----------------------------------------------------------
+// --- file format --------------------------------------------------------
 
 export interface ImportExercise {
 	name: string;
@@ -67,7 +67,7 @@ export interface ImportProfile {
 	weeklySessionGoal?: number;
 }
 
-/** Ett genomfört pass ur Craft: datum, passets namn och ev. kcal. */
+/** A completed session from Craft: date, workout name and optional kcal. */
 export interface ImportSession {
 	date: string;
 	workout: string;
@@ -174,7 +174,7 @@ export function parseImportFile(raw: unknown): ImportFile {
 	return { ...(profile ? { profile } : {}), exercises, workouts, sessions };
 }
 
-/** Profil ur Craft: goals som text eller lista, rules, kcalEstimates och veckomål. */
+/** Profile from Craft: goals as text or list, rules, kcalEstimates and weekly goal. */
 function parseProfile(v: unknown, issues: Issues): ImportProfile | undefined {
 	if (!isObject(v)) {
 		issues.add('profile', 'måste vara ett objekt');
@@ -207,7 +207,7 @@ function parseProfile(v: unknown, issues: Issues): ImportProfile | undefined {
 	return out;
 }
 
-// --- planering ----------------------------------------------------------
+// --- planning -----------------------------------------------------------
 
 export type ExercisePlan =
 	| { action: 'create'; exercise: Exercise; addedLogEntries: number }
@@ -232,7 +232,7 @@ export interface ImportPlan {
 	warnings: string[];
 }
 
-/** Det som redan finns hos användaren. */
+/** What the user already has. */
 export interface ExistingData {
 	exercises: StoredJson<Exercise>[];
 	latestWorkouts: WorkoutTemplate[];
@@ -250,27 +250,27 @@ function sameWorkoutContent(a: Pick<WorkoutTemplate, 'name' | 'exercises'>, b: P
 
 export const IMPORT_CHANGE_NOTE = 'Import från Craft';
 
-/** Importerade pass saknar klockslag; de läggs mitt på dagen i svensk tid. */
+/** Imported sessions have no time of day; they are placed at noon Stockholm time. */
 export function importedStartTime(date: string): string {
 	return `${date}T12:00:00${stockholmOffset(date)}`;
 }
 
 /**
- * Räknar ut vad importen skulle göra mot befintliga data. Skriver ingenting.
- * `today` (YYYY-MM-DD) blir `createdAt` på nya passversioner.
+ * Works out what the import would do against existing data. Writes nothing.
+ * `today` (YYYY-MM-DD) becomes `createdAt` on new workout versions.
  */
 export function planImport(input: ImportFile, existing: ExistingData, today: string): ImportPlan {
 	const warnings: string[] = [];
 	const errors: string[] = [];
 
-	// 1. Sessions-id per datum, så att loggposterna kan kopplas till sina pass.
+	// 1. Session id per date, so log entries can be linked to their sessions.
 	const takenSessionIds = new Set(existing.sessions.map((s) => s.id));
 	const sessionIdByDate = new Map<string, string>();
 	const sessionDrafts: { id: string; slug: string; startedAt: string; imp: ImportSession; existing?: SessionRecord }[] = [];
 	for (const imp of [...input.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
 		const slug = slugify(imp.workout);
 		const startedAt = importedStartTime(imp.date);
-		// Samma pass samma dag räknas som samma session, även om det loggats i appen.
+		// The same workout on the same day counts as the same session, even if logged in the app.
 		const same = existing.sessions.find((s) => s.startedAt.slice(0, 10) === imp.date && s.workoutSlug === slug);
 		const id = same?.id ?? sessionIdFor(imp.date, takenSessionIds);
 		takenSessionIds.add(id);
@@ -278,14 +278,14 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		else sessionIdByDate.set(imp.date, id);
 		sessionDrafts.push({ id, slug, startedAt, imp, ...(same ? { existing: same } : {}) });
 	}
-	// Loggposterna får bara sessions-id från importens egna pass, aldrig från
-	// filen, så att ingen post pekar på en session som inte finns.
+	// Log entries only get session ids from the import's own sessions, never
+	// from the file, so no entry points to a session that doesn't exist.
 	const withSession = ({ date, sets, note }: LogEntry): LogEntry => {
 		const sessionId = sessionIdByDate.get(date);
 		return { ...(sessionId ? { sessionId } : {}), date, sets, ...(note !== undefined ? { note } : {}) };
 	};
 
-	// 2. Övningar.
+	// 2. Exercises.
 	const byName = new Map<string, Exercise>();
 	for (const { data } of existing.exercises) {
 		const key = normalizeName(data.name);
@@ -339,7 +339,7 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 			updated.archived = true;
 			changes.push('arkiverad');
 		}
-		// Nya poster läggs till; befintliga identiska poster får anteckning och passkoppling om de saknas.
+		// New entries are added; existing identical entries get a note and session link if missing.
 		let added = 0;
 		let enriched = 0;
 		for (const e of entries) {
@@ -371,7 +371,7 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		);
 	}
 
-	// 3. Pass.
+	// 3. Workouts.
 	const latestBySlug = new Map(existing.latestWorkouts.map((w) => [w.slug, w]));
 	const workoutPlans: WorkoutPlan[] = [];
 	for (const imp of input.workouts) {
@@ -406,7 +406,7 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		workoutPlans.push({ action: latest ? 'new-version' : 'create', workout });
 	}
 
-	// 4. Sparade pass.
+	// 4. Completed sessions.
 	const versionBySlug = new Map(existing.latestWorkouts.map((w) => [w.slug, w.version]));
 	for (const p of workoutPlans) versionBySlug.set(p.workout.slug, p.workout.version);
 	const plannedExercises = exercisePlans.map((p) => p.exercise);
@@ -438,7 +438,7 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		});
 	}
 
-	// 5. Profil: fyll bara i det som saknas; regler läggs till.
+	// 5. Profile: only fill in what's missing; rules are appended.
 	const current = existing.profile.data;
 	const next: Profile = { ...current };
 	const profileChanges: string[] = [];
@@ -475,22 +475,22 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 	return { profile: profilePlan, exercises: exercisePlans, workouts: workoutPlans, sessions: sessionPlans, warnings };
 }
 
-/** Tar bort identiska dubbletter inom filen (samma datum och samma set). */
+/** Removes identical duplicates within the file (same date and same sets). */
 function dedupeLog(log: LogEntry[]): LogEntry[] {
 	return log.filter((e, i) => log.findIndex((x) => sameSets(x, e)) === i);
 }
 
-// --- skrivning ----------------------------------------------------------
+// --- writing ------------------------------------------------------------
 
 /**
- * Skriver planen. Sessionerna först, sedan övningar före pass, så ett pass aldrig pekar på en
- * övning som saknas. Nya filer skrivs med `createOnly` och ändrade med
- * `ifMatch`, så importen avbryts hellre än skriver över något som ändrats
- * sedan planen räknades ut.
+ * Writes the plan. Sessions first, then exercises before workouts, so a
+ * workout never points to a missing exercise. New files are written with
+ * `createOnly` and changed ones with `ifMatch`, so the import aborts rather
+ * than overwrite anything changed since the plan was made.
  */
 export async function applyImport(storage: UserStorage, plan: ImportPlan): Promise<void> {
-	// Sessionsposterna först: avbryts importen efter dem pekar ingen loggpost
-	// på en session som saknas (appen räknar en sådan post som redan sparad).
+	// Session records first: if the import aborts after them, no log entry
+	// points to a missing session (the app treats such an entry as already saved).
 	for (const p of plan.sessions) {
 		if (p.action === 'create') await createSession(storage, p.session);
 	}
@@ -510,7 +510,7 @@ export async function applyImport(storage: UserStorage, plan: ImportPlan): Promi
 	}
 }
 
-/** Antal filer som skulle skrivas. */
+/** Number of files that would be written. */
 export function countWrites(plan: ImportPlan): number {
 	return (
 		(plan.profile.action === 'unchanged' ? 0 : 1) +
@@ -520,7 +520,7 @@ export function countWrites(plan: ImportPlan): number {
 	);
 }
 
-/** Läser befintliga data och räknar ut planen. */
+/** Reads existing data and works out the plan. */
 export async function planImportFor(storage: UserStorage, input: ImportFile, today: string): Promise<ImportPlan> {
 	const [exercises, latestWorkouts, sessions, profile] = await Promise.all([
 		listExercises(storage),

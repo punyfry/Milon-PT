@@ -23,7 +23,7 @@ export async function listSessions(storage: UserStorage): Promise<SessionRecord[
 	return (await readSessions(storage, ids)).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
-/** Datumet i ett sessions-id (`s_YYYYMMDD` eller `s_YYYYMMDD_2`), annars null. */
+/** The date in a session id (`s_YYYYMMDD` or `s_YYYYMMDD_2`), otherwise null. */
 function idDate(id: string): string | null {
 	const m = /^s_(\d{4})(\d{2})(\d{2})(_\d+)?$/.exec(id);
 	return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
@@ -35,8 +35,8 @@ async function readSessions(storage: UserStorage, ids: readonly string[]): Promi
 }
 
 /**
- * Pass som startade från och med `from` till (inte med) `to`, YYYY-MM-DD.
- * Läser bara filerna vars id ligger i intervallet (och id:n utan datum).
+ * Sessions that started from `from` (inclusive) to `to` (exclusive), YYYY-MM-DD.
+ * Only reads files whose id falls in the range (and ids without a date).
  */
 export async function listSessionsBetween(storage: UserStorage, from: string, to: string): Promise<SessionRecord[]> {
 	const ids = (await listSessionIds(storage)).filter((id) => {
@@ -49,8 +49,8 @@ export async function listSessionsBetween(storage: UserStorage, from: string, to
 }
 
 /**
- * Senaste starttiden per pass (slug). Läser nyaste filerna först, i omgångar
- * som fördubblas (10, 20, 40 …), och slutar när alla `slugs` har hittats.
+ * Latest start time per workout (slug). Reads the newest files first, in
+ * doubling batches (10, 20, 40 …), and stops once all `slugs` are found.
  */
 export async function lastSessionBySlug(storage: UserStorage, slugs: readonly string[]): Promise<Map<string, string>> {
 	const ids = (await listSessionIds(storage)).sort(
@@ -64,14 +64,14 @@ export async function lastSessionBySlug(storage: UserStorage, slugs: readonly st
 			const prev = last.get(s.workoutSlug);
 			if (!prev || Date.parse(s.startedAt) > Date.parse(prev)) last.set(s.workoutSlug, s.startedAt);
 		}
-		// Ett id säger bara datumet, så läs klart dagen innan vi slutar.
+		// An id only gives the date, so finish reading that day before stopping.
 		const nextDate = end < ids.length ? idDate(ids[end]) : null;
 		if ([...wanted].every((slug) => last.has(slug)) && (nextDate === null || nextDate !== idDate(ids[end - 1]))) break;
 	}
 	return last;
 }
 
-/** Ett sparat pass skrivs en gång och ändras inte. */
+/** A saved session is written once and never changed. */
 export async function createSession(storage: UserStorage, session: SessionRecord): Promise<SessionRecord> {
 	const valid = assertValid('pass', session, validateSession);
 	await storage.writeJson(path(valid.id), valid, { createOnly: true });
