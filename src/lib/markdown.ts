@@ -21,8 +21,9 @@ export type Block =
 	| { type: 'ul'; items: Line[] }
 	| { type: 'ol'; items: Line[]; start: number };
 
-const BULLET = /^\s*[-*•]\s+(.*)$/;
-const NUMBERED = /^\s*(\d+)[.)]\s+(.*)$/;
+const BULLET = /^\s*[-*•]\s+(\S.*)$/;
+const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
+const NUMBERED = /^\s*(\d{1,3})[.)]\s+(\S.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*)$/;
 
 export function parseMarkdown(text: string): Block[] {
@@ -41,8 +42,9 @@ export function parseMarkdown(text: string): Block[] {
 			else flush();
 			continue;
 		}
+		const rule = RULE.test(raw);
 		const heading = HEADING.exec(raw);
-		const bullet = BULLET.exec(raw);
+		const bullet = rule ? null : BULLET.exec(raw);
 		const numbered = NUMBERED.exec(raw);
 		const isList = current?.type === 'ul' || current?.type === 'ol';
 		if (gap && !(isList && ((bullet && current!.type === 'ul') || (numbered && current!.type === 'ol')))) flush();
@@ -69,7 +71,7 @@ export function parseMarkdown(text: string): Block[] {
 			// Indragen fortsättningsrad hör till föregående punkt.
 			const last = current.items[current.items.length - 1];
 			last.push({ text: ' ' }, ...parseInline(raw.trim()));
-		} else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(raw)) {
+		} else if (rule) {
 			flush();
 		} else if (current?.type === 'p') {
 			current.lines.push(parseInline(raw));
@@ -85,7 +87,7 @@ export function parseMarkdown(text: string): Block[] {
 /** **fet**, __fet__, *kursiv*, _kursiv_ och `kod`. Omatchade tecken visas som de är. */
 export function parseInline(text: string): Line {
 	const spans: Line = [];
-	const re = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|__(.+?)__|(?<![\p{L}\p{N}*])\*(?!\s)([^*]+?)\*(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])_(?!\s)([^_]+?)_(?![\p{L}\p{N}])/gu;
+	const re = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|__(.+?)__|(?<![\p{L}\p{N}*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])_(?!\s)([^_]+?)(?<!\s)_(?![\p{L}\p{N}])/gu;
 	let last = 0;
 	for (const m of text.matchAll(re)) {
 		if (m.index > last) spans.push({ text: text.slice(last, m.index) });

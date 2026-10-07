@@ -49,6 +49,14 @@ describe('enkel markdown', () => {
 		expect(parseInline('5*5 med *paus*')).toEqual([{ text: '5*5 med ' }, { text: 'paus', italic: true }]);
 	});
 
+	it('hanterar avdelare, tomma punkter, årtal och kursiv med mellanslag', () => {
+		expect(parseMarkdown('A\n* * *\n- - -\n- \n2024. Bra år')).toEqual([
+			{ type: 'p', lines: [[{ text: 'A' }]] },
+			{ type: 'p', lines: [[{ text: '- ' }], [{ text: '2024. Bra år' }]] }
+		]);
+		expect(parseInline('*a * och _b _')).toEqual([{ text: '*a * och _b _' }]);
+	});
+
 	it('släpper igenom HTML som vanlig text', () => {
 		expect(parseMarkdown('<img src=x onerror=alert(1)>')).toEqual([
 			{ type: 'p', lines: [[{ text: '<img src=x onerror=alert(1)>' }]] }
