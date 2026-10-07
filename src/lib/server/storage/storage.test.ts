@@ -15,7 +15,7 @@ const blob = vi.hoisted(() => ({
 vi.mock('@vercel/blob', async (original) => ({ ...(await original<typeof import('@vercel/blob')>()), ...blob }));
 
 describe('paths', () => {
-	it('puts everything under the user\'s own folder', () => {
+	it("puts everything under the user's own folder", () => {
 		expect(userRoot('u1')).toBe('users/u1/');
 		expect(resolvePath('u1', 'exercises/ex_a.json')).toBe('users/u1/exercises/ex_a.json');
 		expect(resolvePath('u1', 'exercises/', { file: false })).toBe('users/u1/exercises/');
@@ -59,7 +59,7 @@ describe('Vercel Blob storage', () => {
 		expect(() => new BlobUserStorage('u1', undefined)).toThrow(/BLOB_READ_WRITE_TOKEN/);
 	});
 
-	it('always writes privately, under the user\'s folder and with the token', async () => {
+	it("always writes privately, under the user's folder and with the token", async () => {
 		blob.put.mockResolvedValue({ etag: 'e1', url: 'https://hemlig.blob/x' });
 		const s = new BlobUserStorage('u1', 'token');
 		expect(await s.writeJson('profile.json', { a: 1 }, { ifMatch: 'e0' })).toEqual({ version: 'e1' });
@@ -83,7 +83,7 @@ describe('Vercel Blob storage', () => {
 		expect(blob.get.mock.calls[0]).toEqual(['users/u1/profile.json', { access: 'private', useCache: false, token: 'token' }]);
 	});
 
-	it('lists only the user\'s prefix and strips it from the path', async () => {
+	it("lists only the user's prefix and strips it from the path", async () => {
 		blob.list.mockResolvedValue({
 			blobs: [{ pathname: 'users/u1/exercises/ex_a.json', size: 2, uploadedAt: new Date(0), etag: 'e', url: 'https://hemlig.blob/a' }],
 			hasMore: false
@@ -94,7 +94,7 @@ describe('Vercel Blob storage', () => {
 		expect(JSON.stringify(files)).not.toContain('hemlig');
 	});
 
-	it('refuses paths outside the user\'s folder before any call is made', async () => {
+	it("refuses paths outside the user's folder before any call is made", async () => {
 		const s = new BlobUserStorage('u1', 'token');
 		await expect(s.readJson('../u2/profile.json')).rejects.toThrow();
 		await expect(s.writeJson('../u2/profile.json', {})).rejects.toThrow();

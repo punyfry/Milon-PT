@@ -56,7 +56,7 @@ describe('data layer', () => {
 		await expect(saveProfile(storage, {}, saved.version)).rejects.toBeInstanceOf(StorageConflictError);
 	});
 
-	it('refuses to read another user\'s files via the path', async () => {
+	it('refuses to read files of another user via the path', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await expect(storage.readJson('../u2/profile.json')).rejects.toThrow(/Ogiltig sökväg/);
 	});
@@ -85,7 +85,7 @@ describe('sessions', () => {
 		return { storage, reads };
 	}
 
-	it('reads only the week\'s session files', async () => {
+	it('reads only the session files of the week', async () => {
 		const { storage, reads } = await setup();
 		const week = await listSessionsBetween(storage, '2026-09-29', '2026-10-06');
 		expect(week.map((s) => s.id)).toEqual(['s_20260929_2', 's_20260929']);

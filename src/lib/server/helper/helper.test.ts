@@ -66,7 +66,7 @@ const input = (question: string, history: { role: 'user' | 'assistant'; text: st
 	parseHelperInput({ session: session(), exerciseId: 'ex_hantelpress', history, question });
 
 describe('helper', () => {
-	it('sends small context: workout name, today\'s sets, five latest log entries and the catalog', async () => {
+	it('sends small context: workout name, the sets so far, five latest log entries and the catalog', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Sänk vikten lite.')], 'end_turn'));
 		const result = await askHelper(storage, input('Är 17,5 för tungt?'), { model: 'claude-haiku-4-5', createMessage: create });

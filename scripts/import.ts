@@ -5,7 +5,7 @@
  *   npm run import -- <file.json> --user <userId> --apply           # writes
  *   npm run import -- <file.json> --user <userId> --local --apply   # writes to .data/ (local dev)
  *
- * `userId` is your Google ID, shown on the start page when signed in.
+ * `userId` is your Google ID, shown on /konto when signed in.
  * `BLOB_READ_WRITE_TOKEN` is read from the environment or from .env / .env.local.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -38,7 +38,7 @@ function parseArgs(argv: string[]) {
 		else usage(`Unexpected argument: ${a}`);
 	}
 	if (!file) usage('Specify the import file.');
-	if (!user) usage('Specify --user with your user ID (shown on the start page).');
+	if (!user) usage('Specify --user with your user ID (shown on /konto).');
 	return { file, user, apply, local };
 }
 

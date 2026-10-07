@@ -127,7 +127,7 @@ Volume: `weight` = sum of weight × reps, `bodyweight` = sum of reps, `time` = s
 
 Two separate calls with their own system prompts, both using tools so the app never parses JSON out of prose. The prompts (in Swedish) are in `src/lib/server/builder/prompt.ts` and `src/lib/server/helper/prompt.ts`.
 
-- **The builder** (`/skapa`, Sonnet): discusses exercises with the catalogue, goals and the workout being edited as context. Replies are rendered with simple markdown.
+- **The builder** (`/skapa`, Sonnet): discusses exercises with the catalog, goals and the workout being edited as context. Replies are rendered with simple markdown.
 - **The helper** ("Hjälp" button during a workout, Haiku): more instruction or swapping an exercise, with the workout, today's sets and the exercise's five latest log entries as context. Replies in plain text.
 - Cost: roughly SEK 4–5 a month for Haiku and SEK 12–20 for Sonnet at about 12 workouts. Besides `AI_DAILY_LIMIT`, set a monthly limit for the API key in the Anthropic Console. A Claude subscription does not cover API calls.
 

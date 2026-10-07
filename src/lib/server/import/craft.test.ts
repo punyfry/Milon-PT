@@ -278,7 +278,7 @@ describe('import with profile, notes and sessions', () => {
 		expect(written.slice(0, 2).every((p) => p.startsWith('sessions/'))).toBe(true);
 	});
 
-	it('rejects dates that don\'t exist', () => {
+	it('rejects dates that do not exist', () => {
 		expect(() => parseImportFile({ sessions: [{ date: '2025-02-29', workout: 'Pass A' }] })).toThrow(/sessions\[0\]\.date/);
 		expect(() =>
 			parseImportFile({ exercises: [{ name: 'X', type: 'bodyweight', instruction: '', log: [{ date: '2026-04-31', sets: [{ reps: 1 }] }] }] })
@@ -292,7 +292,7 @@ describe('import with profile, notes and sessions', () => {
 		expect(() => parseImportFile({ sessions: [{ date: '29/9', workout: '' }] })).toThrow(/sessions\[0\]\.date[\s\S]*sessions\[0\]\.workout/);
 	});
 
-	it('rejects a session for a workout that doesn\'t exist', async () => {
+	it('rejects a session for a workout that does not exist', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const input = parseImportFile({ sessions: [{ date: '2026-09-29', workout: 'Pass X' }] });
 		await expect(planImportFor(storage, input, TODAY)).rejects.toThrow(/Pass X/);

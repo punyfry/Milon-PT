@@ -1,4 +1,4 @@
-"""Draws the Milon-PT icon: a white dumbbell on the app's green accent colour."""
+"""Draws the Milon-PT icon: a white dumbbell on the app's green accent color."""
 import sys
 from PIL import Image, ImageDraw
 
