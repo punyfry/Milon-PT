@@ -37,6 +37,7 @@
 <main>
 	<p><a href="/historik" class="back">← Historik</a></p>
 	<h1>{ex.name}</h1>
+	{#if ex.archived}<p class="meta archived-note">Arkiverad övning. Historiken finns kvar.</p>{/if}
 
 	<section class="card">
 		<div class="head">
@@ -104,6 +105,9 @@
 	}
 	h1 {
 		margin: 0.25rem 0 1rem;
+	}
+	.archived-note {
+		margin: -0.5rem 0 1rem;
 	}
 	h2 {
 		font-size: 1.05rem;
