@@ -1,5 +1,5 @@
 /**
- * One-off import from Craft (see README.md, "Import från Craft").
+ * One-off import from Craft (see README.md, "Craft import").
  *
  * The flow is split so it can be dry-run and tested:
  * 1. `parseImportFile` validates the whole file and collects all errors.
