@@ -6,7 +6,7 @@
 	 */
 	import { formatNumber, formatSeconds } from '$lib/format';
 	import type { ActiveSet, ExerciseType } from '$lib/model';
-	import { isTimerRunning, remainingMs, type SetField } from '$lib/session/active';
+	import { isTimerRunning, remainingMs, timerStartSeconds, type SetField } from '$lib/session/active';
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -95,7 +95,7 @@
 						<button type="button" class="step wide num" onclick={() => onstep('seconds', -5)} aria-label="Minska tid 5 sekunder">−5</button>
 						<button type="button" class="step wide num" onclick={() => onstep('seconds', 5)} aria-label="Öka tid 5 sekunder">+5</button>
 					{/if}
-					<button type="button" class="timerbtn" class:stop={running} onclick={running ? onstoptimer : onstarttimer} disabled={!running && (values.seconds ?? 0) <= 0}>
+					<button type="button" class="timerbtn" class:stop={running} onclick={running ? onstoptimer : onstarttimer} disabled={!running && timerStartSeconds(set) <= 0}>
 						{running ? 'Stopp' : 'Starta'}
 					</button>
 				{:else}

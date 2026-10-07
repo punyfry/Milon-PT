@@ -116,6 +116,12 @@ export type ActiveSet = ExerciseSet & {
 	timerEndsAt?: string;
 	/** Countdown length in seconds, to compute the time on an early stop. */
 	timerDuration?: number;
+	/**
+	 * Planned time in seconds, kept after an early stop so that starting the
+	 * timer again counts down from it rather than from the reached time.
+	 * Cleared when the time is changed by hand.
+	 */
+	plannedSeconds?: number;
 };
 
 /** Active session in localStorage under the key `milonpt.activeSession`. */
