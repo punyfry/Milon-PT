@@ -1,9 +1,9 @@
 <script lang="ts">
 	/**
-	 * Litet linjediagram för en serie över tid. Tunn linje (2 px), svag yta,
-	 * slutpunkt med ring och värdet utskrivet bara vid sista punkten. Tryck
-	 * eller hovra för ett hårkors med värde och datum; piltangenter flyttar
-	 * mellan punkterna. En tabell med samma värden finns där diagrammet visas.
+	 * Small line chart for one series over time. Thin line (2 px), faint area,
+	 * ringed end point and the value labelled only at the last point. Tap or
+	 * hover for a crosshair with value and date; arrow keys move between
+	 * points. A table with the same values is shown alongside the chart.
 	 */
 	interface Point {
 		date: string;
@@ -13,7 +13,7 @@
 		points: Point[];
 		format: (value: number) => string;
 		label: string;
-		/** Styr y-axelns steg: hela tal (reps) och sekunder får inga halva steg. */
+		/** Controls y-axis steps: integers (reps) and seconds get no half steps. */
 		kind?: 'number' | 'integer' | 'seconds';
 		height?: number;
 	}
@@ -24,10 +24,10 @@
 	let active = $state<number | null>(null);
 
 	const time = (d: string) => Date.parse(`${d}T12:00:00Z`);
-	/** Ungefärlig textbredd i px för 11–12 px systemtypsnitt. */
+	/** Approximate text width in px for an 11–12 px system font. */
 	const textWidth = (t: string, px = 6.6) => t.length * px;
 
-	/** "Snälla" värden för y-axeln. */
+	/** "Nice" values for the y-axis. */
 	function niceStep(range: number, count: number) {
 		const raw = range / Math.max(count, 1);
 		if (kind === 'seconds') {
@@ -54,7 +54,7 @@
 		const ticks: number[] = [];
 		for (let v = min; v <= max + step / 2; v += step) ticks.push(Math.round(v * 100) / 100);
 
-		// Marginaler efter etiketternas längd, så att inget klipps.
+		// Margins sized to the labels so nothing is clipped.
 		const pad = {
 			top: 16,
 			bottom: 22,
@@ -80,7 +80,7 @@
 	);
 	const last = $derived(xy.at(-1));
 
-	/** Årtalet visas när serien spänner över flera år eller inte är i år. */
+	/** The year is shown when the series spans several years or is not this year. */
 	const withYear = $derived.by(() => {
 		const years = new Set(points.map((p) => p.date.slice(0, 4)));
 		return years.size > 1 || !years.has(String(new Date().getFullYear()));
@@ -93,13 +93,13 @@
 			timeZone: 'UTC'
 		});
 
-	/** Första datumetiketten visas bara om den inte krockar med den sista. */
+	/** The first date label is only shown if it does not overlap the last one. */
 	const showFirstDate = $derived(
 		xy.length < 2 || textWidth(dateLabel(xy[0].date)) + textWidth(dateLabel(xy.at(-1)!.date)) + 12 <= scale.innerW
 	);
 
 	function nearest(clientX: number, rect: DOMRect) {
-		// Diagrammet skalas till behållarens bredd; räkna om till diagrammets koordinater.
+		// The chart scales to the container width; convert to chart coordinates.
 		const px = ((clientX - rect.left) / (rect.width || 1)) * width;
 		let best = 0;
 		for (let i = 1; i < xy.length; i++) if (Math.abs(xy[i].cx - px) < Math.abs(xy[best].cx - px)) best = i;
@@ -110,7 +110,7 @@
 		active = nearest(e.clientX, (e.currentTarget as HTMLElement).getBoundingClientRect());
 	}
 
-	/** Vid tryck ligger värdet kvar tills nästa tryck; med mus försvinner det när pekaren lämnar. */
+	/** On tap the value stays until the next tap; with a mouse it disappears when the pointer leaves. */
 	function onLeave(e: PointerEvent) {
 		if (e.pointerType !== 'touch') active = null;
 	}

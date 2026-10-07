@@ -23,7 +23,7 @@ const { POST: selftest } = await import('./storage/selftest/+server');
 
 type Handler = (event: never) => Promise<Response>;
 
-/** Anropar en endpoint och ger status och JSON, även när den kastar ett HTTP-fel. */
+/** Calls an endpoint and returns status and JSON, even when it throws an HTTP error. */
 async function call(handler: Handler, body: unknown, headers: Record<string, string> = {}) {
 	const request = new Request('https://milon.test/api', {
 		method: 'POST',
@@ -49,12 +49,12 @@ beforeEach(() => {
 });
 
 describe('POST /api/import', () => {
-	it('avvisar för stora filer redan på Content-Length', async () => {
+	it('rejects files that are too large based on Content-Length', async () => {
 		const res = await call(importer as Handler, { data: {} }, { 'content-length': '2000000' });
 		expect(res.status).toBe(413);
 	});
 
-	it('avvisar ogiltig JSON och listar fel per sökväg utan att skriva', async () => {
+	it('rejects invalid JSON and lists errors per path without writing', async () => {
 		expect((await call(importer as Handler, '{nej')).status).toBe(400);
 		const res = await call(importer as Handler, { data: { exercises: [{ name: '' }] } });
 		expect(res.status).toBe(400);
@@ -62,7 +62,7 @@ describe('POST /api/import', () => {
 		expect(await state.storage.list()).toEqual([]);
 	});
 
-	it('gör en torrkörning utan apply', async () => {
+	it('does a dry run without apply', async () => {
 		const data = { exercises: [{ name: 'Planka', type: 'time', instruction: '', log: [] }], workouts: [] };
 		const res = await call(importer as Handler, { data });
 		expect(res.status).toBe(200);
@@ -71,7 +71,7 @@ describe('POST /api/import', () => {
 });
 
 describe('POST /api/sessions', () => {
-	it('avvisar trasig JSON och ogiltiga pass', async () => {
+	it('rejects malformed JSON and invalid sessions', async () => {
 		expect((await call(sessions as Handler, 'x')).status).toBe(400);
 		expect((await call(sessions as Handler, { session: {} })).status).toBe(400);
 		expect(await state.storage.list()).toEqual([]);
@@ -79,19 +79,19 @@ describe('POST /api/sessions', () => {
 });
 
 describe('POST /api/builder', () => {
-	it('validerar meddelandet innan något räknas eller skickas', async () => {
+	it('validates the message before anything is counted or sent', async () => {
 		expect((await call(builder as Handler, { message: '  ' })).status).toBe(400);
 		expect((await call(builder as Handler, { message: 'x'.repeat(2001) })).status).toBe(400);
 		expect(await state.storage.list('usage/')).toEqual([]);
 		expect(createMessage).not.toHaveBeenCalled();
 	});
 
-	it('svarar 503 när API-nyckeln saknas', async () => {
+	it('responds 503 when the API key is missing', async () => {
 		delete env.ANTHROPIC_API_KEY;
 		expect((await call(builder as Handler, { message: 'Hej' })).status).toBe(503);
 	});
 
-	it('stoppar vid dagens gräns utan att anropa Claude', async () => {
+	it('stops at the daily limit without calling Claude', async () => {
 		env.AI_DAILY_LIMIT = '0';
 		const res = await call(builder as Handler, { message: 'Hej' });
 		expect(res.status).toBe(429);
@@ -101,7 +101,7 @@ describe('POST /api/builder', () => {
 });
 
 describe('POST /api/helper', () => {
-	it('avvisar ogiltiga frågor och stoppar vid dagens gräns', async () => {
+	it('rejects invalid questions and stops at the daily limit', async () => {
 		expect((await call(helper as Handler, { question: '' })).status).toBe(400);
 		const session = {
 			sessionId: 's_20261007',
@@ -120,7 +120,7 @@ describe('POST /api/helper', () => {
 });
 
 describe('POST /api/storage/selftest', () => {
-	it('finns inte i produktion', async () => {
+	it('is not available in production', async () => {
 		expect((await call(selftest as Handler, {})).status).toBe(404);
 		expect(await state.storage.list()).toEqual([]);
 	});

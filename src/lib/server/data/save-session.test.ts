@@ -59,8 +59,8 @@ function active(overrides: Partial<ActiveSession> = {}): ActiveSession {
 const input = (session: ActiveSession, extra = {}) =>
 	parseSaveSessionInput({ session, endedAt: '2026-10-06T18:05:00+02:00', kcalEstimate: 300, saveAsNewVersion: false, ...extra });
 
-describe('spara pass', () => {
-	it('skriver klara set till övningsloggarna och skapar sessionsposten', async () => {
+describe('save session', () => {
+	it('writes done sets to the exercise logs and creates the session record', async () => {
 		const storage = await setup();
 		const result = await saveSession(storage, input(active()));
 		expect(result).toEqual({ sessionId: 's_20261006', alreadySaved: false });
@@ -85,7 +85,7 @@ describe('spara pass', () => {
 		});
 	});
 
-	it('går att köra om utan dubbletter', async () => {
+	it('can be retried without duplicates', async () => {
 		const storage = await setup();
 		await saveSession(storage, input(active()));
 		const again = await saveSession(storage, input(active()));
@@ -94,7 +94,7 @@ describe('spara pass', () => {
 		expect(await listSessionIds(storage)).toEqual(['s_20261006']);
 	});
 
-	it('ger andra passet samma dag ett eget id', async () => {
+	it('gives the second session on the same day its own id', async () => {
 		const storage = await setup();
 		await saveSession(storage, input(active()));
 		const second = await saveSession(storage, input(active({ startedAt: '2026-10-06T19:00:00+02:00' })));
@@ -103,7 +103,7 @@ describe('spara pass', () => {
 		expect(log.map((l) => l.sessionId)).toEqual(['s_20261006_2', 's_20261006']);
 	});
 
-	it('vägrar spara utan klara set eller med set av fel typ', async () => {
+	it('refuses to save without done sets or with sets of the wrong type', async () => {
 		const storage = await setup();
 		const none = active();
 		for (const ex of none.exercises) for (const s of ex.sets) s.done = false;
@@ -115,7 +115,7 @@ describe('spara pass', () => {
 		expect(await listSessionIds(storage)).toEqual([]);
 	});
 
-	it('skapar ny passversion av avvikelser bara om användaren vill', async () => {
+	it('creates a new workout version from deviations only if the user wants it', async () => {
 		const storage = await setup();
 		const swapped = active({
 			deviations: [
@@ -143,7 +143,7 @@ describe('spara pass', () => {
 			{ exerciseId: 'ex_sidoplanka', sets: 2, target: { seconds: 45 } }
 		]);
 
-		// Omkörning skapar ingen v3.
+		// A retry creates no v3.
 		const retry = await saveSession(
 			storage,
 			input({ ...swapped, sessionId: 's_20261007', startedAt: '2026-10-07T17:00:00+02:00' }, { saveAsNewVersion: true })
@@ -152,7 +152,7 @@ describe('spara pass', () => {
 		expect((await storage.list('workouts/')).length).toBe(2);
 	});
 
-	it('tar målet från passet när bytet ändrar övningstyp', async () => {
+	it('takes the target from the session when the swap changes exercise type', async () => {
 		const storage = await setup();
 		const swapped = active({ deviations: [{ type: 'swap', from: 'ex_hantelpress', to: 'ex_sidoplanka' }] });
 		swapped.exercises[1] = { exerciseId: 'ex_sidoplanka', sets: [{ seconds: 40, done: true }] };
@@ -161,7 +161,7 @@ describe('spara pass', () => {
 		expect(v2.exercises[1]).toEqual({ exerciseId: 'ex_sidoplanka', sets: 3, target: { seconds: 40 } });
 	});
 
-	it('avvisar trasig indata innan något läses', () => {
+	it('rejects broken input before anything is read', () => {
 		expect(() => parseSaveSessionInput({ session: { ...active(), sessionId: '../x' }, endedAt: 'nu' })).toThrow(
 			/sessionId[\s\S]*endedAt/
 		);

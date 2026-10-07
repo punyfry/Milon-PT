@@ -1,6 +1,6 @@
 /**
- * Håller skärmen tänd medan en timer går (Screen Wake Lock). Låset släpps av
- * webbläsaren när fliken göms, så det begärs igen när den syns.
+ * Keeps the screen on while a timer runs (Screen Wake Lock). The browser
+ * releases the lock when the tab is hidden, so it is requested again when visible.
  */
 export function createWakeLock() {
 	let sentinel: WakeLockSentinel | null = null;

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    name: Typkontroll, tester och bygge
+    name: Check, test and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,15 +24,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Typkontroll
+      - name: Type check
         run: npm run check
-      - name: Tester
+      - name: Unit tests
         run: npm test
-      - name: Bygge
+      - name: Build
         run: npm run build
 
   audit:
-    name: Sårbarheter i beroenden
+    name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -40,5 +40,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: npm audit (high och uppåt)
+      - name: npm audit (high and above)
         run: npm audit --omit=dev --audit-level=high

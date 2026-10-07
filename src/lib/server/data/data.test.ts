@@ -15,8 +15,8 @@ import {
 	saveWorkoutVersion
 } from '.';
 
-describe('datalagret', () => {
-	it('skapar övningar med unika id', async () => {
+describe('data layer', () => {
+	it('creates exercises with unique ids', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const a = await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
 		const b = await createExercise(storage, { name: 'marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
@@ -25,7 +25,7 @@ describe('datalagret', () => {
 		expect((await getExercise(storage, 'ex_marklyft'))?.data.name).toBe('Marklyft');
 	});
 
-	it('lägger nya loggposter först och skyddar mot samtidiga ändringar', async () => {
+	it('prepends new log entries and guards against concurrent changes', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const ex = await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 		await prependLogEntry(storage, ex.data.id, { date: '2026-10-01', sets: [{ seconds: 40 }] });
@@ -34,7 +34,7 @@ describe('datalagret', () => {
 		await expect(saveExercise(storage, ex.data, ex.version)).rejects.toBeInstanceOf(StorageConflictError);
 	});
 
-	it('versionerar pass och behåller äldre versioner', async () => {
+	it('versions workouts and keeps older versions', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const base = { slug: 'pass-b', name: 'Pass B', createdAt: '2026-10-06', exercises: [] };
 		const v1 = await saveWorkoutVersion(storage, base);
@@ -47,7 +47,7 @@ describe('datalagret', () => {
 		expect(latest.find((w) => w.slug === 'pass-b')?.version).toBe(2);
 	});
 
-	it('läser och sparar profilen', async () => {
+	it('reads and saves the profile', async () => {
 		const storage = new MemoryUserStorage('u1');
 		expect(await getProfile(storage)).toEqual({ data: {} });
 		const saved = await saveProfile(storage, { weeklySessionGoal: 3 });
@@ -56,13 +56,13 @@ describe('datalagret', () => {
 		await expect(saveProfile(storage, {}, saved.version)).rejects.toBeInstanceOf(StorageConflictError);
 	});
 
-	it('vägrar läsa en annan användares filer via sökvägen', async () => {
+	it('refuses to read files of another user via the path', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await expect(storage.readJson('../u2/profile.json')).rejects.toThrow(/Ogiltig sökväg/);
 	});
 });
 
-describe('sessioner', () => {
+describe('sessions', () => {
 	const session = (id: string, slug: string, startedAt: string) => ({
 		id,
 		workoutSlug: slug,
@@ -85,14 +85,14 @@ describe('sessioner', () => {
 		return { storage, reads };
 	}
 
-	it('läser bara veckans sessionsfiler', async () => {
+	it('reads only the session files of the week', async () => {
 		const { storage, reads } = await setup();
 		const week = await listSessionsBetween(storage, '2026-09-29', '2026-10-06');
 		expect(week.map((s) => s.id)).toEqual(['s_20260929_2', 's_20260929']);
 		expect(reads).toHaveLength(2);
 	});
 
-	it('hittar senaste passet per mall', async () => {
+	it('finds the latest session per template', async () => {
 		const { storage } = await setup();
 		const last = await lastSessionBySlug(storage, ['pass-a', 'pass-b', 'pass-c']);
 		expect(Object.fromEntries(last)).toEqual({

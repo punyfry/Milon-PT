@@ -10,9 +10,9 @@ const config = {
 	},
 	kit: {
 		adapter: adapter(),
-		// Content-Security-Policy. SvelteKit lägger själv till hashar för sina
-		// inline-skript. Inloggningsformuläret skickas vidare till Google, därav
-		// form-action. Inline-stilar behövs för Sveltes style:-direktiv.
+		// Content-Security-Policy. SvelteKit adds hashes/nonces for its own inline
+		// scripts. The sign-in form redirects to Google, hence form-action.
+		// Inline styles are needed for Svelte's style: directive.
 		csp: {
 			mode: 'auto',
 			directives: {
@@ -31,7 +31,7 @@ const config = {
 			}
 		},
 		typescript: {
-			// Typkontrollera även importskriptet och vitest-konfigen.
+			// Also type-check the import script and the vitest config.
 			config: (tsconfig) => {
 				tsconfig.include.push('../scripts/**/*.ts', '../vitest.config.ts');
 			}

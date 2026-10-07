@@ -41,7 +41,7 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 			properties: {
 				existingId: { type: ['string', 'null'], description: 'id från katalogen, eller null för en ny övning' },
 				name: { type: ['string', 'null'], description: 'Namn på ny övning, annars null' },
-				// Strikta verktyg godtar inte enum ihop med type-listan ['string', 'null'], så null uttrycks med anyOf.
+				// Strict tools don't accept enum with the type array ['string', 'null'], so null is expressed with anyOf.
 				type: { anyOf: [{ type: 'string', enum: ['weight', 'bodyweight', 'time'] }, { type: 'null' }] },
 				loadClass: { anyOf: [{ type: 'string', enum: ['light', 'heavy'] }, { type: 'null' }], description: 'Bara för weight' },
 				instruction: { type: ['string', 'null'], description: '2-4 korta punkter, en per rad' },
@@ -79,11 +79,11 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 	}
 ];
 
-/** Det verktygen behöver känna till om konversationen. Ändras av verktygen. */
+/** What the tools need to know about the conversation. Mutated by the tools. */
 export interface BuilderState {
-	/** Passet som redigeras, eller null tills ett nytt pass sparats första gången. */
+	/** The workout being edited, or null until a new workout is saved for the first time. */
 	editingSlug: string | null;
-	/** Live-listan: övningarna som diskuterats fram, i ordning. */
+	/** The live list: the exercises agreed on so far, in order. */
 	draft: WorkoutExercise[];
 	saved?: { slug: string; version: number };
 }
@@ -91,7 +91,7 @@ export interface BuilderState {
 export interface ToolOutcome {
 	content: string;
 	isError: boolean;
-	/** Kort rad för chattloggen, t.ex. "Lade till Marklyft". */
+	/** Short line for the chat log, e.g. "Lade till Marklyft". */
 	event?: string;
 }
 
@@ -128,7 +128,7 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	} else {
 		const name = typeof input.name === 'string' ? input.name.trim() : '';
 		if (!name) return fail('Ange name för en ny övning, eller existingId för en befintlig.');
-		// Samma namn som en befintlig övning: återanvänd den i stället för att skapa en dubblett.
+		// Same name as an existing exercise: reuse it instead of creating a duplicate.
 		exercise = catalog.find((e) => normalizeName(e.name) === normalizeName(name));
 		if (!exercise) {
 			if (!isExerciseType(input.type)) return fail('type måste vara weight, bodyweight eller time för en ny övning.');
@@ -226,7 +226,7 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 	};
 }
 
-/** Kör ett verktygsanrop. Fel i indata blir felsvar till modellen, inte undantag. */
+/** Runs a tool call. Invalid input becomes an error result to the model, not an exception. */
 export async function executeTool(
 	storage: UserStorage,
 	state: BuilderState,

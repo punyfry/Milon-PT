@@ -32,18 +32,18 @@
 
 	let { data }: PageProps = $props();
 
-	/** Övningar som bytts in under passet och inte fanns i sidans data. */
+	/** Exercises swapped in during the session that weren't in the page data. */
 	let swappedIn = $state<ExerciseInfo[]>([]);
 	const infos = $derived(new Map<string, ExerciseInfo>([...data.exercises, ...swappedIn].map((e) => [e.id, e])));
 
 	let session = $state<ActiveSession | null>(null);
-	/** Ett annat pass pågår redan; visas i stället för att skriva över det. */
+	/** Another session is already in progress; shown instead of overwriting it. */
 	let other = $state<ActiveSession | null>(null);
 	let mode = $state<'active' | 'finish'>('active');
 	let now = $state(new Date());
 	let storageWarning = $state(false);
 
-	// Avslutsvyn
+	// Finish view
 	let kcal = $state(0);
 	let saveAsNewVersion = $state(false);
 	let saving = $state(false);
@@ -57,15 +57,15 @@
 			return;
 		}
 		if (stored) {
-			// Rätt version och alla inbytta övningar måste vara laddade.
+			// The right version and all swapped-in exercises must be loaded.
 			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id));
 			if (stored.workoutVersion !== data.workout.version || missing.length) {
 				const params = new URLSearchParams({ v: String(stored.workoutVersion) });
 				if (missing.length) params.set('ex', missing.join(','));
 				const target = `/pass/${stored.workoutSlug}?${params}`;
 				if (target !== page.url.pathname + page.url.search) {
-					// Full omladdning: en klientnavigering till samma rutt återanvänder
-					// komponenten, och då körs inte den här initieringen igen.
+					// Full reload: client-side navigation to the same route reuses the
+					// component, and then this initialization doesn't run again.
 					location.replace(target);
 					return;
 				}
@@ -84,14 +84,14 @@
 		storageWarning = !saveActiveSession($state.snapshot(session));
 	}
 
-	/** Kör en ändring och sparar direkt till localStorage. */
+	/** Applies a change and saves to localStorage right away. */
 	function change(fn: (s: ActiveSession) => void) {
 		if (!session) return;
 		fn(session);
 		persist();
 	}
 
-	// Timer: räkna ner, fyll i tiden vid noll och håll skärmen tänd.
+	// Timer: count down, fill in the time at zero and keep the screen on.
 	const timerRunning = $derived(session ? anyTimerRunning(session) : false);
 	onMount(() => {
 		const wakeLock = createWakeLock();
@@ -112,11 +112,11 @@
 		};
 	});
 
-	// --- hjälparen ----------------------------------------------------------
+	// --- helper -------------------------------------------------------------
 
 	interface HelpState {
 		open: boolean;
-		/** Frågor och svar som skickas med som historik (alltid par). */
+		/** Questions and answers sent along as history (always pairs). */
 		turns: { role: 'user' | 'assistant'; text: string }[];
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
 		busy: boolean;
@@ -131,7 +131,7 @@
 			: { open: true, turns: [], log: [], busy: false, error: null };
 	}
 
-	/** Målet i passmallen för den ursprungliga övningen på den här platsen. */
+	/** The template target for the original exercise in this slot. */
 	function templateTarget(exerciseId: string) {
 		const original = session?.deviations.find((d) => d.to === exerciseId)?.from ?? exerciseId;
 		return data.workout.exercises.find((e) => e.exerciseId === original)?.target;
@@ -164,7 +164,7 @@
 				swappedIn.push(to);
 				change((s) => applySwap(s, from, to, target));
 				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
-				// Hjälpen följer med till den nya övningen.
+				// The helper thread follows along to the new exercise.
 				help[to.id] = state;
 				delete help[from];
 			}
@@ -192,8 +192,8 @@
 	const summary = $derived(session && mode === 'finish' ? summarize(session, infos) : null);
 
 	/**
-	 * Övningar där dagens bästa set eller tyngsta vikt slår allt tidigare
-	 * (första gången räknas inte), som text, t.ex. "1RM 55 kg, tyngsta vikt 50 kg".
+	 * Exercises where today's best set or heaviest weight beats everything before
+	 * (the first time doesn't count), as text, e.g. "1RM 55 kg, tyngsta vikt 50 kg".
 	 */
 	const records = $derived.by(() => {
 		const found = new Map<string, string>();
@@ -233,7 +233,7 @@
 					body: JSON.stringify(body)
 				});
 			} catch (e) {
-				// Inget nät: lägg passet i kön, det skickas när nätet är tillbaka.
+				// Offline: queue the session, it is sent when the network is back.
 				const userId = page.data.userId as string | null;
 				const key = pendingKey(session.sessionId, session.startedAt);
 				if (isNetworkError(e) && userId && queueSave({ key, userId, workoutName: data.workout.name, body })) {
@@ -247,7 +247,7 @@
 				const body = await res.json().catch(() => null);
 				throw new Error(body?.message ?? `Servern svarade ${res.status}`);
 			}
-			// Först när servern bekräftat rensas det lokala passet.
+			// The local session is cleared only after the server has confirmed.
 			clearActiveSession();
 			await goto('/', { invalidateAll: true });
 		} catch (e) {

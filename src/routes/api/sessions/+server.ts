@@ -4,7 +4,7 @@ import { parseSaveSessionInput, saveSession } from '$lib/server/data';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
-/** Sparar ett avslutat pass. Klienten rensar localStorage först när detta svarat OK. */
+/** Saves a finished session. The client clears localStorage only after this responds OK. */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
 	const body = await request.json().catch(() => error(400, 'Ogiltig JSON'));

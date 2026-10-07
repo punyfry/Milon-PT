@@ -23,7 +23,7 @@
 	}
 	const volumeText = (v: number) =>
 		ex.type === 'weight' ? `${formatNumber(v)} kg` : ex.type === 'time' ? formatSeconds(v) : `${v} reps`;
-	/** "Rekord", "Rekord: tyngsta vikt" eller "Rekord: 1RM och tyngsta vikt". */
+	/** "Rekord", "Rekord: tyngsta vikt" or "Rekord: 1RM och tyngsta vikt". */
 	function recordLabel(kinds: string[]) {
 		if (ex.type !== 'weight') return 'Rekord';
 		const names = kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM'));

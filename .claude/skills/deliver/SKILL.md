@@ -42,7 +42,7 @@ Start both subagents in the same message so they run at the same time:
 - `gregory`: give it the branch/PR number and what the change is meant to do, and point it at the risky parts of this particular change.
 - `nissa`: give it the branch, the affected functionality and what test data is available.
 
-While they run, wait for CI (the GitHub Actions check **Typkontroll, tester och bygge**, CodeQL and Vercel).
+While they run, wait for CI (the GitHub Actions check **Check, test and build**, CodeQL and Vercel).
 
 ## 6. Handle findings
 

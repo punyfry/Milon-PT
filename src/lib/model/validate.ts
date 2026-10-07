@@ -13,9 +13,9 @@ import type {
 } from './types';
 
 /**
- * Handskrivna validerare för datamodellen. Varje validerare samlar fel med
- * sökväg (t.ex. `exercises[2].log[0].sets[1].reps`) i stället för att stanna
- * vid det första, så importfilen kan rättas i ett svep.
+ * Hand-written validators for the data model. Each validator collects issues
+ * with a path (e.g. `exercises[2].log[0].sets[1].reps`) instead of stopping at
+ * the first, so an import file can be fixed in one go.
  */
 export class Issues {
 	readonly list: string[] = [];
@@ -37,7 +37,7 @@ export class ValidationError extends Error {
 	}
 }
 
-/** Kör en validerare och kastar `ValidationError` om något är fel. */
+/** Runs a validator and throws `ValidationError` on any issue. */
 export function assertValid<T>(
 	what: string,
 	value: unknown,
@@ -49,7 +49,7 @@ export function assertValid<T>(
 	return result;
 }
 
-// --- primitiver ---------------------------------------------------------
+// --- primitives ---------------------------------------------------------
 
 type Obj = Record<string, unknown>;
 
@@ -97,7 +97,7 @@ const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-/** Ett datum YYYY-MM-DD som finns i kalendern (inte t.ex. 2024-02-30). */
+/** A YYYY-MM-DD date that exists in the calendar (not e.g. 2024-02-30). */
 export function isCalendarDate(v: string): boolean {
 	if (!DATE.test(v)) return false;
 	const d = new Date(`${v}T12:00:00Z`);
@@ -124,7 +124,7 @@ function id(o: Obj, key: string, issues: Issues, path: string): string | undefin
 	return v;
 }
 
-// --- modellen -----------------------------------------------------------
+// --- the model -----------------------------------------------------------
 
 export const EXERCISE_TYPES: readonly ExerciseType[] = ['weight', 'bodyweight', 'time'];
 export const LOAD_CLASSES: readonly LoadClass[] = ['light', 'heavy'];
@@ -137,7 +137,7 @@ export function isLoadClass(v: unknown): v is LoadClass {
 	return LOAD_CLASSES.includes(v as LoadClass);
 }
 
-/** Validerar ett set mot övningstypen och returnerar det utan extra fält. */
+/** Validates a set against the exercise type and returns it without extra fields. */
 export function validateSet(v: unknown, type: ExerciseType, issues: Issues, path: string): ExerciseSet | null {
 	if (!isObject(v)) {
 		issues.add(path, 'måste vara ett objekt');
@@ -227,7 +227,7 @@ export function validateTarget(v: unknown, issues: Issues, path: string): Target
 	return reps === undefined ? null : { reps };
 }
 
-/** Mål i reps för weight/bodyweight, sekunder för time. */
+/** Target in reps for weight/bodyweight, seconds for time. */
 export function targetMatchesType(target: Target, type: ExerciseType): boolean {
 	return type === 'time' ? 'seconds' in target : 'reps' in target;
 }
@@ -359,7 +359,7 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 
 const KCAL_TYPES = ['strength', 'hiit'] as const;
 
-/** { strength: { min, max }, hiit: { min, max } }, båda valfria. */
+/** { strength: { min, max }, hiit: { min, max } }, both optional. */
 export function validateKcalEstimates(v: unknown, issues: Issues, path: string): Profile['kcalEstimates'] | null {
 	if (!isObject(v)) {
 		issues.add(path, 'måste vara ett objekt');

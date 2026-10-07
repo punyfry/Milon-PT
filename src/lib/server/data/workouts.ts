@@ -9,7 +9,7 @@ import { StorageConflictError, type StoredJson, type UserStorage } from '../stor
 
 const DIR = 'workouts/';
 
-/** Alla versioner per slug, sorterade stigande. */
+/** All versions per slug, sorted ascending. */
 export async function listWorkoutVersions(storage: UserStorage): Promise<Map<string, number[]>> {
 	const files = await storage.list(DIR);
 	const bySlug = new Map<string, number[]>();
@@ -32,14 +32,14 @@ export async function getWorkout(
 	return { data: assertValid(`pass ${slug} v${version}`, file.data, validateWorkout), version: file.version };
 }
 
-/** Senaste versionen av ett pass, eller null om passet inte finns. */
+/** Latest version of a workout, or null if it doesn't exist. */
 export async function getLatestWorkout(storage: UserStorage, slug: string): Promise<WorkoutTemplate | null> {
 	const versions = (await listWorkoutVersions(storage)).get(slug);
 	if (!versions?.length) return null;
 	return (await getWorkout(storage, slug, versions[versions.length - 1]))?.data ?? null;
 }
 
-/** Senaste versionen av varje pass. Nyaste = högsta `version` för samma slug. */
+/** Latest version of each workout (highest `version` per slug). */
 export async function listLatestWorkouts(storage: UserStorage): Promise<WorkoutTemplate[]> {
 	const bySlug = await listWorkoutVersions(storage);
 	const latest = await Promise.all(
@@ -49,9 +49,9 @@ export async function listLatestWorkouts(storage: UserStorage): Promise<WorkoutT
 }
 
 /**
- * Sparar en ny version av ett pass. Äldre versioner ligger kvar orörda.
- * Versionsnumret räknas ut här, och filen skrivs med `createOnly` så två
- * samtidiga sparningar inte kan skriva över varandra.
+ * Saves a new version of a workout; older versions are left untouched.
+ * The version number is computed here and the file is written with
+ * `createOnly`, so two concurrent saves can't overwrite each other.
  */
 export async function saveWorkoutVersion(
 	storage: UserStorage,

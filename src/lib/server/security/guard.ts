@@ -3,7 +3,7 @@ import { isAllowedEmail } from '$lib/server/allowlist';
 
 const PUBLIC_PATHS = ['/login', '/auth/'];
 
-/** `/login` och allt under `/login/` och `/auth/`, men inte t.ex. `/login-x`. */
+/** `/login` and everything under `/login/` and `/auth/`, but not e.g. `/login-x`. */
 export function isPublic(pathname: string): boolean {
 	return PUBLIC_PATHS.some((p) => (p.endsWith('/') ? pathname.startsWith(p) : pathname === p || pathname.startsWith(`${p}/`)));
 }

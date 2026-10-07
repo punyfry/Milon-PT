@@ -7,7 +7,7 @@ import { SECURITY_HEADERS, securityHeaders } from './headers';
 
 type Session = { user?: { id?: string; email?: string | null; name?: string | null } } | null;
 
-/** Kör vakten för en sökväg och en session. Returnerar svaret eller det som kastades. */
+/** Runs the guard for a path and a session. Returns the response or whatever was thrown. */
 async function guard(pathname: string, session: Session) {
 	const locals = { auth: async () => session, user: undefined } as unknown as App.Locals;
 	const event = { url: new URL(`https://milon.test${pathname}`), locals };
@@ -27,14 +27,14 @@ afterEach(() => {
 });
 
 describe('allowlist', () => {
-	it('släpper inte in någon när listan saknas eller är tom', () => {
+	it('lets nobody in when the list is missing or empty', () => {
 		expect(allowedEmails().size).toBe(0);
 		expect(isAllowedEmail('sofie@example.com')).toBe(false);
 		env.ALLOWED_EMAILS = ' , ';
 		expect(isAllowedEmail('sofie@example.com')).toBe(false);
 	});
 
-	it('jämför utan hänsyn till skiftläge och blanksteg', () => {
+	it('compares ignoring case and whitespace', () => {
 		env.ALLOWED_EMAILS = ' Sofie@Example.com ,annan@example.com';
 		expect(isAllowedEmail('sofie@example.com')).toBe(true);
 		expect(isAllowedEmail(' SOFIE@example.COM ')).toBe(true);
@@ -43,37 +43,37 @@ describe('allowlist', () => {
 	});
 });
 
-describe('inloggningsvakten', () => {
+describe('login guard', () => {
 	const user = { id: '116464423308083623377', email: 'sofie@example.com', name: 'Sofie' };
 
-	it('svarar 401 på API och omdirigerar sidor utan session', async () => {
+	it('answers 401 on the API and redirects pages without a session', async () => {
 		const api = await guard('/api/sessions', null);
 		expect(isHttpError(api.thrown) && api.thrown.status).toBe(401);
 		const page = await guard('/historik', null);
 		expect(isRedirect(page.thrown) && [page.thrown.status, page.thrown.location]).toEqual([303, '/login']);
 	});
 
-	it('stänger ute en adress som inte står på listan, även med giltig session', async () => {
+	it('locks out an address not on the list, even with a valid session', async () => {
 		env.ALLOWED_EMAILS = 'annan@example.com';
 		const result = await guard('/api/import', { user });
 		expect(isHttpError(result.thrown) && result.thrown.status).toBe(401);
 		expect(result.locals.user).toBeNull();
 	});
 
-	it('kräver både id och e-post', async () => {
+	it('requires both id and e-mail', async () => {
 		env.ALLOWED_EMAILS = user.email;
 		expect(isHttpError((await guard('/api/x', { user: { email: user.email } })).thrown)).toBe(true);
 		expect(isHttpError((await guard('/api/x', { user: { id: user.id } })).thrown)).toBe(true);
 	});
 
-	it('släpper in en tillåten användare och sätter locals.user', async () => {
+	it('lets an allowed user in and sets locals.user', async () => {
 		env.ALLOWED_EMAILS = user.email;
 		const result = await guard('/', { user });
 		expect(await result.response?.text()).toBe('ok');
 		expect(result.locals.user).toEqual(user);
 	});
 
-	it('låter inloggningssidan och Auth.js vara öppna, men inget som bara liknar dem', async () => {
+	it('keeps the login page and Auth.js open, but nothing that merely resembles them', async () => {
 		for (const path of ['/login', '/auth/signin/google', '/auth/callback/google']) {
 			expect(isPublic(path), path).toBe(true);
 			expect((await guard(path, null)).response?.status, path).toBe(200);
@@ -84,8 +84,8 @@ describe('inloggningsvakten', () => {
 	});
 });
 
-describe('säkerhetsheaders', () => {
-	it('sätts på svaren', async () => {
+describe('security headers', () => {
+	it('are set on responses', async () => {
 		const response = await securityHeaders({
 			event: {} as never,
 			resolve: async () => new Response('ok')
@@ -93,7 +93,7 @@ describe('säkerhetsheaders', () => {
 		for (const [name, value] of Object.entries(SECURITY_HEADERS)) expect(response.headers.get(name), name).toBe(value);
 	});
 
-	it('klarar svar med låsta headers', async () => {
+	it('handles responses with immutable headers', async () => {
 		const locked = Response.redirect('https://milon.test/login', 303);
 		await expect(securityHeaders({ event: {} as never, resolve: async () => locked })).resolves.toBe(locked);
 	});

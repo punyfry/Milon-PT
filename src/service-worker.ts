@@ -3,11 +3,10 @@
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
 /**
- * Enkelt offlinestöd. Appens filer cachas vid installation. Sidor och
- * sidornas data hämtas från nätet i första hand och sparas, så att det du
- * redan öppnat fungerar utan nät. API-anrop och inloggning går alltid mot
- * nätet. Hamnar man på inloggningssidan töms de sparade sidorna, så att
- * inget ligger kvar efter utloggning.
+ * Simple offline support. App files are cached on install. Pages and their
+ * data are fetched network-first and cached, so pages you have already opened
+ * work offline. API calls and login always go to the network. Landing on the
+ * login page clears the cached pages, so nothing is left after sign-out.
  */
 import { build, files, version } from '$service-worker';
 
@@ -26,8 +25,8 @@ sw.addEventListener('install', (event) => {
 });
 
 sw.addEventListener('activate', (event) => {
-	// Sparade sidor pekar på den förra versionens filer, så de slängs när
-	// en ny version tar över.
+	// Cached pages point to the previous version's files, so they are dropped
+	// when a new version takes over.
 	event.waitUntil(
 		caches
 			.keys()
@@ -61,7 +60,7 @@ async function networkFirst(request: Request, isPage: boolean): Promise<Response
 		const response = await fetch(request);
 		const path = new URL(response.url || request.url).pathname;
 		if (path === '/login' || path.startsWith('/login/')) {
-			// Utloggad: släng allt som sparats för den inloggade användaren.
+			// Signed out: drop everything cached for the signed-in user.
 			await caches.delete(PAGES);
 		} else if (response.ok && !response.redirected) {
 			await cache.put(request, response.clone());

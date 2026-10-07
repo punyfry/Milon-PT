@@ -8,8 +8,8 @@ import type { RequestHandler } from './$types';
 const MAX_BYTES = 1_000_000;
 
 /**
- * Import från Craft för den inloggade användaren: { data, apply }.
- * Utan `apply` görs en torrkörning som bara visar planen.
+ * Import from Craft for the signed-in user: { data, apply }.
+ * Without `apply` it is a dry run that only shows the plan.
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);

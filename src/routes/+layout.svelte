@@ -24,7 +24,7 @@
 		--on-accent: #ffffff;
 		--danger: #b3261e;
 		--done: #e3f1e8;
-		/* Seriefärg för diagram, validerad mot ytan (dataviz-validatorn). */
+		/* Chart series color, validated against the surface (dataviz validator). */
 		--series: #1f8a5b;
 		--radius: 14px;
 		color-scheme: light;
@@ -58,7 +58,7 @@
 	:global(main) {
 		max-width: 40rem;
 		margin: 0 auto;
-		/* Säkerhetsmarginaler för notch och hemindikator när appen körs från hemskärmen. */
+		/* Safe-area insets for the notch and home indicator when run from the home screen. */
 		padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
 			calc(4rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 	}

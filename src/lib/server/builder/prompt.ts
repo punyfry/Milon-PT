@@ -1,6 +1,6 @@
 import type { Exercise, Profile, Target, WorkoutTemplate } from '../../model';
 
-/** Systemprompten för pass-byggaren, med kontexten ifylld. Prompten bor här, inte i dokumentationen. */
+/** System prompt for the workout builder, with the context filled in. The prompt lives here, not in the docs. */
 const TEMPLATE = `Du är Milon, en personlig tränare. Du hjälper användaren att bygga och justera träningspass genom att diskutera fram övningar, som två personer i ett samtal. Svara på svenska, kort och praktiskt. Användaren har grundkunskap i träning, så hoppa över överförklaringar.
 
 Användarens mål och regler:
@@ -49,13 +49,13 @@ export function formatWorkout(workout: WorkoutTemplate | null, names: ReadonlyMa
 }
 
 /**
- * Bygger systemprompten. Den fryses när konversationen startar, så att
- * tidigare turer aldrig ändras i efterhand; nya övningar under samtalet når
- * modellen via verktygssvaren i stället.
+ * Builds the system prompt. It is frozen when the conversation starts so
+ * earlier turns never change afterwards; new exercises created during the
+ * conversation reach the model through tool results instead.
  */
 export function buildSystemPrompt(profile: Profile, exercises: readonly Exercise[], workout: WorkoutTemplate | null): string {
 	const names = new Map(exercises.map((e) => [e.id, e.name]));
-	// Funktionsersättning, så att t.ex. "$&" i profiltexten inte tolkas.
+	// Replacer function, so that e.g. "$&" in the profile text is not interpreted.
 	return TEMPLATE.replace('{{goals_and_rules}}', () => formatGoalsAndRules(profile))
 		.replace('{{exercise_catalog}}', () => formatCatalog(exercises))
 		.replace('{{current_workout}}', () => formatWorkout(workout, names));

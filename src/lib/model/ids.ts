@@ -15,7 +15,7 @@ export function exerciseIdBase(name: string): string {
 	return `ex_${slug || 'ovning'}`;
 }
 
-/** Lägger till `_2`, `_3`, … tills id:t är ledigt. */
+/** Appends `_2`, `_3`, … until the id is free. */
 export function uniqueId(base: string, taken: ReadonlySet<string>, sep = '_'): string {
 	if (!taken.has(base)) return base;
 	for (let n = 2; ; n++) {
@@ -24,12 +24,12 @@ export function uniqueId(base: string, taken: ReadonlySet<string>, sep = '_'): s
 	}
 }
 
-/** "2026-10-06" → "s_20261006", med suffix om flera pass samma dag. */
+/** "2026-10-06" → "s_20261006", with a suffix for several sessions on the same day. */
 export function sessionIdFor(date: string, taken: ReadonlySet<string>): string {
 	return uniqueId(`s_${date.replaceAll('-', '')}`, taken);
 }
 
-/** Jämförelsenyckel för övningsnamn: skiftläge och blanksteg spelar ingen roll. */
+/** Comparison key for exercise names: ignores case and whitespace. */
 export function normalizeName(name: string): string {
 	return name.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('sv');
 }

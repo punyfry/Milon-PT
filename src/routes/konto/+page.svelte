@@ -6,7 +6,7 @@
 
 	let storageStatus = $state<string | null>(null);
 
-	// --- import från Craft ---------------------------------------------------
+	// --- import from Craft ---------------------------------------------------
 	let importData = $state<unknown>(null);
 	let importFile = $state('');
 	let importResult = $state<{ applied: boolean; writes: number; summary: string[] } | null>(null);

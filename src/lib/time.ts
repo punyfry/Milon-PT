@@ -1,9 +1,9 @@
-/** Dagens datum (YYYY-MM-DD) i svensk tid, oavsett serverns tidszon. */
+/** Today's date (YYYY-MM-DD) in Swedish time, regardless of the server's time zone. */
 export function todayInStockholm(now = new Date()): string {
 	return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' }).format(now);
 }
 
-/** Tidszonsförskjutningen i Stockholm ett visst datum, t.ex. "+02:00" (sommartid) eller "+01:00". */
+/** Stockholm UTC offset on a given date, e.g. "+02:00" (summer time) or "+01:00". */
 export function stockholmOffset(date: string): string {
 	const part = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Stockholm', timeZoneName: 'longOffset' })
 		.formatToParts(new Date(`${date}T12:00:00Z`))

@@ -6,7 +6,7 @@ import { createExercise } from '../data/exercises';
 import type { UserStorage } from '../storage/types';
 
 const nullableEnum = (values: string[], description?: string) => ({
-	// Strikta verktyg godtar inte enum ihop med type-listan ['string', 'null'], så null uttrycks med anyOf.
+	// Strict tools don't accept enum with the type array ['string', 'null'], so null is expressed with anyOf.
 	anyOf: [{ type: 'string', enum: values }, { type: 'null' }],
 	...(description ? { description } : {})
 });
@@ -65,8 +65,8 @@ export function toInfo(e: Exercise): ExerciseInfo {
 export type SwapOutcome = { ok: true; from: string; to: ExerciseInfo; created: boolean } | { ok: false; error: string };
 
 /**
- * Kontrollerar ett byte och skapar vid behov den nya övningen. Själva bytet
- * i passet görs av klienten, eftersom passet lever i localStorage.
+ * Validates a swap and creates the new exercise if needed. The swap itself
+ * is done by the client, since the session lives in localStorage.
  */
 export async function executeSwap(
 	storage: UserStorage,

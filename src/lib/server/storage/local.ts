@@ -11,9 +11,9 @@ import {
 } from './types';
 
 /**
- * Lagring i lokala filer under `.data/`. Används bara i dev när
- * `BLOB_READ_WRITE_TOKEN` saknas, så appen går att köra lokalt utan Blob.
- * Samma semantik som Blob-implementationen.
+ * Storage in local files under `.data/`. Only used in dev when
+ * `BLOB_READ_WRITE_TOKEN` is missing, so the app runs locally without Blob.
+ * Same semantics as the Blob implementation.
  */
 export class LocalFileUserStorage implements UserStorage {
 	readonly userId: string;

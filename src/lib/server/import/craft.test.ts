@@ -15,8 +15,8 @@ async function runImport(storage: MemoryUserStorage, raw: unknown) {
 	return plan;
 }
 
-describe('import från Craft', () => {
-	it('importerar exempelfilen till tom lagring', async () => {
+describe('import from Craft', () => {
+	it('imports the example file into empty storage', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const plan = await runImport(storage, example);
 		expect(plan.exercises.map((p) => [p.action, p.exercise.id])).toEqual([
@@ -29,7 +29,7 @@ describe('import från Craft', () => {
 		expect(workout.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft', 'ex_plankan', 'ex_pull_up']);
 	});
 
-	it('är idempotent när samma fil körs igen', async () => {
+	it('is idempotent when the same file is run again', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await runImport(storage, example);
 		const second = await runImport(storage, example);
@@ -38,7 +38,7 @@ describe('import från Craft', () => {
 		expect((await storage.list('workouts/')).length).toBe(1);
 	});
 
-	it('matchar befintliga övningar på namn och slår ihop loggen', async () => {
+	it('matches existing exercises by name and merges the log', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await createExercise(storage, {
 			name: 'marklyft',
@@ -66,7 +66,7 @@ describe('import från Craft', () => {
 		expect(ex.log.map((l) => l.date)).toEqual(['2026-10-03', '2026-10-01', '2026-09-29']);
 	});
 
-	it('skapar en ny passversion när innehållet ändrats', async () => {
+	it('creates a new workout version when the content changed', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await runImport(storage, example);
 		const changed = structuredClone(example);
@@ -76,7 +76,7 @@ describe('import från Craft', () => {
 		expect((await storage.list('workouts/')).length).toBe(2);
 	});
 
-	it('kan referera till övningar som bara finns i appen', async () => {
+	it('can reference exercises that only exist in the app', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await createExercise(storage, { name: 'Axelpress', type: 'weight', loadClass: 'light', instruction: '' });
 		await saveWorkoutVersion(storage, { slug: 'pass-c', name: 'Pass C', createdAt: TODAY, exercises: [] });
@@ -86,7 +86,7 @@ describe('import från Craft', () => {
 		expect(plan.workouts[0]).toMatchObject({ action: 'new-version', workout: { version: 2 } });
 	});
 
-	it('sätter loadClass light med varning när den saknas', async () => {
+	it('sets loadClass light with a warning when missing', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const plan = await runImport(storage, {
 			exercises: [{ name: 'Bicepscurl', type: 'weight', log: [] }]
@@ -95,7 +95,7 @@ describe('import från Craft', () => {
 		expect(plan.warnings).toHaveLength(1);
 	});
 
-	it('samlar alla fel i filen och skriver ingenting', async () => {
+	it('collects all errors in the file and writes nothing', async () => {
 		const bad = {
 			exercises: [
 				{ name: 'Marklyft', type: 'weight', log: [{ date: '29/9', sets: [{ reps: 8 }] }] },
@@ -117,7 +117,7 @@ describe('import från Craft', () => {
 		}
 	});
 
-	it('stoppar okända övningar, fel måltyp och typkrockar före skrivning', async () => {
+	it('stops unknown exercises, wrong target type and type clashes before writing', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 		const input = parseImportFile({
@@ -143,7 +143,7 @@ describe('import från Craft', () => {
 	});
 });
 
-describe('import med profil, anteckningar och pass', () => {
+describe('import with profile, notes and sessions', () => {
 	const full = {
 		profile: {
 			goals: ['Klara en pull-up', 'Stå på händerna'],
@@ -179,7 +179,7 @@ describe('import med profil, anteckningar och pass', () => {
 		]
 	};
 
-	it('skapar profil, sessioner och kopplar loggposterna till sina pass', async () => {
+	it('creates profile and sessions and links log entries to their sessions', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const plan = await runImport(storage, full);
 		expect(plan.profile).toMatchObject({ action: 'create', changes: ['mål', '1 regler', 'kcal för styrka', 'kcal för HIIT'] });
@@ -197,12 +197,12 @@ describe('import med profil, anteckningar och pass', () => {
 		const marklyft = (await getExercise(storage, 'ex_marklyft'))!.data;
 		expect(marklyft.log[0]).toEqual({ sessionId: 's_20260929', date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' });
 		expect(marklyft.log[1].sessionId).toBe('s_20260921');
-		// Dag utan pass i filen: ingen koppling.
+		// Day without a session in the file: no link.
 		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ archived: true, log: [{ date: '2026-09-27' }] });
 		expect((await getExercise(storage, 'ex_wheel_out'))!.data.log[0].sessionId).toBeUndefined();
 	});
 
-	it('är idempotent och skriver aldrig över befintlig profil', async () => {
+	it('is idempotent and never overwrites an existing profile', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await saveProfile(storage, { goals: 'Mina egna mål', rules: ['Tränar kvällar'], weeklySessionGoal: 3 });
 		const first = await runImport(storage, full);
@@ -215,7 +215,7 @@ describe('import med profil, anteckningar och pass', () => {
 		expect((await listSessions(storage)).length).toBe(2);
 	});
 
-	it('kompletterar befintliga loggposter med anteckning och passkoppling', async () => {
+	it('enriches existing log entries with note and session link', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await runImport(storage, { exercises: [{ ...full.exercises[0], log: full.exercises[0].log.map((e) => ({ date: e.date, sets: e.sets })) }] });
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBeUndefined();
@@ -227,7 +227,7 @@ describe('import med profil, anteckningar och pass', () => {
 		expect(log[0]).toMatchObject({ note: 'Marginal kvar', sessionId: 's_20260929' });
 	});
 
-	it('ger andra passet samma dag ett eget id och undviker krock med befintliga pass', async () => {
+	it('gives the second session on the same day its own id and avoids clashing with existing sessions', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await runImport(storage, { ...full, sessions: [] });
 		await createSession(storage, {
@@ -243,7 +243,7 @@ describe('import med profil, anteckningar och pass', () => {
 		expect(plan.sessions.map((s) => s.session.id)).toEqual(['s_20260921', 's_20260929_2']);
 	});
 
-	it('återanvänder samma pass samma dag som redan loggats i appen', async () => {
+	it('reuses a session on the same day already logged in the app', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await runImport(storage, { ...full, sessions: [] });
 		await createSession(storage, {
@@ -264,7 +264,7 @@ describe('import med profil, anteckningar och pass', () => {
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sessionId).toBe('s_20260929');
 	});
 
-	it('ignorerar sessions-id i filen och skriver sessionerna först', async () => {
+	it('ignores session ids in the file and writes sessions first', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const written: string[] = [];
 		const write = storage.writeJson.bind(storage);
@@ -278,27 +278,27 @@ describe('import med profil, anteckningar och pass', () => {
 		expect(written.slice(0, 2).every((p) => p.startsWith('sessions/'))).toBe(true);
 	});
 
-	it('avvisar datum som inte finns', () => {
+	it('rejects dates that do not exist', () => {
 		expect(() => parseImportFile({ sessions: [{ date: '2025-02-29', workout: 'Pass A' }] })).toThrow(/sessions\[0\]\.date/);
 		expect(() =>
 			parseImportFile({ exercises: [{ name: 'X', type: 'bodyweight', instruction: '', log: [{ date: '2026-04-31', sets: [{ reps: 1 }] }] }] })
 		).toThrow(/date/);
 	});
 
-	it('stoppar pass som pekar på okänt pass och felaktig profil', () => {
+	it('stops sessions with invalid fields and an invalid profile', () => {
 		expect(() => parseImportFile({ profile: { goals: [1], kcalEstimates: { yoga: { min: 1, max: 2 } } } })).toThrow(
 			/profile\.goals[\s\S]*profile\.kcalEstimates\.yoga/
 		);
 		expect(() => parseImportFile({ sessions: [{ date: '29/9', workout: '' }] })).toThrow(/sessions\[0\]\.date[\s\S]*sessions\[0\]\.workout/);
 	});
 
-	it('avvisar en session för ett pass som inte finns', async () => {
+	it('rejects a session for a workout that does not exist', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const input = parseImportFile({ sessions: [{ date: '2026-09-29', workout: 'Pass X' }] });
 		await expect(planImportFor(storage, input, TODAY)).rejects.toThrow(/Pass X/);
 	});
 
-	it('föreslår kcal per pass, per passtyp och annars standard', () => {
+	it('suggests kcal per workout, per workout type, otherwise the default', () => {
 		const profile = { kcalEstimates: { strength: { min: 250, max: 350 }, hiit: { min: 300, max: 450 } }, kcalPerWorkout: { 'pass-b': 280 } };
 		expect(kcalSuggestion(profile, { slug: 'pass-b', name: 'Pass B' })).toBe(280);
 		expect(kcalSuggestion(profile, { slug: 'pass-a', name: 'Pass A' })).toBe(300);

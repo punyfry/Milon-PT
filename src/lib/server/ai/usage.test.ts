@@ -7,8 +7,8 @@ import type { CreateMessage } from './models';
 import { AiLimitError, DEFAULT_DAILY_LIMIT, consumeAiCall, dailyLimit, remainingAiCalls } from './usage';
 import { vi } from 'vitest';
 
-describe('daglig AI-gräns', () => {
-	it('läser gränsen ur miljövariabeln', () => {
+describe('daily AI limit', () => {
+	it('reads the limit from the environment variable', () => {
 		expect(dailyLimit(undefined)).toBe(DEFAULT_DAILY_LIMIT);
 		expect(dailyLimit('')).toBe(DEFAULT_DAILY_LIMIT);
 		expect(dailyLimit('abc')).toBe(DEFAULT_DAILY_LIMIT);
@@ -18,7 +18,7 @@ describe('daglig AI-gräns', () => {
 		expect(dailyLimit('0')).toBe(0);
 	});
 
-	it('räknar per dag och stoppar vid gränsen', async () => {
+	it('counts per day and stops at the limit', async () => {
 		const storage = new MemoryUserStorage('u1');
 		expect(await consumeAiCall(storage, '2026-10-07', 2)).toBe(1);
 		expect(await consumeAiCall(storage, '2026-10-07', 2)).toBe(2);
@@ -27,7 +27,7 @@ describe('daglig AI-gräns', () => {
 		await expect(consumeAiCall(storage, '2026-10-07', 0).catch((e) => e.message)).resolves.toMatch(/gräns/);
 	});
 
-	it('räknar rätt när flera anrop kommer samtidigt', async () => {
+	it('counts correctly when several calls arrive at once', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const results = await Promise.allSettled(Array.from({ length: 4 }, () => consumeAiCall(storage, '2026-10-07', 10)));
 		const counts = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
@@ -37,8 +37,8 @@ describe('daglig AI-gräns', () => {
 	});
 });
 
-describe('räkning per Claude-anrop', () => {
-	it('räknar varje anrop och stoppar innan Claude anropas när gränsen är nådd', async () => {
+describe('counting per Claude call', () => {
+	it('counts every call and stops before calling Claude when the limit is reached', async () => {
 		env.AI_DAILY_LIMIT = '2';
 		const storage = new MemoryUserStorage('u1');
 		const inner = vi.fn(async () => ({}) as never) as unknown as CreateMessage;
@@ -50,7 +50,7 @@ describe('räkning per Claude-anrop', () => {
 		delete env.AI_DAILY_LIMIT;
 	});
 
-	it('visar hur många som återstår utan att räkna', async () => {
+	it('reports how many are left without counting', async () => {
 		const storage = new MemoryUserStorage('u1');
 		expect(await remainingAiCalls(storage, '2026-10-07', 3)).toBe(3);
 		await consumeAiCall(storage, '2026-10-07', 3);
@@ -58,7 +58,7 @@ describe('räkning per Claude-anrop', () => {
 		expect(await remainingAiCalls(storage, '2026-10-07', 3)).toBe(2);
 	});
 
-	it('rensar räknare äldre än 30 dagar när en ny dag börjar', async () => {
+	it('prunes counters older than 30 days when a new day starts', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await consumeAiCall(storage, '2026-08-01', 5);
 		await consumeAiCall(storage, '2026-09-20', 5);

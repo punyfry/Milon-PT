@@ -1,8 +1,8 @@
 /**
- * Enkel markdown för chattsvar: stycken, radbrytningar, punkt- och
- * numrerade listor, rubriker (visas som fet rad), **fet**, *kursiv* och
- * `kod`. Resultatet är data som renderas som vanliga element, aldrig HTML,
- * så modellens text kan inte injicera något.
+ * Simple markdown for chat replies: paragraphs, line breaks, bulleted and
+ * numbered lists, headings (shown as a bold line), **bold**, *italic* and
+ * `code`. The result is data rendered as plain elements, never HTML, so the
+ * model's text cannot inject anything.
  */
 
 export interface Span {
@@ -12,7 +12,7 @@ export interface Span {
 	code?: boolean;
 }
 
-/** En rad text. */
+/** A line of text. */
 export type Line = Span[];
 
 export type Block =
@@ -29,7 +29,7 @@ const HEADING = /^\s*#{1,6}\s+(.*)$/;
 export function parseMarkdown(text: string): Block[] {
 	const blocks: Block[] = [];
 	let current = null as Block | null;
-	/** Tom rad efter en lista: listan fortsätter bara om nästa rad är en punkt av samma slag. */
+	/** Blank line after a list: the list only continues if the next line is an item of the same kind. */
 	let gap = false;
 	const flush = () => {
 		if (current) blocks.push(current);
@@ -68,7 +68,7 @@ export function parseMarkdown(text: string): Block[] {
 				current = { type: 'ol', items: [item], start: Number(numbered[1]) };
 			}
 		} else if (!wasGap && (current?.type === 'ul' || current?.type === 'ol') && /^\s+\S/.test(raw)) {
-			// Indragen fortsättningsrad hör till föregående punkt.
+			// An indented continuation line belongs to the previous item.
 			const last = current.items[current.items.length - 1];
 			last.push({ text: ' ' }, ...parseInline(raw.trim()));
 		} else if (rule) {
@@ -84,7 +84,7 @@ export function parseMarkdown(text: string): Block[] {
 	return blocks;
 }
 
-/** **fet**, __fet__, *kursiv*, _kursiv_ och `kod`. Omatchade tecken visas som de är. */
+/** **bold**, __bold__, *italic*, _italic_ and `code`. Unmatched characters are shown as is. */
 export function parseInline(text: string): Line {
 	const spans: Line = [];
 	const re = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|__(.+?)__|(?<![\p{L}\p{N}*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])_(?!\s)([^_]+?)(?<!\s)_(?![\p{L}\p{N}])/gu;

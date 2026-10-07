@@ -1,22 +1,22 @@
 /**
- * Pass som inte kunde sparas för att nätet saknades. De ligger i
- * localStorage och skickas igen när nätet kommer tillbaka. Servern känner
- * igen ett pass som redan sparats (samma id och starttid), så ett nytt
- * försök kan aldrig ge dubbletter.
+ * Sessions that could not be saved because the network was down. They stay
+ * in localStorage and are resent when the network comes back. The server
+ * recognises a session that is already saved (same id and start time), so a
+ * retry can never create duplicates.
  */
 const KEY = 'milonpt.pendingSaves';
-/** Skickas på window när kön ändras, så att rutan uppdateras direkt. */
+/** Dispatched on window when the queue changes, so the panel updates right away. */
 export const OUTBOX_EVENT = 'milonpt-outbox';
 
 export interface PendingSave {
-	/** Unik per pass: sessions-id plus starttid (id:t är bara datumet). */
+	/** Unique per session: session id plus start time (the id is only the date). */
 	key: string;
-	/** Kontot passet tillhör; skickas bara när samma konto är inloggat. */
+	/** The account the session belongs to; only sent when that account is logged in. */
 	userId: string;
 	workoutName: string;
-	/** Det som skickas till POST /api/sessions. */
+	/** The body sent to POST /api/sessions. */
 	body: unknown;
-	/** Senaste felet från servern, om den svarat med fel. */
+	/** Latest error from the server, if it responded with one. */
 	error?: string;
 }
 
@@ -31,7 +31,7 @@ function readAll(): PendingSave[] {
 	}
 }
 
-/** Köade pass för kontot. */
+/** Queued sessions for the account. */
 export function pendingSaves(userId: string | null): PendingSave[] {
 	return userId ? readAll().filter((p) => p.userId === userId) : [];
 }
@@ -47,28 +47,28 @@ function write(list: PendingSave[]): boolean {
 	}
 }
 
-/** Lägger passet i kön. Ger false om localStorage inte går att skriva. */
+/** Queues the session. Returns false if localStorage cannot be written. */
 export function queueSave(save: PendingSave): boolean {
 	return write([...readAll().filter((p) => p.key !== save.key), save]);
 }
 
-/** Ett fel som beror på nätet (inte på servern). */
+/** An error caused by the network (not the server). */
 export function isNetworkError(e: unknown): boolean {
 	return e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
 }
 
 let flushing: Promise<PendingSave[]> | null = null;
 
-/** Kör `fn` med ett lås över alla flikar när webbläsaren stöder det. */
+/** Runs `fn` under a lock across all tabs when the browser supports it. */
 function withLock<T>(fn: () => Promise<T>): Promise<T> {
 	const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
 	return locks ? locks.request('milonpt-outbox', fn) : fn();
 }
 
 /**
- * Försöker skicka kontots köade pass. Returnerar det som ligger kvar. Ett
- * nätfel avbryter försöket; ett fel från servern sparas på posten så att
- * det kan visas.
+ * Tries to send the account's queued sessions and returns what remains. A
+ * network error aborts the attempt; a server error is stored on the entry so
+ * it can be shown.
  */
 export function flushPendingSaves(userId: string | null, fetcher: typeof fetch = fetch): Promise<PendingSave[]> {
 	flushing ??= withLock(async () => {

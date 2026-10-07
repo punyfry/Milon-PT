@@ -3,14 +3,14 @@ import type { StoredJson, UserStorage } from '../storage/types';
 
 const PATH = 'profile.json';
 
-/** Returnerar en tom profil (utan version) om ingen finns än. */
+/** Returns an empty profile (without version) if none exists yet. */
 export async function getProfile(storage: UserStorage): Promise<{ data: Profile; version?: string }> {
 	const file = await storage.readJson<unknown>(PATH);
 	if (!file) return { data: {} };
 	return { data: assertValid('profil', file.data, validateProfile), version: file.version };
 }
 
-/** `version` från läsningen; utelämnas den skapas profilen (och misslyckas om den redan finns). */
+/** `version` from the read; if omitted the profile is created (and fails if it already exists). */
 export async function saveProfile(
 	storage: UserStorage,
 	profile: Profile,

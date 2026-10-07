@@ -34,9 +34,9 @@ export async function listExercises(storage: UserStorage): Promise<StoredJson<Ex
 export type NewExercise = Omit<Exercise, 'id' | 'archived' | 'log'> & Partial<Pick<Exercise, 'archived' | 'log'>>;
 
 /**
- * Skapar en övning med ett ledigt id härlett ur namnet (`ex_marklyft`,
- * `ex_marklyft_2`, …). `takenIds` kan skickas med för att undvika en extra
- * listning när anroparen redan har den.
+ * Creates an exercise with a free id derived from the name (`ex_marklyft`,
+ * `ex_marklyft_2`, …). Pass `takenIds` to skip an extra listing when the
+ * caller already has it.
  */
 export async function createExercise(
 	storage: UserStorage,
@@ -66,7 +66,7 @@ export async function createExercise(
 	throw new Error(`Kunde inte hitta ett ledigt id för ${input.name}`);
 }
 
-/** Skriver över en övning. `version` från läsningen skyddar mot samtidiga ändringar. */
+/** Overwrites an exercise. `version` from the read guards against concurrent changes. */
 export async function saveExercise(
 	storage: UserStorage,
 	exercise: Exercise,
@@ -77,14 +77,14 @@ export async function saveExercise(
 	return { data: valid, version: result.version };
 }
 
-/** Sorterar loggen nyaste först. Stabil, så poster samma dag behåller sin ordning. */
+/** Sorts the log newest first. Stable, so entries on the same day keep their order. */
 export function sortLog(log: LogEntry[]): LogEntry[] {
 	return [...log].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
 /**
- * Lägger till en loggpost. Loggen hålls sorterad nyast först; en post med
- * samma datum som befintliga hamnar före dem.
+ * Adds a log entry. The log is kept sorted newest first; an entry with the
+ * same date as existing ones goes before them.
  */
 export async function prependLogEntry(
 	storage: UserStorage,

@@ -41,7 +41,7 @@
 		const raw = input.value.replace(',', '.').trim();
 		const value = Number(raw);
 		if (raw !== '' && Number.isFinite(value)) onset(field, value);
-		// Visa det värde som faktiskt gäller (ogiltiga värden ignoreras).
+		// Show the value that actually applies (invalid values are ignored).
 		input.value = display(field);
 	}
 </script>

@@ -8,7 +8,7 @@
 	const weekdays = ['M', 'T', 'O', 'T', 'F', 'L', 'S'];
 	const dayNum = (d: string) => Number(d.slice(8, 10));
 	const thisYear = $derived(data.today.slice(0, 4));
-	/** "3 okt." i år, annars "3 jan. 2021". */
+	/** "3 okt." this year, otherwise "3 jan. 2021". */
 	const shortDate = (d: string) =>
 		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', {
 			day: 'numeric',
@@ -16,7 +16,7 @@
 			...(d.startsWith(thisYear) ? {} : { year: 'numeric' }),
 			timeZone: 'UTC'
 		});
-	/** "tisdag 6 oktober" för skärmläsare. */
+	/** "tisdag 6 oktober" for screen readers. */
 	const longDate = (d: string) =>
 		new Date(`${d}T12:00:00Z`).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 	const range = $derived(`${shortDate(data.week.days[0].date)} – ${shortDate(data.week.days[6].date)}`);

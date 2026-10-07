@@ -1,4 +1,4 @@
-/** Ersätter `$app/environment` i tester. */
+/** Replaces `$app/environment` in tests. */
 export const dev = false;
 export const browser = false;
 export const building = false;

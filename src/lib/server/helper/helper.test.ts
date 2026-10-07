@@ -65,8 +65,8 @@ function scripted(...responses: Anthropic.Beta.BetaMessage[]) {
 const input = (question: string, history: { role: 'user' | 'assistant'; text: string }[] = []) =>
 	parseHelperInput({ session: session(), exerciseId: 'ex_hantelpress', history, question });
 
-describe('hjälparen', () => {
-	it('skickar liten kontext: passnamn, dagens set, fem senaste loggposterna och katalogen', async () => {
+describe('helper', () => {
+	it('sends small context: workout name, the sets so far, five latest log entries and the catalog', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Sänk vikten lite.')], 'end_turn'));
 		const result = await askHelper(storage, input('Är 17,5 för tungt?'), { model: 'claude-haiku-4-5', createMessage: create });
@@ -79,19 +79,19 @@ describe('hjälparen', () => {
 		expect(system).toContain('- Plankan (ex_plankan, time): 45 s');
 		expect(system).toContain('- 2026-09-07: 17 kg × 8');
 		expect(system).toContain('- 2026-09-03: 13 kg × 8');
-		expect(system).not.toContain('2026-09-02'); // bara de fem senaste
+		expect(system).not.toContain('2026-09-02'); // only the five latest
 		expect(system).toContain('ex_axelpress | Axelpress | weight | light');
 		expect(system).toContain('ge direkt två konkreta alternativ i första svaret, utan motfrågor');
 		expect(system).toContain('Föreslå aldrig en katalogövning som tränar en annan muskelgrupp');
 		expect(system).toContain('Skriv ren text utan markdown');
 		expect(system).toContain('light (hantlar, kabel, isolationsövningar, steg 1,25 kg)');
 		expect(params.messages).toEqual([{ role: 'user', content: 'Är 17,5 för tungt?' }]);
-		// Haiku: inga tanke-, effort- eller fallback-parametrar.
+		// Helper model: no thinking, effort or fallback parameters.
 		expect(params).not.toHaveProperty('thinking');
 		expect(params).not.toHaveProperty('fallbacks');
 	});
 
-	it('skickar med tidigare frågor och svar i panelen', async () => {
+	it('includes earlier questions and answers in the panel', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Ok.')], 'end_turn'));
 		await askHelper(
@@ -105,7 +105,7 @@ describe('hjälparen', () => {
 		expect(calls[0].messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
 	});
 
-	it('byter mot en befintlig övning', async () => {
+	it('swaps to an existing exercise', async () => {
 		const storage = await setup();
 		const { create } = scripted(
 			reply([text('Då tar vi axelpress.'), swapCall({ fromExerciseId: 'ex_hantelpress', toExerciseId: 'ex_axelpress', newExercise: null })], 'tool_use')
@@ -115,7 +115,7 @@ describe('hjälparen', () => {
 		expect(result.swap).toMatchObject({ from: 'ex_hantelpress', to: { id: 'ex_axelpress', type: 'weight', loadClass: 'light' }, created: false });
 	});
 
-	it('skapar en ny övning när ingen i katalogen passar', async () => {
+	it('creates a new exercise when none in the catalog fits', async () => {
 		const storage = await setup();
 		const { create } = scripted(
 			reply(
@@ -134,7 +134,7 @@ describe('hjälparen', () => {
 		expect((await getExercise(storage, 'ex_sidoplanka'))!.data.instruction).toBe('Armbåge under axeln.');
 	});
 
-	it('låter modellen rätta ett ogiltigt byte en gång, sedan ges upp', async () => {
+	it('lets the model correct an invalid swap once, then gives up', async () => {
 		const storage = await setup();
 		const bad = swapCall({ fromExerciseId: 'ex_hantelpress', toExerciseId: 'ex_plankan', newExercise: null });
 		const { create, calls } = scripted(reply([bad], 'tool_use'), reply([bad], 'tool_use'));
@@ -147,14 +147,14 @@ describe('hjälparen', () => {
 		});
 	});
 
-	it('kör aldrig ett avklippt byte', async () => {
+	it('never runs a truncated swap', async () => {
 		const storage = await setup();
 		const { create } = scripted(reply([swapCall({ fromExerciseId: 'ex_hantelpress' })], 'max_tokens'));
 		const result = await askHelper(storage, input('Byt'), { model: 'claude-haiku-4-5', createMessage: create });
 		expect(result.swap).toBeNull();
 	});
 
-	it('avvisar trasig indata', () => {
+	it('rejects malformed input', () => {
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_okand', question: 'x' })).toThrow(/exerciseId/);
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_plankan', question: '' })).toThrow(/tom/);
 		expect(() =>
@@ -163,7 +163,7 @@ describe('hjälparen', () => {
 	});
 });
 
-describe('byte i passet', () => {
+describe('swap in the session', () => {
 	const axelpress: ExerciseInfo = {
 		id: 'ex_axelpress',
 		name: 'Axelpress',
@@ -175,14 +175,14 @@ describe('byte i passet', () => {
 	const armhavning: ExerciseInfo = { id: 'ex_armhavning', name: 'Armhävning', type: 'bodyweight', instruction: '' };
 	const sidoplanka: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '' };
 
-	it('ersätter en övning utan klara set och förifyller från förra gången', () => {
+	it('replaces an exercise without completed sets and prefills from last time', () => {
 		const s = session();
 		applySwap(s, 'ex_plankan', sidoplanka, { seconds: 45 });
 		expect(s.exercises[1]).toEqual({ exerciseId: 'ex_sidoplanka', sets: [{ seconds: 45, done: false }] });
 		expect(s.deviations).toEqual([{ type: 'swap', from: 'ex_plankan', to: 'ex_sidoplanka' }]);
 	});
 
-	it('behåller klara set och lägger den nya övningen efter', () => {
+	it('keeps completed sets and adds the new exercise after', () => {
 		const s = session();
 		applySwap(s, 'ex_hantelpress', axelpress, { reps: 10 });
 		expect(s.exercises.map((e) => e.exerciseId)).toEqual(['ex_hantelpress', 'ex_axelpress', 'ex_plankan']);
@@ -193,7 +193,7 @@ describe('byte i passet', () => {
 		]);
 	});
 
-	it('slår ihop byten i kedja och tar bort avvikelsen vid byte tillbaka', () => {
+	it('merges chained swaps and removes the deviation when swapping back', () => {
 		const s = session();
 		applySwap(s, 'ex_plankan', sidoplanka);
 		applySwap(s, 'ex_sidoplanka', armhavning, { reps: 10 });
@@ -203,7 +203,7 @@ describe('byte i passet', () => {
 		expect(s.exercises[1].exerciseId).toBe('ex_plankan');
 	});
 
-	it('gör inget om den nya övningen redan finns i passet', () => {
+	it('does nothing if the new exercise is already in the session', () => {
 		const s = session();
 		applySwap(s, 'ex_hantelpress', { id: 'ex_plankan', name: 'Plankan', type: 'time', instruction: '' });
 		expect(s).toEqual(session());

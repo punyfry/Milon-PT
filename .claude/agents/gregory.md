@@ -34,7 +34,7 @@ Be adversarial: look for realistic paths to failure, not theoretical ones. For e
 - Public functions and non-obvious decisions have a short doc comment.
 
 **Design (UI)**
-- Matches the app: the CSS variables in `src/routes/+layout.svelte` (`--bg`, `--surface`, `--text`, `--muted`, `--accent` …), no hard-coded colours.
+- Matches the app: the CSS variables in `src/routes/+layout.svelte` (`--bg`, `--surface`, `--text`, `--muted`, `--accent` …), no hard-coded colors.
 - Works in light and dark mode and at phone width (390 px) without horizontal scroll, with safe-area insets (`env(safe-area-inset-*)`).
 - Accessibility: buttons are buttons, inputs have labels, focus is visible, `aria-` where needed.
 - UI text in Swedish, short and consistent with the rest of the app. Minimalism: the app exists to log workouts quickly.

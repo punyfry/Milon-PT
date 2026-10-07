@@ -5,7 +5,7 @@ import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls } from './usa
 import type { UserStorage } from '../storage/types';
 import { todayInStockholm } from '../../time';
 
-/** Standardmodeller när miljövariablerna saknas: Sonnet för byggaren, Haiku 4.5 för hjälparen. */
+/** Default models when the environment variables are missing: Sonnet for the builder, Haiku 4.5 for the helper. */
 export const DEFAULT_BUILDER_MODEL = 'claude-sonnet-5-5';
 export const DEFAULT_HELPER_MODEL = 'claude-haiku-4-5';
 
@@ -23,15 +23,15 @@ export function isAiConfigured(): boolean {
 	return Boolean(env.ANTHROPIC_API_KEY);
 }
 
-/** Anropar Claude API. Nyckeln läses bara på servern och når aldrig klienten. */
+/** Calls the Claude API. The key is read only on the server and never reaches the client. */
 export const createMessage: CreateMessage = (params) => {
 	client ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 	return client.beta.messages.create(params);
 };
 
 /**
- * createMessage som räknar varje anrop mot dagens gräns (AI_DAILY_LIMIT,
- * standard 200 per användare) och kastar AiLimitError när den är nådd.
+ * createMessage that counts every call against today's limit (AI_DAILY_LIMIT,
+ * default 200 per user) and throws AiLimitError once it is reached.
  */
 export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage = createMessage): CreateMessage {
 	return async (params) => {
@@ -40,7 +40,7 @@ export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage 
 	};
 }
 
-/** Kastar AiLimitError om dagens gräns redan är nådd. Räknar inget. */
+/** Throws AiLimitError if today's limit is already reached. Counts nothing. */
 export async function assertAiCallsLeft(storage: UserStorage): Promise<void> {
 	const limit = dailyLimit(env.AI_DAILY_LIMIT);
 	if ((await remainingAiCalls(storage, todayInStockholm(), limit)) === 0) throw new AiLimitError(limit);
