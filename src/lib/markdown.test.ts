@@ -27,9 +27,26 @@ describe('enkel markdown', () => {
 			{ type: 'heading', line: [{ text: 'Förslag' }] },
 			{ type: 'p', lines: [[{ text: 'Pass A:' }], [{ text: 'fokus ben' }]] },
 			{ type: 'ul', items: [[{ text: 'Knäböj 3 × 8' }], [{ text: 'Utfall' }]] },
-			{ type: 'ol', items: [[{ text: 'Värm upp' }], [{ text: 'Kör' }]] },
+			{ type: 'ol', items: [[{ text: 'Värm upp' }], [{ text: 'Kör' }]], start: 1 },
 			{ type: 'p', lines: [[{ text: 'Klart?' }]] }
 		]);
+	});
+
+	it('håller ihop listor med tomma rader och indragna fortsättningar', () => {
+		expect(parseMarkdown('1. Uppvärmning\n\n2. Knäböj\n   3 set\n\n3. Stretch\n\nKlart')).toEqual([
+			{
+				type: 'ol',
+				start: 1,
+				items: [[{ text: 'Uppvärmning' }], [{ text: 'Knäböj' }, { text: ' ' }, { text: '3 set' }], [{ text: 'Stretch' }]]
+			},
+			{ type: 'p', lines: [[{ text: 'Klart' }]] }
+		]);
+		expect(parseMarkdown('3. Tredje')).toEqual([{ type: 'ol', start: 3, items: [[{ text: 'Tredje' }]] }]);
+	});
+
+	it('tolkar inte stjärnor mellan siffror som kursiv', () => {
+		expect(parseInline('Knäböj 3*10 och 2*5 reps')).toEqual([{ text: 'Knäböj 3*10 och 2*5 reps' }]);
+		expect(parseInline('5*5 med *paus*')).toEqual([{ text: '5*5 med ' }, { text: 'paus', italic: true }]);
 	});
 
 	it('släpper igenom HTML som vanlig text', () => {

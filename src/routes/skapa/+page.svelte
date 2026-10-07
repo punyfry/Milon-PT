@@ -244,6 +244,7 @@
 		border-radius: 14px;
 		max-width: 85%;
 		white-space: pre-line;
+		overflow-wrap: anywhere;
 	}
 	.bubble.user {
 		align-self: flex-end;

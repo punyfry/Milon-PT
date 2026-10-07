@@ -29,7 +29,7 @@
 				{#each b.items as item, j (j)}<li>{@render line(item)}</li>{/each}
 			</ul>
 		{:else}
-			<ol>
+			<ol start={b.start}>
 				{#each b.items as item, j (j)}<li>{@render line(item)}</li>{/each}
 			</ol>
 		{/if}

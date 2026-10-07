@@ -18,15 +18,18 @@ export type Line = Span[];
 export type Block =
 	| { type: 'p'; lines: Line[] }
 	| { type: 'heading'; line: Line }
-	| { type: 'ul' | 'ol'; items: Line[] };
+	| { type: 'ul'; items: Line[] }
+	| { type: 'ol'; items: Line[]; start: number };
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
-const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+const NUMBERED = /^\s*(\d+)[.)]\s+(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*)$/;
 
 export function parseMarkdown(text: string): Block[] {
 	const blocks: Block[] = [];
 	let current = null as Block | null;
+	/** Tom rad efter en lista: listan fortsätter bara om nästa rad är en punkt av samma slag. */
+	let gap = false;
 	const flush = () => {
 		if (current) blocks.push(current);
 		current = null;
@@ -34,23 +37,38 @@ export function parseMarkdown(text: string): Block[] {
 
 	for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
 		if (!raw.trim()) {
-			flush();
+			if (current?.type === 'ul' || current?.type === 'ol') gap = true;
+			else flush();
 			continue;
 		}
 		const heading = HEADING.exec(raw);
 		const bullet = BULLET.exec(raw);
 		const numbered = NUMBERED.exec(raw);
+		const isList = current?.type === 'ul' || current?.type === 'ol';
+		if (gap && !(isList && ((bullet && current!.type === 'ul') || (numbered && current!.type === 'ol')))) flush();
+		const wasGap = gap;
+		gap = false;
 		if (heading) {
 			flush();
 			blocks.push({ type: 'heading', line: parseInline(heading[1]) });
-		} else if (bullet || numbered) {
-			const type = bullet ? 'ul' : 'ol';
-			const item = parseInline((bullet ?? numbered)![1]);
-			if (current?.type === type) current.items.push(item);
+		} else if (bullet) {
+			const item = parseInline(bullet[1]);
+			if (current?.type === 'ul') current.items.push(item);
 			else {
 				flush();
-				current = { type, items: [item] };
+				current = { type: 'ul', items: [item] };
 			}
+		} else if (numbered) {
+			const item = parseInline(numbered[2]);
+			if (current?.type === 'ol') current.items.push(item);
+			else {
+				flush();
+				current = { type: 'ol', items: [item], start: Number(numbered[1]) };
+			}
+		} else if (!wasGap && (current?.type === 'ul' || current?.type === 'ol') && /^\s+\S/.test(raw)) {
+			// Indragen fortsättningsrad hör till föregående punkt.
+			const last = current.items[current.items.length - 1];
+			last.push({ text: ' ' }, ...parseInline(raw.trim()));
 		} else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(raw)) {
 			flush();
 		} else if (current?.type === 'p') {
@@ -67,7 +85,7 @@ export function parseMarkdown(text: string): Block[] {
 /** **fet**, __fet__, *kursiv*, _kursiv_ och `kod`. Omatchade tecken visas som de är. */
 export function parseInline(text: string): Line {
 	const spans: Line = [];
-	const re = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|__(.+?)__|\*(?!\s)([^*]+?)\*|(?<![\p{L}\p{N}])_(?!\s)([^_]+?)_(?![\p{L}\p{N}])/gu;
+	const re = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|__(.+?)__|(?<![\p{L}\p{N}*])\*(?!\s)([^*]+?)\*(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])_(?!\s)([^_]+?)_(?![\p{L}\p{N}])/gu;
 	let last = 0;
 	for (const m of text.matchAll(re)) {
 		if (m.index > last) spans.push({ text: text.slice(last, m.index) });
