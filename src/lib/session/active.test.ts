@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkoutTemplate } from '$lib/model';
+import type { ActiveSet, WorkoutTemplate } from '$lib/model';
 import {
 	addSet,
 	adjust,
+	cancelTimer,
 	completeExpiredTimers,
 	createActiveSession,
 	localIsoString,
@@ -12,6 +13,7 @@ import {
 	setField,
 	startTimer,
 	stopTimer,
+	timerStartSeconds,
 	summarize,
 	type ExerciseInfo
 } from './active';
@@ -114,7 +116,60 @@ describe('timer', () => {
 		const set = { seconds: 45, done: false };
 		startTimer(set, t0);
 		stopTimer(set, at(30.4));
-		expect(set).toEqual({ seconds: 30, done: true });
+		expect(set).toEqual({ seconds: 30, done: true, plannedSeconds: 45 });
+	});
+
+	it('restarts from the planned time after an early stop (#32)', () => {
+		const set: ActiveSet = { seconds: 30, done: false };
+		startTimer(set, t0);
+		stopTimer(set, at(5));
+		expect(set).toMatchObject({ seconds: 5, plannedSeconds: 30 });
+		expect(timerStartSeconds(set)).toBe(30);
+		startTimer(set, at(10));
+		expect(set).toMatchObject({ timerDuration: 30, timerEndsAt: at(40).toISOString(), done: false });
+		stopTimer(set, at(35));
+		expect(set).toEqual({ seconds: 25, done: true, plannedSeconds: 30 });
+	});
+
+	it('keeps the plan when a restarted timer is cancelled', () => {
+		const set: ActiveSet = { seconds: 30, done: false };
+		startTimer(set, t0);
+		stopTimer(set, at(5));
+		startTimer(set, at(10));
+		cancelTimer(set);
+		expect(set).toEqual({ seconds: 5, done: false, plannedSeconds: 30 });
+		expect(timerStartSeconds(set)).toBe(30);
+	});
+
+	it('forgets the plan when the timer runs to zero or the time is changed by hand', () => {
+		const ran: ActiveSet = { seconds: 30, done: false };
+		startTimer(ran, t0);
+		stopTimer(ran, at(5));
+		startTimer(ran, at(10));
+		stopTimer(ran, at(41));
+		expect(ran).toEqual({ seconds: 30, done: true });
+
+		const stepped: ActiveSet = { seconds: 30, done: false };
+		startTimer(stepped, t0);
+		stopTimer(stepped, at(5));
+		adjust(stepped, 'seconds', 1);
+		expect(stepped).toEqual({ seconds: 10, done: true });
+		expect(timerStartSeconds(stepped)).toBe(10);
+
+		const typed: ActiveSet = { seconds: 30, done: false };
+		startTimer(typed, t0);
+		stopTimer(typed, at(5));
+		setField(typed, 'seconds', 20);
+		expect(timerStartSeconds(typed)).toBe(20);
+	});
+
+	it('can restart a set that was stopped at zero seconds', () => {
+		const set: ActiveSet = { seconds: 30, done: false };
+		startTimer(set, t0);
+		stopTimer(set, at(0.2));
+		expect(set).toMatchObject({ seconds: 0, plannedSeconds: 30 });
+		startTimer(set, at(1));
+		expect(set.timerDuration).toBe(30);
 	});
 
 	it('fills in the reached time when the timer hit zero, even after the page was closed', () => {
@@ -123,6 +178,16 @@ describe('timer', () => {
 		expect(completeExpiredTimers(s, at(44))).toBe(0);
 		expect(completeExpiredTimers(s, at(600))).toBe(1);
 		expect(s.exercises[1].sets[0]).toEqual({ seconds: 45, done: true });
+	});
+
+	it('clears the plan when an expired timer is completed', () => {
+		const s = createActiveSession(workout, infos, t0);
+		const set = s.exercises[1].sets[0];
+		startTimer(set, t0);
+		stopTimer(set, at(5));
+		startTimer(set, at(10));
+		expect(completeExpiredTimers(s, at(600))).toBe(1);
+		expect(set).toEqual({ seconds: 45, done: true });
 	});
 });
 

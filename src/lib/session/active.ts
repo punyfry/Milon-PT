@@ -122,6 +122,7 @@ export function adjust(set: ActiveSet, field: SetField, direction: 1 | -1, loadC
 	const current = values[field];
 	if (current === undefined) return;
 	values[field] = Math.max(0, round2(current + direction * stepFor(field, loadClass)));
+	if (field === 'seconds') delete set.plannedSeconds;
 }
 
 /** Sets a field to a typed value. Invalid values are ignored. */
@@ -129,6 +130,8 @@ export function setField(set: ActiveSet, field: SetField, value: number): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	if (values[field] === undefined || !Number.isFinite(value) || value < 0) return;
 	values[field] = field === 'weight' ? round2(value) : Math.round(value);
+	// A time set by hand replaces the plan from an earlier timer run.
+	if (field === 'seconds') delete set.plannedSeconds;
 }
 
 /** New set with the same values as the last one, not marked as done. */
@@ -156,11 +159,18 @@ export function remainingMs(set: ActiveSet, now: Date): number {
 	return Math.max(0, Date.parse(set.timerEndsAt) - now.getTime());
 }
 
-/** Starts the countdown from the set's current time. */
+/** The time a timer started now counts down from: the plan after an early stop, otherwise the set's time. */
+export function timerStartSeconds(set: ActiveSet): number {
+	if (!('seconds' in set)) return 0;
+	return set.plannedSeconds ?? set.seconds;
+}
+
+/** Starts the countdown from the planned time (see `timerStartSeconds`). */
 export function startTimer(set: ActiveSet, now: Date): void {
-	if (!('seconds' in set) || set.seconds <= 0) return;
-	set.timerDuration = set.seconds;
-	set.timerEndsAt = new Date(now.getTime() + set.seconds * 1000).toISOString();
+	const seconds = timerStartSeconds(set);
+	if (seconds <= 0) return;
+	set.timerDuration = seconds;
+	set.timerEndsAt = new Date(now.getTime() + seconds * 1000).toISOString();
 	set.done = false;
 }
 
@@ -169,16 +179,21 @@ function clearTimer(set: ActiveSet): void {
 	delete set.timerDuration;
 }
 
-/** Stop before zero: the elapsed time is saved and the set is marked as done. */
+/**
+ * Stop before zero: the elapsed time is saved and the set is marked as done.
+ * The planned time is kept so that a restart counts down from it again.
+ */
 export function stopTimer(set: ActiveSet, now: Date): void {
 	if (!isTimerRunning(set) || !('seconds' in set)) return;
 	const duration = set.timerDuration ?? set.seconds;
 	set.seconds = Math.max(0, Math.round(duration - remainingMs(set, now) / 1000));
+	if (set.seconds < duration) set.plannedSeconds = duration;
+	else delete set.plannedSeconds;
 	set.done = true;
 	clearTimer(set);
 }
 
-/** Cancels without touching the time or the done flag. */
+/** Cancels without touching the time, the plan or the done flag. */
 export function cancelTimer(set: ActiveSet): void {
 	clearTimer(set);
 }
@@ -193,6 +208,7 @@ export function completeExpiredTimers(session: ActiveSession, now: Date): number
 		for (const set of ex.sets) {
 			if (!isTimerRunning(set) || remainingMs(set, now) > 0 || !('seconds' in set)) continue;
 			set.seconds = set.timerDuration ?? set.seconds;
+			delete set.plannedSeconds;
 			set.done = true;
 			clearTimer(set);
 			completed++;
