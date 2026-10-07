@@ -5,7 +5,7 @@ export const DEFAULT_DAILY_LIMIT = 200;
 
 export class AiLimitError extends Error {
 	constructor(readonly limit: number) {
-		super(`Dagens gräns för Milon är nådd (${limit} frågor). Försök igen i morgon.`);
+		super(`Dagens gräns för Milon är nådd (${limit} anrop). Försök igen i morgon.`);
 		this.name = 'AiLimitError';
 	}
 }
