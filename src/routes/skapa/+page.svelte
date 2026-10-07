@@ -2,6 +2,7 @@
 	import { invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
+	import Markdown from '$lib/components/Markdown.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
 
@@ -125,7 +126,11 @@
 			</p>
 		{/if}
 		{#each view?.log ?? [] as item, i (i)}
-			<p class="bubble {item.role}">{item.text}</p>
+			{#if item.role === 'assistant'}
+				<div class="bubble assistant"><Markdown text={item.text} /></div>
+			{:else}
+				<p class="bubble {item.role}">{item.text}</p>
+			{/if}
 		{/each}
 		{#if sending}<p class="bubble assistant typing">Milon skriver…</p>{/if}
 		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
