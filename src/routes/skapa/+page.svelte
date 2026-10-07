@@ -27,7 +27,7 @@
 		if (!message || sending) return;
 		sending = true;
 		failure = null;
-		// Visa meddelandet direkt medan Milon svarar.
+		// Show the message immediately while Milon responds.
 		view = view
 			? { ...view, log: [...view.log, { role: 'user', text: message }] }
 			: { conversationId: '', editingSlug: data.editing?.slug ?? null, saved: null, draft: [], log: [{ role: 'user', text: message }] };
@@ -51,7 +51,7 @@
 				if (view.saved) await invalidateAll();
 			}
 			if (!res.ok && !body?.log) {
-				// Inget sparades: ta bort bubblan och lägg tillbaka texten så att den kan skickas igen.
+				// Nothing was saved: remove the bubble and restore the text so it can be resent.
 				failure = body?.message ?? `Servern svarade ${res.status}`;
 				view = view && { ...view, log: view.log.slice(0, -1) };
 				input = message;

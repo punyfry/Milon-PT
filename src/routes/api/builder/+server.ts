@@ -18,8 +18,8 @@ import type { RequestHandler } from './$types';
 const MAX_MESSAGE = 2000;
 
 /**
- * En tur i pass-byggaren: { message, conversationId? , editSlug? }.
- * Utan conversationId startas en ny konversation (för `editSlug` om det anges).
+ * One turn in the workout builder: { message, conversationId? , editSlug? }.
+ * Without conversationId a new conversation is started (for `editSlug` if given).
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
@@ -46,7 +46,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 	}
 
-	// Kontrollera gränsen först när konversationen finns, så att ett felaktigt id inte kostar något.
+	// Check the limit only once the conversation exists, so an invalid id costs nothing.
 	try {
 		await assertAiCallsLeft(storage);
 	} catch (e) {
@@ -64,7 +64,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	} catch (e) {
 		apiError = e;
 	}
-	// Spara även efter fel, så att övningar och pass som hann skapas finns kvar i loggen.
+	// Save even after an error, so exercises and workouts already created stay in the log.
 	try {
 		await saveConversation(storage, conversation, version);
 	} catch (e) {
@@ -73,7 +73,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	if (apiError) {
-		console.error('Pass-byggaren:', apiError);
+		console.error('Workout builder:', apiError);
 		const status =
 			apiError instanceof AiLimitError || apiError instanceof Anthropic.RateLimitError ? 429 : apiError instanceof Anthropic.APIError ? 502 : 500;
 		return json({ ...(await conversationView(storage, conversation)), error: true }, { status });

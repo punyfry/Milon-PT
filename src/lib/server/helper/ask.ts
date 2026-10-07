@@ -17,7 +17,7 @@ export interface HelperTurn {
 export interface HelperInput {
 	session: ActiveSession;
 	exerciseId: string;
-	/** Tidigare frågor och svar i den här hjälppanelen, som text. */
+	/** Earlier questions and answers in this helper panel, as text. */
 	history: HelperTurn[];
 	question: string;
 }
@@ -58,9 +58,9 @@ export function parseHelperInput(raw: unknown): HelperInput {
 }
 
 /**
- * Ett hjälpanrop. Kontexten hålls liten: passnamn, dagens set, de fem
- * senaste loggposterna för övningen, katalogen och frågan. Inget skickas
- * utan att användaren bett om det.
+ * One helper call. The context is kept small: workout name, today's sets, the
+ * five latest log entries for the exercise, the catalog and the question.
+ * Nothing is sent unless the user asked.
  */
 export async function askHelper(
 	storage: UserStorage,
@@ -87,7 +87,7 @@ export async function askHelper(
 		{ role: 'user', content: input.question }
 	];
 
-	// Högst ett nytt försök om bytet avvisas, så modellen kan rätta sig.
+	// At most one retry if the swap is rejected, so the model can correct itself.
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const response = await options.createMessage({
 			model: options.model,
@@ -107,7 +107,7 @@ export async function askHelper(
 		const call = response.content.find(
 			(b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use' && b.name === 'swap_exercise'
 		);
-		// Ett avklippt verktygsanrop körs aldrig.
+		// A truncated tool call is never run.
 		if (!call || response.stop_reason === 'max_tokens') {
 			return { reply: text || 'Milon har inget svar just nu. Försök igen.', swap: null };
 		}

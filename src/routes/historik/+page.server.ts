@@ -5,7 +5,7 @@ import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { PageServerLoad } from './$types';
 
-/** `/historik?vecka=YYYY-MM-DD` visar veckan som innehåller datumet (standard: denna vecka). */
+/** `/historik?vecka=YYYY-MM-DD` shows the week containing the date (default: this week). */
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const storage = storageFor(locals);
 	const today = todayInStockholm();
@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const [stored, sessions, profile] = await Promise.all([listExercises(storage), listSessionsBetween(storage, start, addDays(start, 7)), getProfile(storage)]);
 	const exercises = stored.map((e) => e.data);
 
-	// Övningar med historik, senast tränade först. Bara sammanfattning, aldrig hela loggen.
+	// Exercises with history, most recently trained first. Summary only, never the whole log.
 	const list = exercises
 		.filter((e) => e.log.length)
 		.map((e) => {

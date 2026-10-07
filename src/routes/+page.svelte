@@ -31,7 +31,7 @@
 		active = null;
 	}
 
-	/** Korten är vanliga länkar; finns ett pågående pass frågar vi först. */
+	/** The cards are plain links; if a session is in progress we ask first. */
 	function start(e: MouseEvent, slug: string) {
 		if (!active) return;
 		e.preventDefault();

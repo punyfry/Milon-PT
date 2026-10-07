@@ -5,7 +5,7 @@ import { getExercise } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
 
-/** Graf över bästa set per pass och tabell över de senaste passen för en övning. */
+/** Chart of the best set per session and a table of the latest sessions for one exercise. */
 export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!/^[A-Za-z0-9_-]{1,100}$/.test(params.id)) error(404, 'Övningen finns inte');
 	const stored = await getExercise(storageFor(locals), params.id);

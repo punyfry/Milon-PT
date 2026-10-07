@@ -9,16 +9,16 @@ import type { UserStorage } from '../storage/types';
 import { buildSystemPrompt } from './prompt';
 import { BUILDER_TOOLS, executeTool, type BuilderState } from './tools';
 
-/** En rad i chattloggen som visas för användaren. */
+/** A line in the chat log shown to the user. */
 export interface LogItem {
 	role: 'user' | 'assistant' | 'event' | 'error';
 	text: string;
 }
 
 /**
- * En pass-byggar-konversation, sparad som `builder/<id>.json`.
- * `system` fryses vid start och `messages` växer bara (append-only): tidigare
- * turer, inklusive tankeblock, skickas alltid tillbaka exakt som de kom.
+ * A workout builder conversation, stored as `builder/<id>.json`.
+ * `system` is frozen at start and `messages` is append-only: earlier turns,
+ * including thinking blocks, are always sent back exactly as received.
  */
 export interface BuilderConversation extends BuilderState {
 	id: string;
@@ -45,7 +45,7 @@ export async function loadConversation(
 	return { conversation: file.data, version: file.version };
 }
 
-/** Startar en ny konversation, för ett nytt pass eller för att redigera `editSlug`. */
+/** Starts a new conversation, for a new workout or to edit `editSlug`. */
 export async function startConversation(storage: UserStorage, editSlug: string | null): Promise<BuilderConversation> {
 	const [profile, exercises, workout] = await Promise.all([
 		getProfile(storage),
@@ -73,7 +73,7 @@ export async function saveConversation(storage: UserStorage, conversation: Build
 	return result.version;
 }
 
-// --- en tur -------------------------------------------------------------
+// --- a turn -------------------------------------------------------------
 
 export type { CreateMessage };
 
@@ -81,7 +81,7 @@ export interface TurnOptions {
 	model: string;
 	today: string;
 	createMessage: CreateMessage;
-	/** Högsta antal modellanrop per tur (verktygsrundor). */
+	/** Maximum number of model calls per turn (tool rounds). */
 	maxIterations?: number;
 }
 
@@ -89,8 +89,8 @@ export function requestParams(conversation: BuilderConversation, model: string):
 	return {
 		model,
 		max_tokens: 16000,
-		// Systemprompten är fryst per konversation och cachas; resten cachas
-		// automatiskt vid sista blocket, så varje tur bara betalar för det nya.
+		// The system prompt is frozen per conversation and cached; the rest is cached
+		// automatically at the last block, so each turn only pays for what is new.
 		system: [{ type: 'text', text: conversation.system, cache_control: { type: 'ephemeral' } }],
 		cache_control: { type: 'ephemeral' },
 		tools: BUILDER_TOOLS,
@@ -100,10 +100,10 @@ export function requestParams(conversation: BuilderConversation, model: string):
 }
 
 /**
- * Kör en användartur: skickar meddelandet, utför verktygsanrop och låter
- * modellen svara tills den är klar. Ändrar `conversation` på plats. Kastar
- * API-fel vidare efter att ha loggat dem, så att det som hunnit hända
- * (t.ex. skapade övningar) ändå kan sparas av anroparen.
+ * Runs a user turn: sends the message, executes tool calls and lets the
+ * model respond until it is done. Mutates `conversation` in place. Rethrows
+ * API errors after logging them, so that what already happened (e.g.
+ * created exercises) can still be saved by the caller.
  */
 export async function runTurn(
 	storage: UserStorage,
@@ -125,7 +125,7 @@ export async function runTurn(
 			throw e;
 		}
 
-		// Hela svaret sparas oförändrat (tanke-, fallback- och verktygsblock).
+		// The whole response is stored unchanged (thinking, fallback and tool blocks).
 		conversation.messages.push({ role: 'assistant', content: response.content });
 		for (const block of response.content) {
 			if (block.type === 'text' && block.text.trim()) conversation.log.push({ role: 'assistant', text: block.text.trim() });
@@ -138,7 +138,7 @@ export async function runTurn(
 
 		const toolUses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
 		if (response.stop_reason === 'max_tokens') {
-			// Ett avklippt verktygsanrop körs aldrig; modellen får veta det nästa tur.
+			// A truncated tool call is never run; the model is told on the next turn.
 			if (toolUses.length) {
 				conversation.messages.push({
 					role: 'user',
@@ -158,9 +158,9 @@ export async function runTurn(
 
 		const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
 		for (const tool of toolUses) {
-			// Varje tool_use måste följas av ett tool_result, annars avvisar API:t
-			// resten av konversationen. Även oväntade fel (t.ex. lagringen) blir
-			// därför ett felsvar till modellen.
+			// Every tool_use must be followed by a tool_result, otherwise the API rejects
+			// the rest of the conversation. So unexpected errors (e.g. storage) also
+			// become an error result to the model.
 			let outcome;
 			try {
 				outcome = await executeTool(storage, conversation, tool.name, tool.input, options.today);
@@ -177,14 +177,14 @@ export async function runTurn(
 	conversation.log.push({ role: 'error', text: 'Milon tog för många steg. Skriv igen för att fortsätta.' });
 }
 
-// --- vy -----------------------------------------------------------------
+// --- view ---------------------------------------------------------------
 
 export interface DraftItem extends WorkoutExercise {
 	name: string;
 	type: string;
 }
 
-/** Det klienten får: chattloggen och live-listan med namn, aldrig modellens råa meddelanden. */
+/** What the client gets: the chat log and the live list with names, never the raw model messages. */
 export async function conversationView(storage: UserStorage, conversation: BuilderConversation) {
 	const names = new Map((await listExercises(storage)).map((e) => [e.data.id, e.data]));
 	const draft: DraftItem[] = conversation.draft.map((d) => ({

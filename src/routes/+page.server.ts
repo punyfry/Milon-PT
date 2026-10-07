@@ -7,7 +7,7 @@ export interface WorkoutCard {
 	name: string;
 	version: number;
 	exerciseCount: number;
-	/** Starttid för senaste passet med den här mallen (alla versioner). */
+	/** Start time of the latest session with this template (all versions). */
 	lastTrainedAt: string | null;
 }
 
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		exerciseCount: w.exercises.length,
 		lastTrainedAt: lastBySlug.get(w.slug) ?? null
 	}));
-	// Senast tränade passet först, sedan övriga tränade, sist aldrig tränade i namnordning.
+	// Most recently trained first, then other trained ones, finally never trained in name order.
 	cards.sort((a, b) => {
 		if (a.lastTrainedAt && b.lastTrainedAt) return Date.parse(b.lastTrainedAt) - Date.parse(a.lastTrainedAt);
 		if (a.lastTrainedAt || b.lastTrainedAt) return a.lastTrainedAt ? -1 : 1;

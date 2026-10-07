@@ -6,8 +6,8 @@ import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
 
 /**
- * `/skapa` startar ett nytt pass, `/skapa?pass=<slug>` redigerar ett pass och
- * `/skapa?c=<id>` öppnar en pågående konversation igen.
+ * `/skapa` starts a new workout, `/skapa?pass=<slug>` edits a workout and
+ * `/skapa?c=<id>` reopens an ongoing conversation.
  */
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const storage = storageFor(locals);
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const editSlug = conversation ? conversation.editingSlug : url.searchParams.get('pass');
 	let versions: { version: number; createdAt: string; changeNote: string | null; exerciseCount: number }[] = [];
 	let editing: { slug: string; name: string; version: number } | null = null;
-	/** Passets övningar innan konversationen startat, så listan inte är tom vid redigering. */
+	/** The workout's exercises before the conversation starts, so the list isn't empty when editing. */
 	let initialDraft: { exerciseId: string; sets: number; target: { reps: number } | { seconds: number }; name: string; type: string }[] = [];
 	if (editSlug) {
 		const numbers = (await listWorkoutVersions(storage)).get(editSlug);

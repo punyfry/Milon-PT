@@ -5,7 +5,7 @@ import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { RequestHandler } from './$types';
 
-/** Återställer en äldre version genom att spara den som nästa version. Inget skrivs över. */
+/** Restores an older version by saving it as the next version. Nothing is overwritten. */
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const storage = storageFor(locals);
 	const body: unknown = await request.json().catch(() => null);

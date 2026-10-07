@@ -7,7 +7,7 @@ import { askHelper, parseHelperInput } from '$lib/server/helper/ask';
 import { storageFor } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
-/** Hjälparen under passet: { session, exerciseId, history, question } → { reply, swap }. */
+/** The in-session helper: { session, exerciseId, history, question } → { reply, swap }. */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
 	if (!isAiConfigured()) error(503, 'ANTHROPIC_API_KEY saknas på servern');
@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		return json(await askHelper(storage, input, { model: helperModel(), createMessage: limitedCreateMessage(storage) }));
 	} catch (e) {
 		if (e instanceof AiLimitError) error(429, e.message);
-		console.error('Hjälparen:', e);
+		console.error('Helper:', e);
 		if (e instanceof Anthropic.RateLimitError) error(429, 'Milon är upptagen just nu. Försök igen om en stund.');
 		if (e instanceof Anthropic.APIError) error(502, 'Milon kunde inte svara just nu. Försök igen.');
 		throw e;

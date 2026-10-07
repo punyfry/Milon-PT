@@ -9,9 +9,9 @@ import type { PageServerLoad } from './$types';
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 /**
- * Data för det aktiva passet: passmallen (`?v=` för en viss version, annars
- * senaste) och övningarna med bara senaste loggposten. Övningar som bytts in
- * under passet skickas med som `?ex=id1,id2`.
+ * Data for the active session: the workout template (`?v=` for a specific
+ * version, otherwise the latest) and the exercises with only their latest log
+ * entry. Exercises swapped in during the session are passed as `?ex=id1,id2`.
  */
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const storage = storageFor(locals);

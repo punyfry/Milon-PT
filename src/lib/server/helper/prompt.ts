@@ -2,7 +2,7 @@ import { formatSet as formatSetForDisplay } from '../../format';
 import type { ActiveSession, Exercise, LogEntry } from '../../model';
 import { formatCatalog } from '../builder/prompt';
 
-/** Systemprompten för hjälparen, med kontexten ifylld. Prompten bor här, inte i dokumentationen. */
+/** System prompt for the helper, with the context filled in. The prompt lives here, not in the docs. */
 const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. Användaren tränar just nu och har bett om hjälp. Svara på svenska i högst fyra meningar, utan inledning.
 
 Pass: {{workout_name}}
@@ -18,12 +18,12 @@ Regler:
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.
 - Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.`;
 
-/** Som i appen, men med vanliga mellanslag i prompten. */
+/** As in the app, but with regular spaces in the prompt. */
 export function formatSet(...args: Parameters<typeof formatSetForDisplay>): string {
 	return formatSetForDisplay(...args).replace(/\u00a0/g, ' ');
 }
 
-/** "Marklyft (ex_marklyft, weight): 40 kg × 8 klart, 45 kg × 6" – en rad per övning. */
+/** "Marklyft (ex_marklyft, weight): 40 kg × 8 klart, 45 kg × 6", one line per exercise. */
 export function formatSessionState(session: ActiveSession, exercises: ReadonlyMap<string, Exercise>): string {
 	const lines = session.exercises.map((ex) => {
 		const info = exercises.get(ex.exerciseId);
@@ -34,7 +34,7 @@ export function formatSessionState(session: ActiveSession, exercises: ReadonlyMa
 	return '\n' + lines.join('\n');
 }
 
-/** De senaste fem loggposterna, nyast först. Aldrig hela loggen. */
+/** The five latest log entries, newest first. Never the whole log. */
 export function formatHistory(exercise: Exercise | undefined): string {
 	if (!exercise) return '(okänd övning)';
 	const entries: LogEntry[] = exercise.log.slice(0, 5);
@@ -54,7 +54,7 @@ export function buildHelperPrompt(
 	current: Exercise | undefined,
 	catalog: readonly Exercise[]
 ): string {
-	// Funktionsersättning, så att "$" i namn eller instruktioner inte tolkas.
+	// Replacer function, so that "$" in names or instructions is not interpreted.
 	return TEMPLATE.replace('{{workout_name}}', () => workoutName)
 		.replace('{{session_state}}', () => formatSessionState(session, exercises))
 		.replace('{{exercise_history}}', () => '\n' + formatHistory(current))

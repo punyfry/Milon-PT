@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	/** Veckomålet (antal pass per vecka) som historikens veckovy jämför mot. */
+	/** Weekly goal (sessions per week) that the history week view compares against. */
 	goal: async ({ locals, request }) => {
 		const storage = storageFor(locals);
 		const raw = String((await request.formData()).get('weeklySessionGoal') ?? '').trim();

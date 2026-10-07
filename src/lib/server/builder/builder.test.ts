@@ -23,7 +23,7 @@ const toolUse = (id: string, name: string, input: unknown) =>
 	({ type: 'tool_use', id, name, input }) as Anthropic.Beta.BetaToolUseBlock;
 const thinking = { type: 'thinking', thinking: '', signature: 'sig-1' } as Anthropic.Beta.BetaThinkingBlock;
 
-/** Spelar upp förinspelade svar och sparar vad som skickades. */
+/** Replays prerecorded responses and records what was sent. */
 function scripted(...responses: Anthropic.Beta.BetaMessage[]) {
 	const calls: Anthropic.Beta.MessageCreateParamsNonStreaming[] = [];
 	const create: CreateMessage = async (params) => {
@@ -45,8 +45,8 @@ const newExercise = {
 	target: { reps: 10, seconds: null }
 };
 
-describe('systemprompt', () => {
-	it('fyller i mål, katalog och passet som redigeras', async () => {
+describe('system prompt', () => {
+	it('fills in goals, catalog and the workout being edited', async () => {
 		const storage = await setup();
 		const ex = (await getExercise(storage, 'ex_marklyft'))!.data;
 		const prompt = buildSystemPrompt(
@@ -61,8 +61,8 @@ describe('systemprompt', () => {
 	});
 });
 
-describe('verktyg', () => {
-	it('propose_exercise skapar ny övning, återanvänder befintlig och uppdaterar live-listan', async () => {
+describe('tools', () => {
+	it('propose_exercise creates a new exercise, reuses an existing one and updates the live list', async () => {
 		const storage = await setup();
 		const state: BuilderState = { editingSlug: null, draft: [] };
 
@@ -70,7 +70,7 @@ describe('verktyg', () => {
 		expect(created).toMatchObject({ isError: false, event: 'Lade till Hantelrodd: 3 set × 10 reps (ny övning)' });
 		expect((await getExercise(storage, 'ex_hantelrodd'))!.data).toMatchObject({ type: 'weight', loadClass: 'light' });
 
-		// Samma namn igen skapar ingen dubblett, utan uppdaterar setet.
+		// The same name again updates the set instead of creating a duplicate.
 		const again = await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'hantelrodd', sets: 4 }, TODAY);
 		expect(again.event).toBe('Uppdaterade Hantelrodd: 4 set × 10 reps');
 
@@ -82,7 +82,7 @@ describe('verktyg', () => {
 		expect((await storage.list('exercises/')).length).toBe(3);
 	});
 
-	it('propose_exercise svarar med fel som modellen kan rätta', async () => {
+	it('propose_exercise returns errors the model can correct', async () => {
 		const storage = await setup();
 		const state: BuilderState = { editingSlug: null, draft: [] };
 		const bad = async (input: unknown) => (await executeTool(storage, state, 'propose_exercise', input, TODAY)).content;
@@ -93,7 +93,7 @@ describe('verktyg', () => {
 		expect(state.draft).toEqual([]);
 	});
 
-	it('set_workout sparar nytt pass som v1 och sedan nästa version', async () => {
+	it('set_workout saves a new workout as v1 and then the next version', async () => {
 		const storage = await setup();
 		const state: BuilderState = { editingSlug: null, draft: [] };
 		const input = {
@@ -114,7 +114,7 @@ describe('verktyg', () => {
 		expect((await storage.list('workouts/')).length).toBe(2);
 	});
 
-	it('set_workout skriver aldrig över ett annat pass med samma namn', async () => {
+	it('set_workout never overwrites another workout with the same name', async () => {
 		const storage = await setup();
 		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: TODAY, exercises: [] });
 		const state: BuilderState = { editingSlug: null, draft: [] };
@@ -129,7 +129,7 @@ describe('verktyg', () => {
 		expect((await storage.list('workouts/')).length).toBe(1);
 	});
 
-	it('set_workout avvisar okända övningar och fel måltyp', async () => {
+	it('set_workout rejects unknown exercises and wrong target type', async () => {
 		const storage = await setup();
 		const result = await executeTool(
 			storage,
@@ -150,8 +150,8 @@ describe('verktyg', () => {
 	});
 });
 
-describe('en tur', () => {
-	it('kör verktyg, skickar tillbaka svaren och loggar för användaren', async () => {
+describe('a turn', () => {
+	it('runs tools, sends back the results and logs for the user', async () => {
 		const storage = await setup();
 		await saveProfile(storage, { goals: 'Styrka' });
 		const conversation = await startConversation(storage, null);
@@ -168,16 +168,16 @@ describe('en tur', () => {
 			{ role: 'event', text: 'Lade till Hantelrodd: 3 set × 10 reps (ny övning)' },
 			{ role: 'assistant', text: 'Klart. Något mer?' }
 		]);
-		// Andra anropet innehåller hela första svaret oförändrat (inkl. tankeblocket) och verktygssvaret.
+		// The second call contains the whole first response unchanged (incl. the thinking block) and the tool result.
 		const second = calls[1].messages;
 		expect(second[1]).toEqual({ role: 'assistant', content: [thinking, text('Bra val, jag lägger till hantelrodd.'), toolUse('t1', 'propose_exercise', newExercise)] });
 		expect(second[2].content).toEqual([expect.objectContaining({ type: 'tool_result', tool_use_id: 't1' })]);
-		// Systemprompten är densamma i båda anropen.
+		// The system prompt is the same in both calls.
 		expect(calls[0].system).toEqual(calls[1].system);
 		expect(JSON.stringify(calls[0].system)).toContain('Mål: Styrka');
 	});
 
-	it('loggar API-fel men behåller det som hunnit hända', async () => {
+	it('logs API errors but keeps what already happened', async () => {
 		const storage = await setup();
 		const conversation = await startConversation(storage, null);
 		const { create } = scripted(message([toolUse('t1', 'propose_exercise', newExercise)], 'tool_use'));
@@ -188,7 +188,7 @@ describe('en tur', () => {
 		expect(conversation.log.at(-1)).toMatchObject({ role: 'error' });
 	});
 
-	it('kör aldrig ett avklippt verktygsanrop', async () => {
+	it('never runs a truncated tool call', async () => {
 		const storage = await setup();
 		const conversation = await startConversation(storage, null);
 		const { create } = scripted(message([toolUse('t1', 'propose_exercise', { existingId: null })], 'max_tokens'));
@@ -197,7 +197,7 @@ describe('en tur', () => {
 		expect(conversation.messages.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'tool_result', is_error: true }] });
 	});
 
-	it('redigering startar med passets övningar i live-listan', async () => {
+	it('editing starts with the workout exercises in the live list', async () => {
 		const storage = await setup();
 		await saveWorkoutVersion(storage, {
 			slug: 'pass-a',
@@ -212,7 +212,7 @@ describe('en tur', () => {
 		await expect(startConversation(storage, 'finns-inte')).rejects.toThrow();
 	});
 
-	it('begär fallback bara för modeller som stöder det', async () => {
+	it('requests fallback only for models that support it', async () => {
 		const storage = await setup();
 		const conversation = await startConversation(storage, null);
 		expect(requestParams(conversation, 'claude-sonnet-5-5')).toMatchObject({
@@ -227,8 +227,8 @@ describe('en tur', () => {
 	});
 });
 
-describe('lagringsfel i ett verktygsanrop', () => {
-	/** Lagring som kastar när en övning ska skrivas, t.ex. ett nätverksfel mot Blob. */
+describe('storage error in a tool call', () => {
+	/** Storage that throws when an exercise is written, e.g. a network error against Blob. */
 	class FailingWrites extends MemoryUserStorage {
 		failing = true;
 		override async writeJson(path: string, data: unknown, options?: Parameters<MemoryUserStorage['writeJson']>[2]) {
@@ -237,7 +237,7 @@ describe('lagringsfel i ett verktygsanrop', () => {
 		}
 	}
 
-	it('ger ett felsvar till modellen så att konversationen förblir giltig', async () => {
+	it('returns an error result to the model so the conversation stays valid', async () => {
 		const storage = new FailingWrites('u1');
 		const conversation = await startConversation(storage, null);
 		const { create, calls } = scripted(
@@ -248,7 +248,7 @@ describe('lagringsfel i ett verktygsanrop', () => {
 
 		await runTurn(storage, conversation, 'Lägg till hantelrodd', { model: 'm', today: TODAY, createMessage: create });
 
-		// Varje tool_use följs av ett tool_result, så nästa anrop är giltigt.
+		// Every tool_use is followed by a tool_result, so the next call is valid.
 		expect(conversation.messages[2]).toMatchObject({
 			role: 'user',
 			content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true }]
@@ -263,8 +263,8 @@ describe('lagringsfel i ett verktygsanrop', () => {
 	});
 });
 
-describe('verktygsscheman', () => {
-	/** Går igenom alla delscheman i ett JSON-schema. */
+describe('tool schemas', () => {
+	/** Walks all subschemas of a JSON schema. */
 	function* nodes(schema: unknown): Generator<Record<string, unknown>> {
 		if (Array.isArray(schema)) for (const s of schema) yield* nodes(s);
 		else if (schema && typeof schema === 'object') {
@@ -273,7 +273,7 @@ describe('verktygsscheman', () => {
 		}
 	}
 
-	it('kombinerar aldrig enum med en lista av typer (avvisas av API:t för strict-verktyg)', async () => {
+	it('never combines enum with a type array (rejected by the API for strict tools)', async () => {
 		const { BUILDER_TOOLS } = await import('./tools');
 		const { SWAP_TOOL } = await import('../helper/swap');
 		for (const tool of [...BUILDER_TOOLS, SWAP_TOOL]) {
