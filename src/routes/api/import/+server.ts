@@ -13,8 +13,9 @@ const MAX_BYTES = 1_000_000;
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
+	if (Number(request.headers.get('content-length') ?? 0) > MAX_BYTES) error(413, 'Filen är för stor (max 1 MB)');
 	const text = await request.text();
-	if (text.length > MAX_BYTES) error(413, 'Filen är för stor (max 1 MB)');
+	if (new TextEncoder().encode(text).length > MAX_BYTES) error(413, 'Filen är för stor (max 1 MB)');
 	let body: unknown;
 	try {
 		body = JSON.parse(text);

@@ -19,6 +19,7 @@ import {
 	Issues,
 	ValidationError,
 	exerciseIdBase,
+	isCalendarDate,
 	isExerciseType,
 	isLoadClass,
 	isObject,
@@ -159,7 +160,7 @@ export function parseImportFile(raw: unknown): ImportFile {
 		rawSessions.forEach((s, i) => {
 			const p = `sessions[${i}]`;
 			if (!isObject(s)) return issues.add(p, 'måste vara ett objekt');
-			const date = typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date) && !Number.isNaN(Date.parse(s.date)) ? s.date : null;
+			const date = typeof s.date === 'string' && isCalendarDate(s.date) ? s.date : null;
 			if (!date) issues.add(`${p}.date`, 'måste vara ett datum YYYY-MM-DD');
 			const workout = typeof s.workout === 'string' ? s.workout.trim() : '';
 			if (!workout) issues.add(`${p}.workout`, 'måste vara passets namn');
@@ -269,15 +270,20 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 	for (const imp of [...input.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
 		const slug = slugify(imp.workout);
 		const startedAt = importedStartTime(imp.date);
-		const same = existing.sessions.find((s) => s.startedAt === startedAt && s.workoutSlug === slug);
+		// Samma pass samma dag räknas som samma session, även om det loggats i appen.
+		const same = existing.sessions.find((s) => s.startedAt.slice(0, 10) === imp.date && s.workoutSlug === slug);
 		const id = same?.id ?? sessionIdFor(imp.date, takenSessionIds);
 		takenSessionIds.add(id);
 		if (sessionIdByDate.has(imp.date)) warnings.push(`Flera pass ${imp.date}: loggposterna kopplas till det första`);
 		else sessionIdByDate.set(imp.date, id);
 		sessionDrafts.push({ id, slug, startedAt, imp, ...(same ? { existing: same } : {}) });
 	}
-	const withSession = (e: LogEntry): LogEntry =>
-		!e.sessionId && sessionIdByDate.has(e.date) ? { ...e, sessionId: sessionIdByDate.get(e.date)! } : e;
+	// Loggposterna får bara sessions-id från importens egna pass, aldrig från
+	// filen, så att ingen post pekar på en session som inte finns.
+	const withSession = ({ date, sets, note }: LogEntry): LogEntry => {
+		const sessionId = sessionIdByDate.get(date);
+		return { ...(sessionId ? { sessionId } : {}), date, sets, ...(note !== undefined ? { note } : {}) };
+	};
 
 	// 2. Övningar.
 	const byName = new Map<string, Exercise>();
@@ -477,12 +483,17 @@ function dedupeLog(log: LogEntry[]): LogEntry[] {
 // --- skrivning ----------------------------------------------------------
 
 /**
- * Skriver planen. Övningar skrivs före pass, så ett pass aldrig pekar på en
+ * Skriver planen. Sessionerna först, sedan övningar före pass, så ett pass aldrig pekar på en
  * övning som saknas. Nya filer skrivs med `createOnly` och ändrade med
  * `ifMatch`, så importen avbryts hellre än skriver över något som ändrats
  * sedan planen räknades ut.
  */
 export async function applyImport(storage: UserStorage, plan: ImportPlan): Promise<void> {
+	// Sessionsposterna först: avbryts importen efter dem pekar ingen loggpost
+	// på en session som saknas (appen räknar en sådan post som redan sparad).
+	for (const p of plan.sessions) {
+		if (p.action === 'create') await createSession(storage, p.session);
+	}
 	if (plan.profile.action !== 'unchanged') await saveProfile(storage, plan.profile.profile, plan.profile.version);
 	for (const p of plan.exercises) {
 		if (p.action === 'create') {
@@ -496,10 +507,6 @@ export async function applyImport(storage: UserStorage, plan: ImportPlan): Promi
 		await storage.writeJson(`workouts/${workoutFileName(p.workout.slug, p.workout.version)}`, p.workout, {
 			createOnly: true
 		});
-	}
-	// Sessionsposterna sist: de pekar på övningar och pass som nu finns.
-	for (const p of plan.sessions) {
-		if (p.action === 'create') await createSession(storage, p.session);
 	}
 }
 

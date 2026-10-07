@@ -97,10 +97,17 @@ const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+/** Ett datum YYYY-MM-DD som finns i kalendern (inte t.ex. 2024-02-30). */
+export function isCalendarDate(v: string): boolean {
+	if (!DATE.test(v)) return false;
+	const d = new Date(`${v}T12:00:00Z`);
+	return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
 function date(o: Obj, key: string, issues: Issues, path: string): string | undefined {
 	const v = str(o, key, issues, path);
 	if (v === undefined) return undefined;
-	if (!DATE.test(v) || Number.isNaN(Date.parse(v))) issues.add(join(path, key), 'måste vara ett datum YYYY-MM-DD');
+	if (!isCalendarDate(v)) issues.add(join(path, key), 'måste vara ett datum YYYY-MM-DD');
 	return v;
 }
 

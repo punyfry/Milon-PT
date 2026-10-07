@@ -232,7 +232,7 @@ describe('import med profil, anteckningar och pass', () => {
 		await runImport(storage, { ...full, sessions: [] });
 		await createSession(storage, {
 			id: 's_20260929',
-			workoutSlug: 'pass-a',
+			workoutSlug: 'pass-c-hiit',
 			workoutVersion: 1,
 			startedAt: '2026-09-29T18:00:00+02:00',
 			endedAt: '2026-09-29T19:00:00+02:00',
@@ -241,6 +241,48 @@ describe('import med profil, anteckningar och pass', () => {
 		});
 		const plan = await runImport(storage, full);
 		expect(plan.sessions.map((s) => s.session.id)).toEqual(['s_20260921', 's_20260929_2']);
+	});
+
+	it('återanvänder samma pass samma dag som redan loggats i appen', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await runImport(storage, { ...full, sessions: [] });
+		await createSession(storage, {
+			id: 's_20260929',
+			workoutSlug: 'pass-a',
+			workoutVersion: 1,
+			startedAt: '2026-09-29T18:00:00+02:00',
+			endedAt: '2026-09-29T19:00:00+02:00',
+			exerciseIds: ['ex_marklyft'],
+			deviations: []
+		});
+		const plan = await runImport(storage, full);
+		expect(plan.sessions.map((s) => [s.session.id, s.action])).toEqual([
+			['s_20260921', 'create'],
+			['s_20260929', 'unchanged']
+		]);
+		expect((await listSessions(storage)).length).toBe(2);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sessionId).toBe('s_20260929');
+	});
+
+	it('ignorerar sessions-id i filen och skriver sessionerna först', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const written: string[] = [];
+		const write = storage.writeJson.bind(storage);
+		storage.writeJson = (path, data, opts) => (written.push(path), write(path, data, opts));
+		const input = {
+			...full,
+			exercises: [full.exercises[0], { ...full.exercises[1], log: [{ sessionId: 's_20261007', date: '2026-09-27', sets: [{ seconds: 30 }] }] }]
+		};
+		await runImport(storage, input);
+		expect((await getExercise(storage, 'ex_planka'))!.data.log[0].sessionId).toBeUndefined();
+		expect(written.slice(0, 2).every((p) => p.startsWith('sessions/'))).toBe(true);
+	});
+
+	it('avvisar datum som inte finns', () => {
+		expect(() => parseImportFile({ sessions: [{ date: '2025-02-29', workout: 'Pass A' }] })).toThrow(/sessions\[0\]\.date/);
+		expect(() =>
+			parseImportFile({ exercises: [{ name: 'X', type: 'bodyweight', instruction: '', log: [{ date: '2026-04-31', sets: [{ reps: 1 }] }] }] })
+		).toThrow(/date/);
 	});
 
 	it('stoppar pass som pekar på okänt pass och felaktig profil', () => {
