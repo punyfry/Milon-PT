@@ -208,7 +208,7 @@ export function anyTimerRunning(session: ActiveSession): boolean {
 // --- sammanfattning -----------------------------------------------------
 
 /**
- * Volym enligt SPEC.md: weight = summa vikt × reps, bodyweight = summa reps,
+ * Volym: weight = summa vikt × reps, bodyweight = summa reps,
  * time = summa sekunder.
  */
 export function volume(type: ExerciseType, sets: readonly ExerciseSet[]): number {
@@ -257,7 +257,7 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 	return { exercises, doneSets: exercises.reduce((n, e) => n + e.doneSets, 0), volumeByType };
 }
 
-/** Förslag enligt SPEC.md: styrka ca 250–350 kcal. Profilens värde för passet går före. */
+/** Förslag: styrka ca 250–350 kcal. Profilens värde för passet går före. */
 export const DEFAULT_KCAL = 300;
 
 /**

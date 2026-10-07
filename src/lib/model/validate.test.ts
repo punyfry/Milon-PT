@@ -12,7 +12,7 @@ const marklyft = {
 };
 
 describe('validering', () => {
-	it('godkänner exemplen i SPEC.md', () => {
+	it('godkänner exemplen i README.md', () => {
 		expect(assertValid('övning', marklyft, validateExercise)).toEqual(marklyft);
 		const workout = {
 			slug: 'pass-b',

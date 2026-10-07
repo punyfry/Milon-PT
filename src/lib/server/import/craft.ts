@@ -1,5 +1,5 @@
 /**
- * Engångsimport från Craft (SPEC.md, "Historik och import").
+ * Engångsimport från Craft (se README.md, "Import från Craft").
  *
  * Flödet är uppdelat så att det kan torrköras och testas:
  * 1. `parseImportFile` validerar hela filen och samlar alla fel.

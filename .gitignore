@@ -22,3 +22,4 @@ vite.config.ts.timestamp-*
 
 # Lokal datalagring i dev (utan Blob-token)
 /.data
+coverage

@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
 import { isObject } from '$lib/model';
-import { builderModel, createMessage, isAiConfigured } from '$lib/server/ai/client';
+import { builderModel, countAiCall, createMessage, isAiConfigured } from '$lib/server/ai/client';
+import { AiLimitError } from '$lib/server/ai/usage';
 import {
 	conversationView,
 	loadConversation,
@@ -29,6 +30,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const message = typeof body.message === 'string' ? body.message.trim() : '';
 	if (!message) error(400, 'Meddelandet är tomt');
 	if (message.length > MAX_MESSAGE) error(400, `Meddelandet är för långt (max ${MAX_MESSAGE} tecken)`);
+
+	try {
+		await countAiCall(storage);
+	} catch (e) {
+		if (e instanceof AiLimitError) error(429, e.message);
+		throw e;
+	}
 
 	let conversation: BuilderConversation;
 	let version: string | undefined;

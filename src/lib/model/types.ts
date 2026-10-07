@@ -1,5 +1,5 @@
 /**
- * Datamodellen enligt SPEC.md. Delas av server och klient.
+ * Datamodellen (se README.md, "Datamodell"). Delas av server och klient.
  *
  * Per användare finns fyra filtyper under `users/<userId>/`:
  * - `profile.json`
@@ -99,7 +99,7 @@ export interface Profile {
 	rules?: string[];
 	/** kcal-uppskattning per pass, nyckel = workout-slug. Går före kcalEstimates. */
 	kcalPerWorkout?: Record<string, number>;
-	/** kcal-uppskattning per passtyp (SPEC.md: styrka ca 250–350, HIIT ca 300–450). */
+	/** kcal-uppskattning per passtyp (standard: styrka ca 250–350, HIIT ca 300–450). */
 	kcalEstimates?: Partial<Record<KcalWorkoutType, KcalRange>>;
 	/** Övrig kontext till coachen. */
 	coachContext?: string;
@@ -132,5 +132,5 @@ export interface ActiveSession {
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
 
 export const LOAD_STEP_KG: Record<LoadClass, number> = { light: 1.25, heavy: 5 };
-/** Föreslaget steg för tidsövningar (öppet beslut i SPEC.md). */
+/** Steg för tidsövningar (±5 s). */
 export const TIME_STEP_SECONDS = 5;

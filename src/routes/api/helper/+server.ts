@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
 import { ValidationError } from '$lib/model';
-import { createMessage, helperModel, isAiConfigured } from '$lib/server/ai/client';
+import { countAiCall, createMessage, helperModel, isAiConfigured } from '$lib/server/ai/client';
+import { AiLimitError } from '$lib/server/ai/usage';
 import { askHelper, parseHelperInput } from '$lib/server/helper/ask';
 import { storageFor } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
@@ -16,6 +17,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		input = parseHelperInput(body);
 	} catch (e) {
 		if (e instanceof ValidationError) error(400, e.issues.join('; '));
+		throw e;
+	}
+	try {
+		await countAiCall(storage);
+	} catch (e) {
+		if (e instanceof AiLimitError) error(429, e.message);
 		throw e;
 	}
 	try {

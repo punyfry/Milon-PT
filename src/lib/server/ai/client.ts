@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
 import type { CreateMessage } from './models';
+import { consumeAiCall, dailyLimit } from './usage';
+import type { UserStorage } from '../storage/types';
+import { todayInStockholm } from '../../time';
 
-/** Standardmodeller när miljövariablerna saknas (SPEC.md: Sonnet för byggaren, Haiku 4.5 för hjälparen). */
+/** Standardmodeller när miljövariablerna saknas: Sonnet för byggaren, Haiku 4.5 för hjälparen. */
 export const DEFAULT_BUILDER_MODEL = 'claude-sonnet-5-5';
 export const DEFAULT_HELPER_MODEL = 'claude-haiku-4-5';
 
@@ -25,3 +28,11 @@ export const createMessage: CreateMessage = (params) => {
 	client ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 	return client.beta.messages.create(params);
 };
+
+/**
+ * Räknar ett anrop mot dagens gräns (AI_DAILY_LIMIT, standard 200 per
+ * användare). Kastar AiLimitError när gränsen är nådd.
+ */
+export function countAiCall(storage: UserStorage): Promise<number> {
+	return consumeAiCall(storage, todayInStockholm(), dailyLimit(env.AI_DAILY_LIMIT));
+}
