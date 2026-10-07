@@ -47,5 +47,6 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 
 ## Workflow
 
+- Use the `leverera` skill (`.claude/skills/leverera/SKILL.md`) for features, fixes and issues: you code, then run the subagents `milon-reviewer` and `milon-tester` (`.claude/agents/`) in parallel, fix their findings and merge when CI and both are satisfied.
 - One branch and PR per change; squash-merge with the PR number in the title. Describe how to test in the PR.
 - Decisions that belong to the owner (product behaviour, UX choices) go to a GitHub issue instead of being guessed.
