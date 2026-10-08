@@ -237,7 +237,8 @@ export const EXPIRED_TIMER_GRACE_MS = 3 * 60_000;
  * Fills in the reached time for timers that hit zero, even if that happened
  * while the page was closed. With `graceMs`, a timer that hit zero longer ago
  * than that is cancelled instead (no time, done flag unchanged). Returns the
- * number of timers that finished or were cancelled.
+ * number of timers that finished or were cancelled; the ticker beeps on it, so
+ * it passes no `graceMs`.
  */
 export function completeExpiredTimers(session: ActiveSession, now: Date, graceMs = Infinity): number {
 	let changed = 0;
