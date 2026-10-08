@@ -309,4 +309,13 @@ describe('saving a turn', () => {
 		stale.messages.push({ role: 'user', content: 'Från en annan flik' });
 		await expect(saveTurn(storage, stale, loaded.version, 0)).rejects.toBeInstanceOf(StorageConflictError);
 	});
+
+	it('never retries creating a conversation, nor one that is gone', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const conversation = await startConversation(storage, null);
+		await saveConversation(storage, conversation);
+		await expect(saveTurn(storage, conversation, undefined, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		const gone = { ...conversation, id: 'b_finnsinte1' };
+		await expect(saveTurn(storage, gone, 'v-gammal', 0)).rejects.toBeInstanceOf(StorageConflictError);
+	});
 });
