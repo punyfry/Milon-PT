@@ -20,6 +20,7 @@ const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
+const { POST: workouts } = await import('./workouts/+server');
 const { PUT: editSessionHandler, DELETE: deleteSessionHandler } = await import('./sessions/[id]/+server');
 
 type Handler = (event: never) => Promise<Response>;
@@ -203,5 +204,17 @@ describe('POST /api/helper', () => {
 		const res = await call(helper as Handler, { session, exerciseId: 'ex_planka', question: 'Hur?' });
 		expect(res.status).toBe(429);
 		expect(createMessage).not.toHaveBeenCalled();
+	});
+});
+
+describe('POST /api/workouts', () => {
+	it('saves a workout built by hand and answers 400 with messages for the user', async () => {
+		await createExercise(state.storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		const ok = await call(workouts as Handler, { name: 'Pass C', items: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }] });
+		expect(ok).toEqual({ status: 200, body: { slug: 'pass-c', version: 1, saved: true } });
+		const bad = await call(workouts as Handler, { name: '', items: [] });
+		expect(bad.status).toBe(400);
+		expect(bad.body.message).toBe('Passet behöver ett namn. Passet behöver minst en övning.');
+		expect((await call(workouts as Handler, 'inte json')).status).toBe(400);
 	});
 });

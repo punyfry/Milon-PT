@@ -53,3 +53,18 @@ describe('/pass/[slug] load', () => {
 		expect(exercises.map((e) => e.id)).toEqual(['ex_gammal', 'ex_arkiverad_extra']);
 	});
 });
+
+describe('helper availability', () => {
+	it('follows the API key and the coach setting', async () => {
+		const { env } = await import('../../../test/env-private');
+		const { saveProfile } = await import('$lib/server/data');
+		env.ANTHROPIC_API_KEY = 'test';
+		const available = async () => ((await run()) as unknown as { helperAvailable: boolean }).helperAvailable;
+		expect(await available()).toBe(true);
+		await saveProfile(state.storage, { coach: false });
+		expect(await available()).toBe(false);
+		delete env.ANTHROPIC_API_KEY;
+		await saveProfile(state.storage, { coach: true }, (await state.storage.readJson('profile.json'))!.version);
+		expect(await available()).toBe(false);
+	});
+});
