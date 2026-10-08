@@ -199,6 +199,12 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 	};
 }
 
+/** An issue as a sentence for the user: "name: övningen behöver ett namn" → "Övningen behöver ett namn." */
+export function issueText(issue: string): string {
+	const text = issue.replace(/^[\w.[\]]+: /, '');
+	return text[0].toUpperCase() + text.slice(1) + (/[.!?]$/.test(text) ? '' : '.');
+}
+
 export const MAX_EXERCISE_NAME = 80;
 export const MAX_INSTRUCTION = 1000;
 

@@ -93,7 +93,9 @@
 	{#if data.cards.length === 0}
 		<section class="empty">
 			<h2>Inga pass än</h2>
-			<p class="muted">Bygg ditt första pass tillsammans med Milon, eller importera dina pass från Craft.</p>
+			<p class="muted">
+				{data.coach ? 'Bygg ditt första pass tillsammans med Milon' : 'Bygg ditt första pass'}, eller importera dina pass från Craft.
+			</p>
 			<a class="btn primary full" href="/skapa">Skapa pass</a>
 			<a class="btn full" href="/konto#import">Importera från Craft</a>
 		</section>

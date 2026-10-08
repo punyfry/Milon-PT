@@ -1,9 +1,13 @@
 import {
+	Issues,
+	ValidationError,
 	assertValid,
+	issueText,
 	exerciseIdBase,
 	normalizeName,
 	uniqueId,
 	validateExercise,
+	validateExerciseInput,
 	type Exercise,
 	type LogEntry
 } from '../../model';
@@ -94,6 +98,28 @@ export async function saveExercise(
 	const valid = assertValid(`övning ${exercise.id}`, exercise, validateExercise);
 	const result = await storage.writeJson(path(valid.id), valid, { ifMatch: version });
 	return { data: valid, version: result.version };
+}
+
+/**
+ * Changes an exercise's name, type and instruction (`input` as typed by the
+ * user). The type is locked once sets are logged, since sets are stored per
+ * type, and the name may not be taken by another active exercise of the same
+ * type. Throws ValidationError with messages for the user.
+ */
+export async function updateExerciseDetails(storage: UserStorage, id: string, input: unknown): Promise<StoredJson<Exercise>> {
+	const issues = new Issues();
+	const fields = validateExerciseInput(input, issues, '');
+	if (!fields) throw new ValidationError('övning', issues.list.map(issueText));
+	const current = await getExercise(storage, id);
+	if (!current) throw new ValidationError('övning', ['Övningen finns inte.']);
+	if (fields.type !== current.data.type && current.data.log.length)
+		throw new ValidationError('övning', ['Typen går inte att ändra när det finns loggade set.']);
+	const key = normalizeName(fields.name);
+	const taken = (await listExercises(storage)).some(
+		({ data: e }) => e.id !== id && !e.archived && e.type === fields.type && normalizeName(e.name) === key
+	);
+	if (taken) throw new ValidationError('övning', [`Det finns redan en övning som heter ${fields.name}.`]);
+	return saveExercise(storage, { ...current.data, ...fields }, current.version);
 }
 
 /** Sorts the log newest first. Stable, so entries on the same day keep their order. */

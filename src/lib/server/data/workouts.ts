@@ -32,6 +32,28 @@ export async function getWorkout(
 	return { data: assertValid(`pass ${slug} v${version}`, file.data, validateWorkout), version: file.version };
 }
 
+export interface VersionSummary {
+	version: number;
+	createdAt: string;
+	changeNote: string | null;
+	exerciseCount: number;
+}
+
+/** Every version of a workout, newest first, with the latest in full. Null if the workout doesn't exist. */
+export async function getWorkoutHistory(
+	storage: UserStorage,
+	slug: string
+): Promise<{ latest: WorkoutTemplate; versions: VersionSummary[] } | null> {
+	const numbers = (await listWorkoutVersions(storage)).get(slug);
+	if (!numbers?.length) return null;
+	const all = (await Promise.all(numbers.map((v) => getWorkout(storage, slug, v)))).filter((w) => w !== null).map((w) => w.data);
+	if (!all.length) return null;
+	const versions = all
+		.map((w) => ({ version: w.version, createdAt: w.createdAt, changeNote: w.changeNote ?? null, exerciseCount: w.exercises.length }))
+		.reverse();
+	return { latest: all[all.length - 1], versions };
+}
+
 /** Latest version of a workout, or null if it doesn't exist. */
 export async function getLatestWorkout(storage: UserStorage, slug: string): Promise<WorkoutTemplate | null> {
 	const versions = (await listWorkoutVersions(storage)).get(slug);

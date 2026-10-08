@@ -10,6 +10,7 @@ import {
 	getProfile,
 	listLatestWorkouts,
 	prependLogEntry,
+	updateExerciseDetails,
 	saveExercise,
 	saveProfile,
 	saveWorkoutVersion
@@ -99,5 +100,25 @@ describe('sessions', () => {
 			'pass-a': '2026-10-06T18:00:00+02:00',
 			'pass-b': '2026-09-29T08:00:00+02:00'
 		});
+	});
+});
+
+describe('editing exercise details', () => {
+	it('changes name, type and instruction, and keeps the log', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		const { data } = await updateExerciseDetails(storage, 'ex_rodd', { name: ' Hantelrodd ', type: 'bodyweight', instruction: ' Rak rygg. ' });
+		expect(data).toMatchObject({ id: 'ex_rodd', name: 'Hantelrodd', type: 'bodyweight', instruction: 'Rak rygg.', log: [] });
+	});
+
+	it('locks the type once sets are logged and refuses a name already taken', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		await prependLogEntry(storage, 'ex_rodd', { date: '2026-10-06', sets: [{ weight: 20, reps: 8 }] });
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'time', instruction: '' })).rejects.toThrow(/Typen går inte/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'marklyft', type: 'weight', instruction: '' })).rejects.toThrow(/redan en övning/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: '', type: 'weight' })).rejects.toThrow(/Övningen behöver ett namn\./);
+		await expect(updateExerciseDetails(storage, 'ex_saknas', { name: 'X', type: 'weight' })).rejects.toThrow(/finns inte/);
 	});
 });

@@ -1,16 +1,21 @@
-import { error } from '@sveltejs/kit';
-import { getWorkout, listExercises, listLatestWorkouts, listWorkoutVersions } from '$lib/server/data';
-import { builderModel, isAiConfigured } from '$lib/server/ai/client';
+import { error, redirect } from '@sveltejs/kit';
+import { getProfile, getWorkoutHistory, listExercises, listLatestWorkouts, type VersionSummary } from '$lib/server/data';
+import { aiAvailable, builderModel } from '$lib/server/ai/client';
 import { conversationView, loadConversation } from '$lib/server/builder/conversation';
 import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
 
 /**
  * `/skapa` starts a new workout, `/skapa?pass=<slug>` edits a workout and
- * `/skapa?c=<id>` reopens an ongoing conversation.
+ * `/skapa?c=<id>` reopens an ongoing conversation. Without Milon (turned off,
+ * or no API key) workouts are built by hand at `/skapa/manuell`.
  */
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const storage = storageFor(locals);
+	if (!aiAvailable((await getProfile(storage)).data)) {
+		const pass = url.searchParams.get('pass');
+		redirect(307, pass ? `/skapa/manuell?${new URLSearchParams({ pass })}` : '/skapa/manuell');
+	}
 
 	const c = url.searchParams.get('c');
 	const loaded = c ? await loadConversation(storage, c) : null;
@@ -18,26 +23,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const conversation = loaded ? await conversationView(storage, loaded.conversation) : null;
 
 	const editSlug = conversation ? conversation.editingSlug : url.searchParams.get('pass');
-	let versions: { version: number; createdAt: string; changeNote: string | null; exerciseCount: number }[] = [];
+	let versions: VersionSummary[] = [];
 	let editing: { slug: string; name: string; version: number } | null = null;
 	/** The workout's exercises before the conversation starts, so the list isn't empty when editing. */
 	let initialDraft: { exerciseId: string; sets: number; target: { reps: number } | { seconds: number }; name: string; type: string }[] = [];
 	if (editSlug) {
-		const numbers = (await listWorkoutVersions(storage)).get(editSlug);
-		if (!numbers?.length) {
+		const history = await getWorkoutHistory(storage, editSlug);
+		if (!history) {
 			if (!conversation) error(404, 'Passet finns inte');
 		} else {
-			const all = await Promise.all(numbers.map((v) => getWorkout(storage, editSlug, v)));
-			versions = all
-				.filter((w) => w !== null)
-				.map((w) => ({
-					version: w.data.version,
-					createdAt: w.data.createdAt,
-					changeNote: w.data.changeNote ?? null,
-					exerciseCount: w.data.exercises.length
-				}))
-				.reverse();
-			const latest = all[all.length - 1]!.data;
+			versions = history.versions;
+			const latest = history.latest;
 			editing = { slug: latest.slug, name: latest.name, version: latest.version };
 			if (!conversation) {
 				const byId = new Map((await listExercises(storage)).map((e) => [e.data.id, e.data]));
@@ -55,7 +51,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
 	return {
-		configured: isAiConfigured(),
 		model: builderModel(),
 		conversation,
 		editing,

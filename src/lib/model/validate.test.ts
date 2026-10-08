@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, issueText, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -79,5 +79,13 @@ describe('profile', () => {
 		expect(coachEnabled({})).toBe(true);
 		expect(coachEnabled({ coach: true })).toBe(true);
 		expect(coachEnabled({ coach: false })).toBe(false);
+	});
+});
+
+describe('issue text for the user', () => {
+	it('drops the path, starts with a capital letter and ends with a period', () => {
+		expect(issueText('name: övningen behöver ett namn')).toBe('Övningen behöver ett namn.');
+		expect(issueText('exercises[2].log[0].sets[1].reps: måste vara ett heltal')).toBe('Måste vara ett heltal.');
+		expect(issueText('Passet finns inte längre.')).toBe('Passet finns inte längre.');
 	});
 });

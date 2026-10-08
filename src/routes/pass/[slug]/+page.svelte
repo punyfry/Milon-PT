@@ -9,7 +9,7 @@
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
 	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import type { ActiveSession, ActiveSet, ExerciseType } from '$lib/model';
+	import { newExerciseId, normalizeName, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
 	import {
 		addSet,
 		applySwap,
@@ -39,9 +39,14 @@
 
 	/** Exercises swapped in (by Milon) that were not in the page data, e.g. newly created ones. */
 	let swappedIn = $state<ExerciseInfo[]>([]);
-	const infos = $derived(new Map<string, ExerciseInfo>([...data.catalog, ...data.exercises, ...swappedIn].map((e) => [e.id, e])));
 
 	let session = $state<ActiveSession | null>(null);
+	/** Exercises written in during the session only exist in it until it is saved. */
+	const written = (s: ActiveSession | null): ExerciseInfo[] =>
+		(s?.newExercises ?? []).map(({ id, name, type, instruction }) => ({ id, name, type, instruction }));
+	const infos = $derived(
+		new Map<string, ExerciseInfo>([...data.catalog, ...data.exercises, ...swappedIn, ...written(session)].map((e) => [e.id, e]))
+	);
 	/** Another workout is already in progress; shown instead of overwriting it. */
 	let other = $state<ActiveSession | null>(null);
 	let mode = $state<'active' | 'finish'>('active');
@@ -83,7 +88,8 @@
 		if (stored?.preparing && !stored.deviations.length && stored.workoutVersion !== data.workout.version) stored = null;
 		if (stored) {
 			// The right version and every swapped-in exercise must be loaded.
-			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id));
+			const local = new Set(written(stored).map((e) => e.id));
+			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id) && !local.has(id));
 			if (stored.workoutVersion !== data.workout.version || missing.length) {
 				const params = new URLSearchParams({ v: String(stored.workoutVersion) });
 				if (missing.length) params.set('ex', missing.join(','));
@@ -420,6 +426,18 @@
 	function pick(from: string, to: ExerciseInfo) {
 		swap(from, to);
 		sheet = null;
+	}
+
+	/** Swaps to an exercise written in; one written in earlier with the same name and type is reused. */
+	function pickNew(from: string, fields: Omit<NewSessionExercise, 'id'>) {
+		if (!session) return;
+		const key = normalizeName(fields.name);
+		let entry = session.newExercises?.find((n) => n.type === fields.type && normalizeName(n.name) === key);
+		if (!entry) {
+			entry = { id: newExerciseId(), ...fields };
+			change((s) => (s.newExercises = [...(s.newExercises ?? []), entry!]));
+		}
+		pick(from, { id: entry.id, name: entry.name, type: entry.type, instruction: entry.instruction });
 	}
 
 	/** From the swap list to Milon, with the swap question already asked. */
@@ -781,6 +799,7 @@
 			{session}
 			onaskmilon={data.helperAvailable ? () => askMilonToSwap(id) : undefined}
 			onpick={(to) => pick(id, to)}
+			onnew={(fields) => pickNew(id, fields)}
 			onclose={() => (sheet = null)}
 		/>
 	</Sheet>
