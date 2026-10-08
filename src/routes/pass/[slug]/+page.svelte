@@ -736,7 +736,7 @@
 						class="sumrow"
 						class:skipped={!done.length}
 						onclick={() => goTo(i)}
-						aria-label="{ei?.name ?? e.exerciseId}: ändra{e.note ? `. Anteckning: ${e.note}` : ''}{e.note && !done.length ? ' (sparas inte, inga set klara)' : ''}"
+						aria-label="{ei?.name ?? e.exerciseId}: ändra{e.note && !done.length ? '. Anteckningen sparas inte, inga set klara' : ''}"
 					>
 						<span class="name">
 							{ei?.name ?? e.exerciseId}
@@ -744,7 +744,7 @@
 							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
 						</span>
 						<span class="setsline num">{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : 'Inga set klara'}</span>
-						{#if e.note}<span class="sumnote">{e.note}{#if !done.length}<em> · sparas inte, inga set klara</em>{/if}</span>{/if}
+						{#if e.note}<span class="sumnote">{e.note}{#if !done.length}<em>{' · sparas inte'}</em>{/if}</span>{/if}
 						<span class="go"><Icon name="right" /></span>
 					</button>
 				</li>
