@@ -2,7 +2,7 @@
 	/**
 	 * Milon's face (assets/avatar/milon.svg), inline so it takes the accent
 	 * color. `thinking` blinks the eyes while he works. Decorative: the text
-	 * next to it always says it is Milon.
+	 * next to it, or the button's aria-label, says it is Milon.
 	 */
 	interface Props {
 		size?: number;

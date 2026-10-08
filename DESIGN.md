@@ -89,6 +89,7 @@ No rest timer.
 ## Other screens
 
 - **Start:** greeting with first name and date, this week's sessions against the weekly goal, a card for a workout in progress, workout cards with their first exercises.
+- **Workout overview** (before "Starta passet"): a list with hairlines, per exercise the name ("Inbytt"/"Ny" tag), target, last time's note and an "Instruktion" toggle when there is one; on the right "Byt" and a small Milon icon (icon only, with an aria-label). One "Fråga Milon om passet" below the list. No weights or reps here.
 - **History:** week card (today outlined in the accent, volume per type without a heading), milestones, exercises grouped by workout with search.
 - **Exercise:** chart and the latest sessions as rows (date, best value, sets, note, volume).
 - **Create workout:** collapsible exercise list at the top, chat, composer that never covers the last message. The user's own messages are grey with a `--ring` border. Versions in a sheet.
