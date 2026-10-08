@@ -193,6 +193,33 @@ describe('save session', () => {
 		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBeUndefined();
 	});
 
+	it('uses the active namesake of a deleted exercise in the new version instead of bringing it back', async () => {
+		const storage = await setup();
+		const v1 = (await listLatestWorkouts(storage))[0];
+		await saveWorkoutVersion(storage, { ...v1, createdAt: '2026-10-02', exercises: v1.exercises.filter((e) => e.exerciseId !== 'ex_plankan') });
+		await deleteExercise(storage, 'ex_plankan');
+		await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
+
+		const session = active({ deviations: [{ type: 'swap', from: 'ex_hantelpress', to: 'ex_armhavning' }] });
+		session.exercises[1] = { exerciseId: 'ex_armhavning', sets: [{ reps: 12, done: true }] };
+		await saveSession(storage, input(session, { saveAsNewVersion: true }));
+		const ids = (await listLatestWorkouts(storage))[0].exercises.map((e) => e.exerciseId);
+		expect(ids).toEqual(['ex_marklyft', 'ex_armhavning', 'ex_plankan_2']);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+	});
+
+	it('does not bring back a deleted exercise that a swap took out of the workout', async () => {
+		const storage = await setup();
+		const v1 = (await listLatestWorkouts(storage))[0];
+		await saveWorkoutVersion(storage, { ...v1, createdAt: '2026-10-02', exercises: v1.exercises.filter((e) => e.exerciseId !== 'ex_hantelpress') });
+		await deleteExercise(storage, 'ex_hantelpress');
+
+		const session = active({ deviations: [{ type: 'swap', from: 'ex_hantelpress', to: 'ex_armhavning' }] });
+		session.exercises[1] = { exerciseId: 'ex_armhavning', sets: [{ reps: 12, done: true }] };
+		await saveSession(storage, input(session, { saveAsNewVersion: true }));
+		expect((await getExercise(storage, 'ex_hantelpress'))!.data.deleted).toBe(true);
+	});
+
 	it('refuses to save without done sets or with sets of the wrong type', async () => {
 		const storage = await setup();
 		const none = active();

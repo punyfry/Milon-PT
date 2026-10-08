@@ -140,6 +140,22 @@ export async function deleteExercise(storage: UserStorage, id: string): Promise<
 	await saveExercise(storage, { ...current.data, deleted: true }, current.version);
 }
 
+/**
+ * The deleted exercises among `ids`, each with the active exercise that has
+ * since taken its name and type, if any. Bringing back one with such a
+ * namesake would leave two active exercises with the same name.
+ */
+export async function findDeletedExercises(
+	storage: UserStorage,
+	ids: Iterable<string>
+): Promise<{ stored: StoredJson<Exercise>; namesake?: Exercise }[]> {
+	const stored = await Promise.all([...new Set(ids)].map((id) => getExercise(storage, id)));
+	const deleted = stored.filter((e) => e?.data.deleted).map((e) => e!);
+	if (!deleted.length) return [];
+	const active = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
+	return deleted.map((d) => ({ stored: d, namesake: findSameExercise(active, d.data) }));
+}
+
 /** Brings back a deleted exercise, e.g. when a workout version that uses it is saved again. */
 export async function undeleteExercise(storage: UserStorage, stored: StoredJson<Exercise>): Promise<void> {
 	const { deleted: _, ...active } = stored.data;

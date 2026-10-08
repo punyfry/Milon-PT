@@ -15,7 +15,8 @@
 	let fields = $state({ name: '', type: 'weight' as ExerciseType, instruction: '' });
 	let editError = $state<string | null>(null);
 
-	const OFFLINE = 'Kunde inte nå servern. Försök igen.';
+	/** No answer from the server (offline) or an unexpected error; the default would show the error page. */
+	const FAILED = 'Något gick fel. Kontrollera nätet och försök igen.';
 
 	// --- deleting -------------------------------------------------------------
 	let confirmDelete = $state(false);
@@ -139,8 +140,10 @@
 				async ({ result, update }) => {
 					if (result.type === 'success') editing = false;
 					else if (result.type === 'failure') editError = String(result.data?.editError ?? 'Kunde inte spara.');
-					// Without a network the default would show the error page.
-					else if (result.type === 'error') return void (editError = OFFLINE);
+					else if (result.type === 'error') {
+						editError = FAILED;
+						return;
+					}
 					await update({ reset: false });
 				}}
 		>
@@ -167,7 +170,7 @@
 				return async ({ result, update }) => {
 					deleting = false;
 					if (result.type === 'failure') deleteError = String(result.data?.deleteError ?? 'Kunde inte ta bort övningen.');
-					else if (result.type === 'error') deleteError = OFFLINE;
+					else if (result.type === 'error') deleteError = FAILED;
 					else await update();
 				};
 			}}
