@@ -9,7 +9,7 @@
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
 	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import { findSameExercise, newExerciseId, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
+	import { NOTE_MAX, findSameExercise, newExerciseId, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
 	import {
 		addSet,
 		applySwap,
@@ -62,7 +62,8 @@
 		| { kind: 'close' }
 		| { kind: 'discard' }
 		| { kind: 'help'; exerciseId: string }
-		| { kind: 'swap'; exerciseId: string };
+		| { kind: 'swap'; exerciseId: string }
+		| { kind: 'note'; index: number; text: string };
 	let sheet = $state<SheetState | null>(null);
 	let undo = $state<{ text: string; run: () => void } | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | undefined;
@@ -406,6 +407,23 @@
 		}
 	}
 
+	// --- notes ---------------------------------------------------------------
+
+	function openNote(index: number) {
+		sheet = { kind: 'note', index, text: session?.exercises[index]?.note ?? '' };
+	}
+
+	function saveNote() {
+		if (sheet?.kind !== 'note') return;
+		const { index, text } = sheet;
+		const note = text.trim().slice(0, NOTE_MAX);
+		change((s) => {
+			if (note) s.exercises[index].note = note;
+			else delete s.exercises[index].note;
+		});
+		sheet = null;
+	}
+
 	// --- swapping and starting ---------------------------------------------
 
 	/** Swaps for this workout only; during the workout the new exercise is shown. */
@@ -635,6 +653,7 @@
 						</button>
 					{/if}
 					<button class="btn small" onclick={() => guard(() => (sheet = { kind: 'swap', exerciseId: ex.exerciseId }))}><Icon name="swap" /> Byt</button>
+					<button class="btn small" aria-haspopup="dialog" onclick={() => openNote(cur)}><Icon name="note" /> Anteckning</button>
 					{#if data.helperAvailable}
 						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
 					{/if}
@@ -642,6 +661,11 @@
 				{#if showInstruction[ex.exerciseId]}<p class="instruction">{info.instruction}</p>{/if}
 				{#if info.lastEntry?.note}
 					<p class="lastnote"><span>Förra gången:</span> {info.lastEntry.note}</p>
+				{/if}
+				{#if ex.note}
+					<button class="lastnote mine" onclick={() => openNote(cur)} aria-label="Din anteckning: {ex.note}. Tryck för att ändra."
+						><span>I dag:</span> {ex.note}</button
+					>
 				{/if}
 
 				<div class="sets">
@@ -726,13 +750,19 @@
 				{@const ei = infos.get(e.exerciseId)}
 				{@const done = e.sets.filter((s) => s.done)}
 				<li>
-					<button class="sumrow" class:skipped={!done.length} onclick={() => goTo(i)} aria-label="{ei?.name ?? e.exerciseId}: ändra">
+					<button
+						class="sumrow"
+						class:skipped={!done.length}
+						onclick={() => goTo(i)}
+						aria-label="{ei?.name ?? e.exerciseId}: ändra{e.note && !done.length ? '. Anteckningen sparas inte, inga set klara' : ''}"
+					>
 						<span class="name">
 							{ei?.name ?? e.exerciseId}
 							{#if e.sets.some((s) => isRecord(ei, s))}<span class="tag">PR</span>{/if}
 							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
 						</span>
 						<span class="setsline num">{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : 'Inga set klara'}</span>
+						{#if e.note}<span class="sumnote">{e.note}{#if !done.length}<em>{' · sparas inte'}</em>{/if}</span>{/if}
 						<span class="go"><Icon name="right" /></span>
 					</button>
 				</li>
@@ -802,6 +832,15 @@
 			onnew={(fields) => pickNew(id, fields)}
 			onclose={() => (sheet = null)}
 		/>
+	</Sheet>
+{:else if sheet?.kind === 'note' && session}
+	{@const name = infos.get(session.exercises[sheet.index]?.exerciseId ?? '')?.name ?? ''}
+	<Sheet title="Anteckning" onclose={() => (sheet = null)}>
+		<h2 class="sheet-title">Anteckning · {name}</h2>
+		<p class="muted">Sparas med övningens set och visas nästa gång, t.ex. "Prova 25 kg".</p>
+		<textarea bind:value={sheet.text} maxlength={NOTE_MAX} rows="4" aria-label="Anteckning för {name}" placeholder="Skriv en anteckning"></textarea>
+		<button class="btn primary full" onclick={saveNote}>Spara anteckning</button>
+		<button class="btn ghost full" onclick={() => (sheet = null)}>Avbryt</button>
 	</Sheet>
 {:else if sheet?.kind === 'help' && help[sheet.exerciseId]}
 	{@const id = sheet.exerciseId}
@@ -974,12 +1013,43 @@
 		white-space: pre-line;
 	}
 	.lastnote {
+		overflow-wrap: anywhere;
 		margin: 12px 0 0;
 		padding-left: 10px;
 		border-left: 2px solid var(--line);
 		font-size: 14px;
 		color: var(--soft);
 		white-space: pre-line;
+	}
+	.lastnote.mine {
+		display: block;
+		width: 100%;
+		text-align: left;
+		background: none;
+		border: 0;
+		border-left: 2px solid var(--accent);
+		padding: 0 0 0 10px;
+		font: inherit;
+		font-size: 14px;
+		color: var(--soft);
+		cursor: pointer;
+	}
+	.sumnote {
+		grid-column: 1;
+		overflow-wrap: anywhere;
+		font-size: 13px;
+		color: var(--muted);
+		white-space: pre-line;
+	}
+	textarea {
+		width: 100%;
+		padding: 12px 14px;
+		border-radius: var(--radius);
+		border: 1px solid var(--line);
+		background: var(--surface-2);
+		color: var(--text);
+		font: inherit;
+		resize: vertical;
 	}
 	.lastnote span {
 		color: var(--muted);

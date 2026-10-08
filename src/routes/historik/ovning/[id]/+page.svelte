@@ -237,6 +237,7 @@
 	}
 	.note {
 		margin: 0;
+		overflow-wrap: anywhere;
 		font-size: 13px;
 		color: var(--muted);
 		white-space: pre-line;

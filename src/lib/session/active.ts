@@ -331,12 +331,15 @@ export function applySwap(session: ActiveSession, fromId: string, to: ExerciseIn
 	if (index < 0 || session.exercises.some((e) => e.exerciseId === to.id)) return;
 
 	const old = session.exercises[index];
-	const fresh = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target, { ownHistory: true }) };
+	const fresh: ActiveSession['exercises'][number] = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target, { ownHistory: true }) };
 	const done = old.sets.filter((s) => s.done);
 	if (done.length) {
+		// The note stays with the done sets it belongs to.
 		old.sets = done;
 		session.exercises.splice(index + 1, 0, fresh);
 	} else {
+		// Nothing done yet: today's note (often the reason for the swap) moves to the new exercise.
+		if (old.note) fresh.note = old.note;
 		session.exercises.splice(index, 1, fresh);
 	}
 

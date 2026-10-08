@@ -86,6 +86,27 @@ describe('save session', () => {
 		});
 	});
 
+	it("saves an exercise's note with its log entry, trimmed, and only for exercises with done sets", async () => {
+		const storage = await setup();
+		const session = active();
+		session.exercises[0].note = '  Prova 50 kg nästa gång ';
+		session.exercises[1].note = 'Ingen anteckning sparas här';
+		session.exercises[1].sets = [{ weight: 12.5, reps: 10, done: false }];
+		session.exercises[2].note = '   ';
+		await saveSession(storage, input(session));
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBe('Prova 50 kg nästa gång');
+		expect((await getExercise(storage, 'ex_hantelpress'))!.data.log).toEqual([]);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.log[0]).not.toHaveProperty('note');
+	});
+
+	it('refuses a note that is too long or not text', () => {
+		const session = active();
+		session.exercises[0].note = 'x'.repeat(1001);
+		expect(() => input(session)).toThrow(/högst 1000/);
+		session.exercises[0].note = 5 as never;
+		expect(() => input(session)).toThrow(/måste vara text/);
+	});
+
 	it('can be retried without duplicates', async () => {
 		const storage = await setup();
 		await saveSession(storage, input(active()));
@@ -210,6 +231,14 @@ describe('exercises written in during the session', () => {
 		expect(again.alreadySaved).toBe(true);
 		expect((await listExercises(storage)).map((e) => e.data.id).filter((id) => id.startsWith('ex_hantelrodd'))).toEqual(['ex_hantelrodd']);
 		expect((await getExercise(storage, 'ex_hantelrodd'))!.data.log).toHaveLength(1);
+	});
+
+	it('saves the note of a written-in exercise with its log entry', async () => {
+		const storage = await setup();
+		const session = withNew();
+		session.exercises[1].note = 'Tyngre nästa gång';
+		await saveSession(storage, input(session));
+		expect((await getExercise(storage, 'ex_hantelrodd'))!.data.log[0].note).toBe('Tyngre nästa gång');
 	});
 
 	it('uses an existing exercise with the same name and type', async () => {

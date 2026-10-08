@@ -148,7 +148,8 @@ export interface ActiveSession {
 	workoutVersion: number;
 	startedAt: string;
 	lastActivityAt: string;
-	exercises: { exerciseId: string; sets: ActiveSet[] }[];
+	/** `note` is the user's note for the exercise today, saved with its log entry. */
+	exercises: { exerciseId: string; sets: ActiveSet[]; note?: string }[];
 	deviations: Deviation[];
 	/** Exercises written in during the session; see `NewSessionExercise`. */
 	newExercises?: NewSessionExercise[];
@@ -160,5 +161,8 @@ export interface ActiveSession {
 	 */
 	preparing?: boolean;
 }
+
+/** Longest note per exercise and session (log entry, active session, editor). */
+export const NOTE_MAX = 1000;
 
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
