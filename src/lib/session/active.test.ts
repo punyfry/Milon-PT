@@ -5,6 +5,7 @@ import {
 	applySwap,
 	cancelTimer,
 	completeExpiredTimers,
+	EXPIRED_TIMER_GRACE_MS,
 	createActiveSession,
 	localIsoString,
 	prefillSets,
@@ -251,6 +252,29 @@ describe('timer', () => {
 		expect(completeExpiredTimers(s, at(44))).toBe(0);
 		expect(completeExpiredTimers(s, at(600))).toBe(1);
 		expect(s.exercises[1].sets[0]).toEqual({ seconds: 45, done: true });
+	});
+
+	it('drops the time of a timer that ran out longer ago than the grace period (#57)', () => {
+		const s = createActiveSession(workout, infos, t0);
+		const set = s.exercises[1].sets[0];
+		startTimer(set, t0);
+		// 45 s timer, opened 3 minutes after zero: still within the grace period.
+		const copy = structuredClone(s);
+		expect(completeExpiredTimers(copy, at(45 + 180), EXPIRED_TIMER_GRACE_MS)).toBe(1);
+		expect(copy.exercises[1].sets[0]).toEqual({ seconds: 45, done: true });
+		// Later than that: the timer is cancelled and the set left as it was.
+		expect(completeExpiredTimers(s, at(45 + 181), EXPIRED_TIMER_GRACE_MS)).toBe(1);
+		expect(set).toEqual({ seconds: 45, done: false });
+	});
+
+	it('keeps a restarted done set done when its stale timer is dropped', () => {
+		const s = createActiveSession(workout, infos, t0);
+		const set = s.exercises[1].sets[0];
+		startTimer(set, t0);
+		stopTimer(set, at(20));
+		startTimer(set, at(30));
+		expect(completeExpiredTimers(s, at(3600), EXPIRED_TIMER_GRACE_MS)).toBe(1);
+		expect(set).toEqual({ seconds: 20, plannedSeconds: 45, done: true });
 	});
 
 	it('clears the plan when an expired timer is completed', () => {
