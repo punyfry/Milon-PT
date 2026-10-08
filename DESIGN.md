@@ -19,15 +19,15 @@ CSS variables in `src/routes/+layout.svelte`. The theme follows the phone by def
 | Token | Dark | Light | Used for |
 |---|---|---|---|
 | `--bg` | `#0A0A0B` | `#F3F2EE` | Screen background |
-| `--surface` | `#121214` | `#FAFAF8` | Cards, sheets |
-| `--surface-2` | `#1B1B1E` | `#E9E7E1` | Active set background, buttons, fields |
-| `--step` | `#2A2A2E` | `#DCD9D1` | −/+ buttons in the active set |
-| `--seg` | `#1B1B1E` | `#D6D3CA` | Inactive progress segments |
+| `--surface` | `#17171A` | `#FAFAF8` | Cards, sheets |
+| `--surface-2` | `#26262A` | `#E2DFD7` | Active set background, buttons, fields |
+| `--step` | `#37373C` | `#CFCBC1` | −/+ buttons in the active set |
+| `--seg` | `#26262A` | `#D6D3CA` | Inactive progress segments |
 | `--text` | `#F2F2F0` | `#18181A` | Body text, numbers of done sets |
 | `--heading` | `#C8C8CD` | `#3C3C40` | Large headings (deliberately greyer than `--text`) |
-| `--muted` | `#8E8E94` | `#66655F` | Labels, secondary lines, last session's values |
+| `--muted` | `#8E8E94` | `#605F59` | Labels, secondary lines, last session's values |
 | `--soft` | `#BDBDC2` | `#4A4946` | Secondary text, e.g. the "Nästa" line |
-| `--dim` | `#7C7C83` | `#6E6D66` | Prefilled values of upcoming sets |
+| `--dim` | `#818188` | `#6E6D66` | Prefilled values of upcoming sets |
 | `--line` | `rgba(255,255,255,.08)` | `rgba(0,0,0,.09)` | Hairlines |
 | `--ring` | `rgba(255,255,255,.22)` | `rgba(0,0,0,.28)` | Empty circle for a set not done, border of the user's own chat bubbles |
 | `--accent` | `#5EEAD4` | `#0D6B63` | The only accent color, both as fill and as text |
@@ -35,7 +35,7 @@ CSS variables in `src/routes/+layout.svelte`. The theme follows the phone by def
 
 The light theme uses a darker mint so the same color works everywhere: as a fill, as text and in charts. Error messages use a muted red (`--danger`); destructive buttons have no color of their own and are protected by placement and confirmation instead.
 
-Contrast: all text at least 4.5:1 against its surface. Mint `#0D6B63` is 5.7:1 on the light background and 5.1:1 on `--surface-2`; white text on it is 6.4:1.
+Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly in both themes: `--surface-2` is at least 1.19:1 against both `--bg` and `--surface`, so buttons and fields stand out on cards and sheets. Mint `#0D6B63` is 5.7:1 on the light background and 4.8:1 on `--surface-2`; white text on it is 6.4:1.
 
 ### Typography
 
