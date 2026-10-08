@@ -19,7 +19,7 @@ import {
 	type LogEntry,
 	type SessionRecord
 } from '../../model';
-import { stockholmOffset } from '../../time';
+import { stockholmIso } from '../../time';
 import { StorageConflictError, type UserStorage } from '../storage/types';
 import { getExercise, saveExercise, sortLog } from './exercises';
 import { deleteSessionRecord, getSession, saveSessionRecord } from './sessions';
@@ -76,30 +76,31 @@ export interface EditSessionInput {
 export function parseEditSessionInput(raw: unknown): EditSessionInput {
 	const issues: string[] = [];
 	if (!isObject(raw)) throw new ValidationError('ändring', ['måste vara ett objekt']);
-	if (typeof raw.version !== 'string' || !raw.version || raw.version.length > 200) issues.push('version saknas');
-	if (typeof raw.startTime !== 'string' || !TIME.test(raw.startTime)) issues.push('starttiden är ogiltig');
-	if (typeof raw.end !== 'string' || !DATE_TIME.test(raw.end)) issues.push('sluttiden är ogiltig');
+	if (typeof raw.version !== 'string' || !raw.version || raw.version.length > 200) issues.push('Versionen saknas. Ladda om sidan.');
+	if (typeof raw.startTime !== 'string' || !TIME.test(raw.startTime)) issues.push('Ange en starttid.');
+	if (typeof raw.end !== 'string' || !DATE_TIME.test(raw.end)) issues.push('Ange en sluttid med datum och klockslag.');
 	const kcal = raw.kcalEstimate;
-	if (kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000)) issues.push('kcal är ogiltig');
+	if (kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000)) issues.push('Kcal ska vara mellan 0 och 5000.');
 	const exercises = Array.isArray(raw.exercises) ? raw.exercises : [];
-	if (!Array.isArray(raw.exercises) || exercises.length < 1 || exercises.length > 50) issues.push('passet måste ha minst en övning');
+	if (!Array.isArray(raw.exercises) || exercises.length < 1 || exercises.length > 50) issues.push('Passet måste ha minst en övning.');
 	const seen = new Set<string>();
 	exercises.forEach((e, i) => {
 		if (!isObject(e) || typeof e.exerciseId !== 'string' || !ID.test(e.exerciseId) || seen.has(e.exerciseId)) {
-			issues.push(`exercises[${i}] är ogiltig`);
+			issues.push(`exercises[${i}] är ogiltig.`);
 			return;
 		}
 		seen.add(e.exerciseId);
-		if (!Array.isArray(e.sets) || e.sets.length < 1 || e.sets.length > 50) issues.push(`exercises[${i}] måste ha minst ett set`);
+		if (!Array.isArray(e.sets) || e.sets.length < 1 || e.sets.length > 50) issues.push(`Varje övning måste ha minst ett set (exercises[${i}]).`);
 	});
 	if (issues.length) throw new ValidationError('ändring', issues);
-	return raw as unknown as EditSessionInput;
+	const input = raw as unknown as EditSessionInput;
+	return { ...input, kcalEstimate: input.kcalEstimate === null ? null : Math.round(input.kcalEstimate) };
 }
 
 /** Same instant as before if the wall time is unchanged, so an untouched time keeps its exact value. */
 function withTime(original: string, date: string, time: string): string {
 	if (original.slice(0, 16) === `${date}T${time}`) return original;
-	return `${date}T${time}:00${stockholmOffset(date)}`;
+	return stockholmIso(date, time);
 }
 
 /** Changes one exercise's log; retried on conflict since the read is fresh each time. */
@@ -152,7 +153,7 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 		const sets = e.sets.map((s, j) => {
 			const path = `exercises[${i}].sets[${j}]`;
 			const set = validateSet(s, stored.data.type, issues, path);
-			if (set && Object.entries(set).some(([k, v]) => v > MAX[k as keyof typeof MAX])) issues.add(path, 'orimligt högt värde');
+			if (set && Object.entries(set).some(([k, v]) => v > MAX[k as keyof typeof MAX])) issues.add(path, 'Orimligt högt värde.');
 			return set;
 		});
 		kept.set(e.exerciseId, sets.filter((s) => s !== null));
@@ -172,6 +173,7 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	}
 
 	const updated: SessionRecord = { ...record, startedAt, endedAt, exerciseIds: record.exerciseIds.filter((e) => kept.has(e)) };
+	if (startedAt !== record.startedAt) updated.originalStartedAt = record.originalStartedAt ?? record.startedAt;
 	if (input.kcalEstimate === null) delete updated.kcalEstimate;
 	else updated.kcalEstimate = input.kcalEstimate;
 	return (await saveSessionRecord(storage, updated, current.version)).data;

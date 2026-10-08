@@ -15,7 +15,7 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 		if (!session) error(404, 'Passet finns inte');
 		return json({ session });
 	} catch (e) {
-		if (e instanceof ValidationError) error(400, e.issues.join('; '));
+		if (e instanceof ValidationError) error(400, e.issues.join(' '));
 		if (e instanceof StorageConflictError) error(409, CONFLICT);
 		throw e;
 	}

@@ -11,6 +11,7 @@ import {
 	getSessionDetail,
 	parseEditSessionInput,
 	prependLogEntry,
+	saveExercise,
 	saveSession,
 	saveWorkoutVersion,
 	type EditSessionInput
@@ -148,7 +149,7 @@ describe('editing a session', () => {
 		).rejects.toBeInstanceOf(ValidationError);
 		await expect(
 			editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 4000, reps: 5 }] }] }), now)
-		).rejects.toThrow(/orimligt/);
+		).rejects.toThrow(/Orimligt/);
 		// Nothing was written by the refused edits.
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets).toEqual([{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }]);
 		expect((await getSession(storage, 's_20261006'))!.version).toBe(detail.version);
@@ -156,7 +157,7 @@ describe('editing a session', () => {
 
 	it('checks the shape before anything is read', () => {
 		expect(() => parseEditSessionInput({ version: 'v', startTime: '25:00', end: '2026-10-06', kcalEstimate: -1, exercises: [] })).toThrow(
-			/starttiden[\s\S]*sluttiden[\s\S]*kcal[\s\S]*minst en övning/
+			/starttid[\s\S]*sluttid[\s\S]*Kcal[\s\S]*minst en övning/
 		);
 		expect(() =>
 			parseEditSessionInput({ version: 'v', startTime: '10:00', end: '2026-10-06T11:00', kcalEstimate: null, exercises: [{ exerciseId: 'ex_a', sets: [] }] })
@@ -166,6 +167,98 @@ describe('editing a session', () => {
 	it('returns null for a session that does not exist', async () => {
 		const { storage, detail } = await setup();
 		expect(await editSession(storage, 's_20990101', input(detail.version), now)).toBeNull();
+	});
+});
+
+describe('a queued save arriving after an edit', () => {
+	/** The same save again, as the outbox would send it if the first response was lost. */
+	const retry = (storage: MemoryUserStorage) =>
+		saveSession(storage, {
+			session: {
+				sessionId: 's_20261006',
+				workoutSlug: 'pass-b',
+				workoutVersion: 1,
+				startedAt: '2026-10-06T17:10:00+02:00',
+				lastActivityAt: '2026-10-06T18:00:00+02:00',
+				exercises: [
+					{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8, done: true }, { weight: 45, reps: 6, done: true }] },
+					{ exerciseId: 'ex_plankan', sets: [{ seconds: 45, done: true }] }
+				],
+				deviations: []
+			},
+			endedAt: '2026-10-08T09:30:00+02:00',
+			kcalEstimate: 300,
+			saveAsNewVersion: false
+		});
+
+	it('is recognised as already saved after the start time was changed', async () => {
+		const { storage, detail } = await setup();
+		const edited = await editSession(storage, 's_20261006', input(detail.version, { startTime: '16:50' }), now);
+		expect(edited).toMatchObject({ startedAt: '2026-10-06T16:50:00+02:00', originalStartedAt: '2026-10-06T17:10:00+02:00' });
+		expect(await retry(storage)).toMatchObject({ sessionId: 's_20261006', alreadySaved: true });
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log).toHaveLength(2);
+	});
+
+	it('keeps the original start through several edits', async () => {
+		const { storage, detail } = await setup();
+		await editSession(storage, 's_20261006', input(detail.version, { startTime: '16:50' }), now);
+		const second = (await getSessionDetail(storage, 's_20261006'))!;
+		const edited = await editSession(storage, 's_20261006', input(second.version, { startTime: '16:40' }), now);
+		expect(edited?.originalStartedAt).toBe('2026-10-06T17:10:00+02:00');
+	});
+
+	it('does not bring back an exercise removed from the session', async () => {
+		const { storage, detail } = await setup();
+		await editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] }] }), now);
+		expect(await retry(storage)).toMatchObject({ alreadySaved: true });
+		expect((await getExercise(storage, 'ex_plankan'))!.data.log).toEqual([]);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets).toEqual([{ weight: 40, reps: 8 }]);
+	});
+});
+
+describe('edge cases', () => {
+	it('rejects malformed input', () => {
+		const ok = { version: 'v', startTime: '10:00', end: '2026-10-06T11:00', kcalEstimate: null, exercises: [{ exerciseId: 'ex_a', sets: [{ reps: 1 }] }] };
+		expect(() => parseEditSessionInput('x')).toThrow();
+		expect(() => parseEditSessionInput({ ...ok, version: '' })).toThrow(/Versionen/);
+		expect(() => parseEditSessionInput({ ...ok, version: 'v'.repeat(201) })).toThrow(/Versionen/);
+		expect(() => parseEditSessionInput({ ...ok, exercises: [ok.exercises[0], ok.exercises[0]] })).toThrow(/exercises\[1\]/);
+		expect(() => parseEditSessionInput({ ...ok, exercises: [{ exerciseId: '../x', sets: [{ reps: 1 }] }] })).toThrow(/exercises\[0\]/);
+		expect(parseEditSessionInput({ ...ok, kcalEstimate: 312.6 }).kcalEstimate).toBe(313);
+	});
+
+	it('returns null or false for invalid ids', async () => {
+		const { storage, detail } = await setup();
+		expect(await editSession(storage, '../x', input(detail.version), now)).toBeNull();
+		expect(await deleteSession(storage, '../x', detail.version)).toBe(false);
+	});
+
+	it('refuses an exercise whose file is gone', async () => {
+		const { storage, detail } = await setup();
+		await storage.delete('exercises/ex_plankan.json');
+		await expect(editSession(storage, 's_20261006', input(detail.version), now)).rejects.toThrow(/finns inte/);
+	});
+
+	it('puts back a missing log entry in date order, and the detail skips exercises without one', async () => {
+		const { storage } = await setup();
+		const ex = (await getExercise(storage, 'ex_marklyft'))!;
+		await saveExercise(storage, { ...ex.data, log: ex.data.log.filter((l) => l.sessionId !== 's_20261006') }, ex.version);
+		const detail = (await getSessionDetail(storage, 's_20261006'))!;
+		expect(detail.exercises.map((e) => e.id)).toEqual(['ex_plankan']);
+		await editSession(storage, 's_20261006', input(detail.version), now);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log.map((l) => l.date)).toEqual(['2026-10-06', '2026-10-01']);
+	});
+
+	it('gives up with a conflict if an exercise keeps changing underneath', async () => {
+		const { storage, detail } = await setup();
+		const write = storage.writeJson.bind(storage);
+		storage.writeJson = async (path, data, options) => {
+			if (path === 'exercises/ex_marklyft.json') throw new StorageConflictError(path);
+			return write(path, data, options);
+		};
+		await expect(
+			editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 50, reps: 1 }] }] }), now)
+		).rejects.toBeInstanceOf(StorageConflictError);
 	});
 });
 

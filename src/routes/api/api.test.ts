@@ -1,6 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
+import { createExercise, prependLogEntry } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -107,7 +108,32 @@ describe('PUT and DELETE /api/sessions/[id]', () => {
 		expect(await state.storage.list()).toEqual([]);
 	});
 
-	it('answers 409 when the session changed since it was loaded', async () => {
+	it('edits and deletes a saved session', async () => {
+		await createExercise(state.storage, { name: 'Armhävning', type: 'bodyweight', instruction: '' });
+		await prependLogEntry(state.storage, 'ex_armhavning', { sessionId: 's_20261007', date: '2026-10-07', sets: [{ reps: 5 }] });
+		await state.storage.writeJson('sessions/s_20261007.json', {
+			id: 's_20261007',
+			workoutSlug: 'pass-a',
+			workoutVersion: 1,
+			startedAt: '2026-10-07T10:00:00+02:00',
+			endedAt: '2026-10-09T11:00:00+02:00',
+			exerciseIds: ['ex_armhavning'],
+			deviations: []
+		});
+		const id = { id: 's_20261007' };
+		const { version } = (await state.storage.readJson('sessions/s_20261007.json'))!;
+		const edit = { version, startTime: '10:00', end: '2026-10-07T11:00', kcalEstimate: 250, exercises: [{ exerciseId: 'ex_armhavning', sets: [{ reps: 6 }] }] };
+		const res = await call(editSessionHandler as Handler, edit, {}, id);
+		expect(res.status).toBe(200);
+		expect(res.body.session).toMatchObject({ endedAt: '2026-10-07T11:00:00+02:00', kcalEstimate: 250 });
+		expect((await call(editSessionHandler as Handler, edit, {}, id)).status).toBe(409); // the old version again
+		const current = (await state.storage.readJson('sessions/s_20261007.json'))!.version;
+		const del = await call(deleteSessionHandler as Handler, { version: current }, {}, id);
+		expect(del).toEqual({ status: 200, body: { deleted: true } });
+		expect(await state.storage.readJson('sessions/s_20261007.json')).toBeNull();
+	});
+
+		it('answers 409 when the session changed since it was loaded', async () => {
 		await state.storage.writeJson('sessions/s_20261007.json', {
 			id: 's_20261007',
 			workoutSlug: 'pass-a',

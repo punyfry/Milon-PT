@@ -82,6 +82,12 @@ export interface SessionRecord {
 	exerciseIds: string[];
 	deviations: Deviation[];
 	kcalEstimate?: number;
+	/**
+	 * The start time it was saved with, kept when the start is edited
+	 * afterwards: a queued retry of the save still sends that value and must be
+	 * recognised as already saved.
+	 */
+	originalStartedAt?: string;
 }
 
 export type KcalWorkoutType = 'strength' | 'hiit';

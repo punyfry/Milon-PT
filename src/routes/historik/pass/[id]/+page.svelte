@@ -2,7 +2,7 @@
 	import { goto, invalidate } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
-	import { formatDuration, formatNumber, formatSet } from '$lib/format';
+	import { formatDuration, formatSet } from '$lib/format';
 	import type { ExerciseType } from '$lib/model';
 	import type { PageProps } from './$types';
 
@@ -36,8 +36,14 @@
 	let error = $state<string | null>(null);
 	let confirmDelete = $state(false);
 
+	/** Exact values (no rounding or thousands separator), with a decimal comma. */
 	function toDraft(set: { weight?: number; reps?: number; seconds?: number }): DraftSet {
-		return { weight: formatNumber(set.weight ?? 0), reps: String(set.reps ?? 0), seconds: String(set.seconds ?? 0) };
+		return { weight: String(set.weight ?? 0).replace('.', ','), reps: String(set.reps ?? 0), seconds: String(set.seconds ?? 0) };
+	}
+
+	function failure(e: unknown): string {
+		if (e instanceof TypeError) return 'Ingen anslutning. Försök igen när du har nät.';
+		return e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
 	}
 
 	function edit() {
@@ -58,7 +64,7 @@
 		const out = sets.map((d) => {
 			if (type === 'weight') {
 				const raw = d.weight.replace(',', '.').trim();
-				return { weight: /^\d{1,4}(\.\d{1,2})?$/.test(raw) ? Number(raw) : NaN, reps: int(d.reps) };
+				return { weight: /^\d{1,4}(\.\d{1,3})?$/.test(raw) ? Number(raw) : NaN, reps: int(d.reps) };
 			}
 			return type === 'time' ? { seconds: int(d.seconds) } : { reps: int(d.reps) };
 		});
@@ -74,7 +80,7 @@
 			exercises.push({ exerciseId: e.id, sets });
 		}
 		const kcal = draft.kcal.trim();
-		if (kcal && !/^\d{1,4}$/.test(kcal)) return void (error = 'Ange kcal som ett heltal.');
+		if (kcal && !(/^\d{1,4}$/.test(kcal) && Number(kcal) <= 5000)) return void (error = 'Ange kcal som ett heltal mellan 0 och 5000.');
 		saving = true;
 		error = null;
 		try {
@@ -93,7 +99,9 @@
 			await invalidate('app:session');
 			draft = null;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
+			error = failure(e);
+			// Part of the change may have been written; the view must show what is stored.
+			await invalidate('app:session').catch(() => {});
 		} finally {
 			saving = false;
 		}
@@ -111,7 +119,7 @@
 			if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? `Servern svarade ${res.status}`);
 			await goto(`/historik?vecka=${startDate}`, { invalidateAll: true });
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
+			error = failure(e);
 			confirmDelete = false;
 		} finally {
 			saving = false;
@@ -187,16 +195,17 @@
 				{#if e.removed}
 					<p class="muted small">Tas bort ur passet när du sparar.</p>
 				{:else}
-					{#each e.sets as set, si (si)}
+					<!-- Not named "set": that clashes with the setter Svelte generates for the bindings. -->
+					{#each e.sets as row, si (si)}
 						<div class="setrow">
 							<span class="n num">{si + 1}</span>
 							{#if e.type === 'weight'}
-								<label><input class="num" type="text" inputmode="decimal" bind:value={set.weight} aria-label="Vikt i kg, set {si + 1}" /><small>kg</small></label>
-								<label><input class="num" type="text" inputmode="numeric" bind:value={set.reps} aria-label="Reps, set {si + 1}" /><small>reps</small></label>
+								<label><input class="num" type="text" inputmode="decimal" bind:value={row.weight} aria-label="Vikt i kg, set {si + 1}" /><small>kg</small></label>
+								<label><input class="num" type="text" inputmode="numeric" bind:value={row.reps} aria-label="Reps, set {si + 1}" /><small>reps</small></label>
 							{:else if e.type === 'time'}
-								<label><input class="num" type="text" inputmode="numeric" bind:value={set.seconds} aria-label="Sekunder, set {si + 1}" /><small>s</small></label>
+								<label><input class="num" type="text" inputmode="numeric" bind:value={row.seconds} aria-label="Sekunder, set {si + 1}" /><small>s</small></label>
 							{:else}
-								<label><input class="num" type="text" inputmode="numeric" bind:value={set.reps} aria-label="Reps, set {si + 1}" /><small>reps</small></label>
+								<label><input class="num" type="text" inputmode="numeric" bind:value={row.reps} aria-label="Reps, set {si + 1}" /><small>reps</small></label>
 							{/if}
 							<button
 								class="icon-btn"
@@ -252,7 +261,7 @@
 	.stats {
 		margin: 20px 0 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+		grid-template-columns: 1fr 1fr;
 		gap: 8px;
 	}
 	.stats div {
