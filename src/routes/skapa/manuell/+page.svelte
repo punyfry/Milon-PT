@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { beforeNavigate, goto, invalidateAll } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, invalidateAll } from '$app/navigation';
 	import ExerciseFields, { TYPE_LABEL } from '$lib/components/ExerciseFields.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
@@ -60,6 +60,9 @@
 		items = fromWorkout();
 		saved = snapshot();
 	}
+
+	// The page is reused when another workout (or a new one) is opened, so the form follows the new data.
+	afterNavigate(reset);
 
 	beforeNavigate((nav) => {
 		if (dirty && !saving && !confirm('Passet är inte sparat. Lämna ändå?')) nav.cancel();
@@ -155,11 +158,14 @@
 			if (!res.ok) throw new Error(body?.message ?? `Servern svarade ${res.status}`);
 			saved = snapshot();
 			if (data.editing?.slug !== body.slug) await goto(`/skapa/manuell?pass=${body.slug}`, { invalidateAll: true });
-			else await invalidateAll();
-			reset();
+			else {
+				await invalidateAll();
+				reset();
+			}
 			notice = { text: body.saved ? `Sparat som version ${body.version}.` : 'Inga ändringar att spara.', slug: body.slug };
 		} catch (e) {
-			failure = e instanceof Error ? e.message : 'Kunde inte spara passet. Försök igen.';
+			// fetch itself throws a TypeError without a network.
+			failure = e instanceof Error && !(e instanceof TypeError) ? e.message : 'Kunde inte nå servern. Passet är inte sparat, försök igen när du har nät.';
 		} finally {
 			saving = false;
 		}
@@ -325,6 +331,7 @@
 	.actions {
 		display: flex;
 		gap: 8px;
+		white-space: nowrap;
 	}
 	.body {
 		flex: 1;

@@ -453,7 +453,10 @@
 		if (!entry) {
 			entry = { id: newExerciseId(), ...fields };
 			// Ones swapped away again without a done set are dropped, so they don't count toward the limit.
-			change((s) => (s.newExercises = [...(s.newExercises ?? []).filter((n) => s.exercises.some((e) => e.exerciseId === n.id)), entry!]));
+			const added = entry;
+			change((s) => {
+				s.newExercises = [...(s.newExercises ?? []).filter((n) => s.exercises.some((e) => e.exerciseId === n.id)), added];
+			});
 		}
 		pick(from, { id: entry.id, name: entry.name, type: entry.type, instruction: entry.instruction });
 	}
