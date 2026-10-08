@@ -184,9 +184,10 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
 		return null;
 	}
-	// `loadClass` (weight steps) is no longer used; it is dropped from older files when they are read.
+	// `loadClass` (weight steps) and `archived` are no longer used; they are dropped from older files when
+	// they are read, so archived exercises become active (#46).
 	const instruction = str(v, 'instruction', issues, path, { allowEmpty: true });
-	if (typeof v.archived !== 'boolean') issues.add(join(path, 'archived'), 'måste vara true eller false');
+	if (v.deleted !== undefined && typeof v.deleted !== 'boolean') issues.add(join(path, 'deleted'), 'måste vara true eller false');
 	const log = (arr(v, 'log', issues, path) ?? []).map((e, i) =>
 		validateLogEntry(e, type, issues, join(join(path, 'log'), i))
 	);
@@ -196,7 +197,7 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		name: name!,
 		type,
 		instruction: instruction!,
-		archived: v.archived as boolean,
+		...(v.deleted === true ? { deleted: true as const } : {}),
 		log: log as LogEntry[]
 	};
 }

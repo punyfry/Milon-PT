@@ -9,7 +9,7 @@ export interface CatalogExercise {
 	id: string;
 	name: string;
 	type: ExerciseType;
-	archived: boolean;
+	deleted: boolean;
 }
 
 /** Building a workout by hand: `/skapa/manuell` for a new one, `?pass=<slug>` to edit one. */
@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (slug && !history) error(404, 'Passet finns inte');
 
 	const catalog: CatalogExercise[] = exercises
-		.map(({ data: e }) => ({ id: e.id, name: e.name, type: e.type, archived: e.archived }))
+		.map(({ data: e }) => ({ id: e.id, name: e.name, type: e.type, deleted: e.deleted === true }))
 		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 	let editing: { slug: string; name: string; version: number; items: { exerciseId: string; sets: number; target: Target }[] } | null = null;
 	let versions: VersionSummary[] = [];

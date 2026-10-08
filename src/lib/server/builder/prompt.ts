@@ -35,7 +35,7 @@ export function formatGoalsAndRules(profile: Profile): string {
 }
 
 export function formatCatalog(exercises: readonly Exercise[]): string {
-	const active = exercises.filter((e) => !e.archived).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+	const active = exercises.filter((e) => !e.deleted).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 	if (!active.length) return '(inga än)';
 	return active.map((e) => `${e.id} | ${e.name} | ${e.type}`).join('\n');
 }

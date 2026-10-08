@@ -71,13 +71,13 @@ export async function executeSwap(
 	let to: Exercise | undefined;
 	let created = false;
 	if (typeof input.toExerciseId === 'string' && input.toExerciseId) {
-		to = catalog.find((e) => e.id === input.toExerciseId && !e.archived);
+		to = catalog.find((e) => e.id === input.toExerciseId && !e.deleted);
 		if (!to) return { ok: false, error: `Det finns ingen övning med id ${input.toExerciseId} i katalogen.` };
 	} else if (isObject(input.newExercise)) {
 		const n = input.newExercise;
 		const name = typeof n.name === 'string' ? n.name.trim() : '';
 		if (!name) return { ok: false, error: 'newExercise.name saknas.' };
-		to = catalog.find((e) => normalizeName(e.name) === normalizeName(name) && !e.archived);
+		to = catalog.find((e) => normalizeName(e.name) === normalizeName(name) && !e.deleted);
 		if (!to) {
 			if (!isExerciseType(n.type)) return { ok: false, error: 'newExercise.type måste vara weight, bodyweight eller time.' };
 			to = (

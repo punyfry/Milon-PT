@@ -21,21 +21,23 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		listLatestWorkouts(storage)
 	]);
 	const exercises = stored.map((e) => e.data);
+	// Deleted exercises still count in the week, but are not listed (#46).
+	const active = exercises.filter((e) => !e.deleted);
 
 	// Exercises with history, most recently trained first. Summary only, never the whole log.
-	const list = exercises
+	const list = active
 		.filter((e) => e.log.length)
 		.map((e) => {
 			const lastDate = e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
 			const series = progressSeries(e);
 			const best = series.reduce((b, p) => Math.max(b, p.value), 0);
-			return { id: e.id, name: e.name, type: e.type, archived: e.archived, lastDate, best, metric: metricFor(e.type).label };
+			return { id: e.id, name: e.name, type: e.type, lastDate, best, metric: metricFor(e.type).label };
 		})
 		.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'sv'));
 
 	const groups = groupByWorkout(list, workouts);
 
-	const milestones = milestoneExercises(exercises).map((m) => ({
+	const milestones = milestoneExercises(active).map((m) => ({
 		key: m.key,
 		title: m.title,
 		exercise: m.exercise ? { id: m.exercise.id, name: m.exercise.name, type: m.exercise.type } : null,
@@ -57,7 +59,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		nextWeek: start < currentStart ? addDays(start, 7) : null,
 		isCurrentWeek: start === currentStart,
 		groups,
-		archived: list.filter((e) => e.archived),
 		milestones
 	};
 };

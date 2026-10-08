@@ -35,7 +35,7 @@ describe('manual workout', () => {
 		const workout = (await getLatestWorkout(storage, 'pass-c'))!;
 		expect(workout).toMatchObject({ name: 'Pass C', createdAt: TODAY, changeNote: 'Byggt för hand' });
 		expect(workout.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft', 'ex_hantelrodd', 'ex_plankan']);
-		expect((await getExercise(storage, 'ex_hantelrodd'))!.data).toMatchObject({ name: 'Hantelrodd', type: 'weight', instruction: 'Rak rygg.', archived: false });
+		expect((await getExercise(storage, 'ex_hantelrodd'))!.data).toMatchObject({ name: 'Hantelrodd', type: 'weight', instruction: 'Rak rygg.' });
 	});
 
 	it('saves an edit as the next version with a change note, and nothing when unchanged', async () => {

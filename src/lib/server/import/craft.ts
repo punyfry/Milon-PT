@@ -10,7 +10,7 @@
  * Exercise names are matched against existing exercises (ignoring case and
  * whitespace) before new ones are created. Besides exercises and workouts the
  * file may contain a profile (goals, rules, kcal per workout type), notes on
- * log entries, archived exercises and completed sessions (`sessions`), which
+ * log entries and completed sessions (`sessions`), which
  * become session records with that day's log entries linked. The import can
  * be rerun with the same file: identical log entries, workouts and sessions
  * are skipped, and existing profile values are never overwritten.
@@ -53,7 +53,6 @@ export interface ImportExercise {
 	name: string;
 	type: ExerciseType;
 	instruction: string;
-	archived: boolean;
 	log: LogEntry[];
 }
 
@@ -110,10 +109,9 @@ export function parseImportFile(raw: unknown): ImportFile {
 				name,
 				type: e.type,
 				instruction: typeof e.instruction === 'string' ? e.instruction.trim() : '',
-				archived: e.archived === true,
 				log: log.filter((l) => l !== null)
 			});
-			if (e.archived !== undefined && typeof e.archived !== 'boolean') issues.add(`${p}.archived`, 'måste vara true eller false');
+			// `archived` from older export files is ignored: there is no archiving any more (#46).
 		});
 
 	const workouts: ImportWorkout[] = [];
@@ -280,15 +278,21 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 	};
 
 	// 2. Exercises.
+	// A deleted exercise is matched too, so a rerun creates no duplicates, but an active one with the same name wins.
 	const byName = new Map<string, Exercise>();
-	for (const { data } of existing.exercises) {
+	const activeFirst = [...existing.exercises].sort((a, b) => Number(a.data.deleted ?? false) - Number(b.data.deleted ?? false));
+	for (const { data } of activeFirst) {
 		const key = normalizeName(data.name);
+		if (byName.has(key) && data.deleted) continue;
 		if (byName.has(key)) warnings.push(`Flera befintliga övningar heter "${data.name}", matchar mot ${byName.get(key)!.id}`);
 		else byName.set(key, data);
 	}
 	const versions = new Map(existing.exercises.map((e) => [e.data.id, e.version]));
 	const takenIds = new Set(existing.exercises.map((e) => e.data.id));
 
+	// A deleted exercise that an imported workout uses comes back (as when a workout version is restored),
+	// so no workout ends up using a deleted exercise (#46).
+	const usedByWorkouts = new Set(input.workouts.flatMap((w) => w.exercises.map((x) => normalizeName(x.name))));
 	const exercisePlans: ExercisePlan[] = [];
 	for (const imp of input.exercises) {
 		const current = byName.get(normalizeName(imp.name));
@@ -301,7 +305,6 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 				name: imp.name,
 				type: imp.type,
 				instruction: imp.instruction,
-				archived: imp.archived,
 				log: sortLog(entries)
 			};
 			byName.set(normalizeName(imp.name), exercise);
@@ -319,9 +322,9 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 			updated.instruction = imp.instruction;
 			changes.push('instruktion');
 		}
-		if (imp.archived && !current.archived) {
-			updated.archived = true;
-			changes.push('arkiverad');
+		if (current.deleted && usedByWorkouts.has(normalizeName(imp.name))) {
+			delete updated.deleted;
+			changes.push('återställd');
 		}
 		// New entries are added; existing identical entries get a note and session link if missing.
 		let added = 0;
@@ -353,6 +356,14 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 				? { action: 'update', exercise: updated, version: versions.get(current.id)!, addedLogEntries: added, changes }
 				: { action: 'unchanged', exercise: current }
 		);
+	}
+
+	for (const key of usedByWorkouts) {
+		const ex = byName.get(key);
+		if (!ex?.deleted || exercisePlans.some((p) => p.exercise.id === ex.id)) continue;
+		const { deleted: _, ...active } = ex;
+		byName.set(key, active);
+		exercisePlans.push({ action: 'update', exercise: active, version: versions.get(ex.id)!, addedLogEntries: 0, changes: ['återställd'] });
 	}
 
 	// 3. Workouts.
@@ -521,7 +532,7 @@ export function summarizePlan(plan: ImportPlan): string {
 	else lines.push(`${plan.profile.action === 'create' ? '+' : '~'} profil: ${plan.profile.changes.join(', ')}`);
 	for (const p of plan.exercises) {
 		const e = p.exercise;
-		if (p.action === 'create') lines.push(`+ övning ${e.id} "${e.name}" (${e.type}, ${p.addedLogEntries} loggposter)${e.archived ? ", arkiverad" : ""}`);
+		if (p.action === 'create') lines.push(`+ övning ${e.id} "${e.name}" (${e.type}, ${p.addedLogEntries} loggposter)`);
 		else if (p.action === 'update') lines.push(`~ övning ${e.id} "${e.name}": ${p.changes.join(', ')}`);
 		else lines.push(`= övning ${e.id} "${e.name}" oförändrad`);
 	}

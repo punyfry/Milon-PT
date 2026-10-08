@@ -28,7 +28,7 @@ import {
 	type WorkoutTemplate
 } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { findOrCreateExercise, getExercise, listExercises, prependLogEntry } from './exercises';
+import { findDeletedExercises, findOrCreateExercise, getExercise, listExercises, prependLogEntry, undeleteExercise } from './exercises';
 import { createSession, getSession, listSessionIds, sessionIdDate } from './sessions';
 import { getLatestWorkout, getWorkout, saveWorkoutVersion } from './workouts';
 
@@ -284,7 +284,14 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	// New workout version with the deviations, if the user wants it.
 	let newWorkoutVersion: number | undefined;
 	if (input.saveAsNewVersion && session.deviations.length) {
-		const next = applyDeviations(base, session.deviations, exercises, doneSets);
+		// The base version may use an exercise deleted since. The new latest version brings it back (#46), or uses
+		// the active exercise that has taken its name, so no two active exercises share a name.
+		const deleted = await findDeletedExercises(storage, base.exercises.map((e) => e.exerciseId));
+		const replaced = new Map(deleted.filter((d) => d.namesake).map((d) => [d.stored.data.id, d.namesake!.id]));
+		const seen = new Set<string>();
+		const next = applyDeviations(base, session.deviations, exercises, doneSets)
+			.map((e) => ({ ...e, exerciseId: replaced.get(e.exerciseId) ?? e.exerciseId }))
+			.filter((e) => !seen.has(e.exerciseId) && seen.add(e.exerciseId));
 		const latest = await getLatestWorkout(storage, base.slug);
 		const unchanged = latest && JSON.stringify(latest.exercises) === JSON.stringify(next);
 		if (unchanged) {
@@ -298,6 +305,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 				}
 			}
 			const name = (id: string) => names.get(id) ?? id;
+			const kept = new Set(next.map((e) => e.exerciseId));
+			for (const { stored, namesake } of deleted) if (!namesake && kept.has(stored.data.id)) await undeleteExercise(storage, stored);
 			const saved = await saveWorkoutVersion(storage, {
 				slug: base.slug,
 				name: base.name,

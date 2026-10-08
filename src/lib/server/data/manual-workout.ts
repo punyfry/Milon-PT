@@ -130,7 +130,7 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	if (input.editSlug && !latest) throw new ValidationError('pass', ['Passet finns inte längre.']);
 	const base = input.editSlug ? latest : null;
 
-	const byId = new Map(catalog.map((e) => [e.id, e]));
+	const byId = new Map(catalog.filter((e) => !e.deleted).map((e) => [e.id, e]));
 	const problems: string[] = [];
 	for (const [i, item] of input.items.entries()) {
 		if (!('exerciseId' in item)) continue;
@@ -144,7 +144,7 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	}
 	// The same exercise twice is caught before anything is created. A new one
 	// with the name and type of an existing one is that exercise (see findOrCreateExercise).
-	const active = catalog.filter((e) => !e.archived);
+	const active = catalog.filter((e) => !e.deleted);
 	const keyOf = (item: ManualItem) => {
 		if ('exerciseId' in item) return item.exerciseId;
 		const { name, type } = item.newExercise;

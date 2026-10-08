@@ -12,10 +12,10 @@ const ID = /^[A-Za-z0-9_-]{1,100}$/;
  * Data for the overview and the active session: the workout template (`?v=`
  * for a specific version, otherwise the latest) and the exercises with only
  * their latest log entry. Exercises swapped in during the session are passed
- * as `?ex=id1,id2`. `catalog` holds every exercise that is not archived, to
+ * as `?ex=id1,id2`. `catalog` holds every exercise that is not deleted, to
  * swap to; it comes with the page so swapping works offline in the gym.
  * `exercises` only adds the workout's (and `?ex=`) exercises that are not in
- * the catalog, i.e. archived ones.
+ * the catalog, i.e. deleted ones.
  */
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const storage = storageFor(locals);
@@ -33,10 +33,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const ids = [...new Set([...workout.exercises.map((e) => e.exerciseId), ...extra])];
 	const [stored, { data: profile }] = await Promise.all([listExercises(storage), getProfile(storage)]);
 	const byId = new Map(stored.map((e) => [e.data.id, e.data]));
-	const archived = ids.map((id) => byId.get(id)).filter((e) => e?.archived);
-	const exercises: ExerciseInfo[] = archived.map((e) => toInfo(e!));
+	const deleted = ids.map((id) => byId.get(id)).filter((e) => e?.deleted);
+	const exercises: ExerciseInfo[] = deleted.map((e) => toInfo(e!));
 	const catalog: ExerciseInfo[] = stored
-		.filter((e) => !e.data.archived)
+		.filter((e) => !e.data.deleted)
 		.map((e) => toInfo(e.data))
 		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 	return {

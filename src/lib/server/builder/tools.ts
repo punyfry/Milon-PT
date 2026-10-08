@@ -116,7 +116,7 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!sets) return fail('sets måste vara ett heltal mellan 1 och 20.');
 	if (!tgt) return fail('target ska ha antingen reps eller seconds (ett positivt heltal), och den andra null.');
 
-	const catalog = (await listExercises(storage)).map((e) => e.data);
+	const catalog = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
 	let exercise: Exercise | undefined;
 	let created = false;
 
@@ -176,7 +176,7 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 	const changeNote = typeof input.changeNote === 'string' ? input.changeNote.trim() : '';
 	if (!Array.isArray(input.exercises) || input.exercises.length === 0) return fail('Passet behöver minst en övning.');
 
-	const catalog = new Map((await listExercises(storage)).map((e) => [e.data.id, e.data]));
+	const catalog = new Map((await listExercises(storage)).filter((e) => !e.data.deleted).map((e) => [e.data.id, e.data]));
 	const exercises: WorkoutExercise[] = [];
 	const problems: string[] = [];
 	input.exercises.forEach((x, i) => {

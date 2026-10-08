@@ -99,7 +99,7 @@ Four file types per user, plus conversations and counters. Sets live on the exer
 | File | Contents |
 | --- | --- |
 | `profile.json` | Milon on or off (`coach`), goals, rules, weekly goal and kcal estimates per workout type |
-| `exercises/<exerciseId>.json` | Exercise with name, type, instruction, `archived` and the full log (newest first) |
+| `exercises/<exerciseId>.json` | Exercise with name, type, instruction, `deleted` (only when deleted) and the full log (newest first) |
 | `workouts/<slug>.v<N>.json` | Workout template. Every change creates the next version; older ones are kept and can be restored |
 | `sessions/<sessionId>.json` | A completed workout: template and version, start and end, deviations, kcal |
 | `builder/<id>.json` | Builder conversations |
@@ -111,7 +111,6 @@ Four file types per user, plus conversations and counters. Sets live on the exer
   "name": "Marklyft",
   "type": "weight",
   "instruction": "Stång över mellanfoten, rak rygg, tryck golvet ifrån dig.",
-  "archived": false,
   "log": [{ "sessionId": "s_20261006", "date": "2026-10-06", "sets": [{ "weight": 40, "reps": 8 }], "note": "Marginal kvar" }]
 }
 ```
@@ -133,7 +132,7 @@ The look (tokens, type, layout) is described in [DESIGN.md](DESIGN.md). A fixed 
 4. **Finish:** summary with time, done sets, new records and each exercise's sets; tap an exercise to go back and change it. If there are deviations you are asked whether to save them as a new version of the workout. kcal is suggested (the profile's value for the workout, otherwise the workout type's range) and can be adjusted. "Avsluta pass" writes the exercise logs and the session record; localStorage is cleared only after the server confirms. "Släng passet" is last, with confirmation.
 5. **Create workout:** chat with the builder and a collapsible list of the exercises being discussed at the top. Approved exercises are saved (existing ones are reused), and "Spara pass" creates `v1` or the next version. Older versions are listed in a sheet and can be restored as a new version; a restore is refused if one of its exercises has changed type since, as its target would no longer fit. On a phone, Enter adds a new line and the send button sends.
    **By hand** (`/skapa/manuell`, where `/skapa` leads when Milon is off or not configured, and linked from the builder otherwise): name the workout, add exercises from your own or write in new ones, set sets and target (reps or seconds), reorder and remove. "Spara pass" goes through `POST /api/workouts` and creates `v1` or the next version with a generated change note; nothing is saved if nothing changed. New exercises are created on save, reusing an active one with the same name and type.
-6. **History:** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercises grouped by workout with search and archived ones last, and per exercise a chart and the latest sessions as rows. **Ändra** on an exercise changes its name, type (only while no sets are logged and no workout uses it, since sets and targets depend on the type) and instruction.
+6. **History:** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercises grouped by workout with search, and per exercise a chart and the latest sessions as rows. **Ändra** on an exercise changes its name, type (only while no sets are logged and no workout uses it, since sets and targets depend on the type) and instruction. **Ta bort övning** deletes it, unless the latest version of a workout uses it. A deleted exercise keeps its file and log (`deleted: true`): it disappears from every list and picker, but its sets stay in the week's numbers and in the sessions where they were done, and restoring an old workout version that uses it brings it back (refused if a new exercise has taken its name), as does saving a session's swaps as a new version built on such a version (which uses the new exercise instead if one has taken the name). A new exercise with the same name is a new one. There is no archiving; `archived` in older files is ignored, so those exercises are active.
    **Session view** (`/historik/pass/[id]`, from the week's session list or a date in an exercise's history): start, end, length, kcal and each exercise's sets. **Redigera** corrects the start time (the start date is fixed, it is part of the session id), the end date and time, kcal, the sets (change, add, remove) and each exercise's note, and can remove an exercise from the session. **Ta bort pass** deletes the session and its sets; workout versions it created stay. Edits go through `PUT`/`DELETE /api/sessions/[id]` with the record's version, write the log entries first and the record last, and answer 409 if the session changed since the page was loaded. A changed start keeps the saved value in `originalStartedAt`, so a queued retry of the original save is still recognised as already saved (and then writes no log entries).
 7. **Account:** weekly goal, Milon on or off (shown when the API key is set), theme (system, dark, light), the Craft import and sign-out.
 
@@ -151,7 +150,7 @@ Two separate calls with their own system prompts, both using tools so the app ne
 **Easiest:** sign in, go to **Konto → Importera från Craft** and pick the JSON file. The app first shows what would be saved and only saves when you press **Importera**. See `scripts/import-example.json` for the format. Besides exercises and workouts, the file can contain:
 
 - `profile`: `goals` (text or list), `rules`, `kcalEstimates` (`strength`/`hiit` with `min`/`max`) and `weeklySessionGoal`. Existing values are never overwritten; rules are appended.
-- `note` on log entries and `archived` on exercises.
+- `note` on log entries. (`archived` on exercises is accepted from older files but ignored.)
 - `sessions`: completed workouts `{ date, workout, kcalEstimate? }`. They become session records at 12:00 Swedish time, and log entries from the same day are linked to them.
 
 From the command line (requires `BLOB_READ_WRITE_TOKEN`, or `--local` for `.data/`). Your user ID is shown on `/konto`.
@@ -162,7 +161,7 @@ npm run import -- my-export.json --user <user-id> --apply  # writes
 ```
 
 - The whole file is validated first and every error is listed with its path. Nothing is written if anything is wrong.
-- Exercise names are matched against existing exercises (case and whitespace don't matter). Existing names and instructions are never overwritten.
+- Exercise names are matched against existing exercises (case and whitespace don't matter). Existing names and instructions are never overwritten. A deleted exercise is matched too (an active one with the same name wins); it comes back if an imported workout uses it, otherwise it stays deleted.
 - The same file can be imported again without duplicates.
 
 ## Add to home screen (PWA)

@@ -102,7 +102,7 @@
 
 	const inList = $derived(new Set(items.map((i) => i.exerciseId).filter(Boolean)));
 	const candidates = $derived(
-		data.catalog.filter((e) => !e.archived && !inList.has(e.id) && normalizeName(e.name).includes(normalizeName(query)))
+		data.catalog.filter((e) => !e.deleted && !inList.has(e.id) && normalizeName(e.name).includes(normalizeName(query)))
 	);
 
 	function openAdd() {
@@ -130,7 +130,7 @@
 		if (!input) return void (addError = issueText(issues.list[0] ?? 'Kontrollera övningen'));
 		if (findSameExercise(items, input)) return void (addError = `${input.name} finns redan i passet.`);
 		// The same exercise already exists: use it rather than creating a copy.
-		const existing = findSameExercise(data.catalog.filter((c) => !c.archived), input);
+		const existing = findSameExercise(data.catalog.filter((c) => !c.deleted), input);
 		if (existing) return add({ exerciseId: existing.id, name: existing.name, type: existing.type });
 		add({ newExercise: input, name: input.name, type: input.type });
 	}

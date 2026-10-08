@@ -15,6 +15,19 @@
 	let fields = $state({ name: '', type: 'weight' as ExerciseType, instruction: '' });
 	let editError = $state<string | null>(null);
 
+	/** No answer from the server (offline) or an unexpected error; the default would show the error page. */
+	const FAILED = 'Något gick fel. Kontrollera nätet och försök igen.';
+
+	// --- deleting -------------------------------------------------------------
+	let confirmDelete = $state(false);
+	let deleteError = $state<string | null>(null);
+	let deleting = $state(false);
+
+	function openDelete() {
+		deleteError = null;
+		confirmDelete = true;
+	}
+
 	function openEdit() {
 		fields = { name: ex.name, type: ex.type, instruction: ex.instruction };
 		editError = null;
@@ -54,12 +67,12 @@
 <header class="topbar">
 	<a class="icon-btn" href="/historik" aria-label="Tillbaka till historik"><Icon name="left" /></a>
 	<span class="label">Historik</span>
-	<button class="btn small edit" onclick={openEdit}>Ändra</button>
+	{#if !ex.deleted}<button class="btn small edit" onclick={openEdit}>Ändra</button>{/if}
 </header>
 
 <main>
 	<div class="pagehead">
-		<span class="label">{kind}{ex.archived ? ' · arkiverad' : ''}</span>
+		<span class="label">{kind}{ex.deleted ? ' · borttagen' : ''}</span>
 		<h1>{ex.name}</h1>
 	</div>
 
@@ -113,6 +126,8 @@
 			<p class="instruction">{ex.instruction}</p>
 		</details>
 	{/if}
+
+	{#if !ex.deleted}<button class="btn ghost full remove" onclick={openDelete}>Ta bort övning</button>{/if}
 </main>
 
 {#if editing}
@@ -125,6 +140,10 @@
 				async ({ result, update }) => {
 					if (result.type === 'success') editing = false;
 					else if (result.type === 'failure') editError = String(result.data?.editError ?? 'Kunde inte spara.');
+					else if (result.type === 'error') {
+						editError = FAILED;
+						return;
+					}
 					await update({ reset: false });
 				}}
 		>
@@ -140,9 +159,42 @@
 	</Sheet>
 {/if}
 
+{#if confirmDelete}
+	<Sheet title="Ta bort övningen?" onclose={() => (confirmDelete = false)}>
+		<form
+			method="POST"
+			action="?/delete"
+			class="editform"
+			use:enhance={() => {
+				deleting = true;
+				return async ({ result, update }) => {
+					deleting = false;
+					if (result.type === 'failure') deleteError = String(result.data?.deleteError ?? 'Kunde inte ta bort övningen.');
+					else if (result.type === 'error') deleteError = FAILED;
+					else await update();
+				};
+			}}
+		>
+			<h2>Ta bort övningen?</h2>
+			{#if ex.deleteLock}
+				<p>{ex.deleteLock}</p>
+				<button type="button" class="btn primary full" onclick={() => (confirmDelete = false)}>OK</button>
+			{:else}
+				<p class="muted">{ex.name} försvinner ur listan med övningar och går inte längre att välja i ett pass. Loggade set finns kvar i passen där de gjordes.</p>
+				{#if deleteError}<p class="error" role="alert">{deleteError}</p>{/if}
+				<button type="submit" class="btn primary full" disabled={deleting}>{deleting ? 'Tar bort…' : 'Ta bort övningen'}</button>
+				<button type="button" class="btn ghost full" onclick={() => (confirmDelete = false)}>Avbryt</button>
+			{/if}
+		</form>
+	</Sheet>
+{/if}
+
 <style>
 	.edit {
 		justify-self: end;
+	}
+	.remove {
+		margin-top: 24px;
 	}
 	.editform {
 		display: grid;

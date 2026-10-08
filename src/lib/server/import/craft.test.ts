@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '../../model';
-import { createExercise, createSession, getExercise, getProfile, listLatestWorkouts, listSessions, saveProfile, saveWorkoutVersion } from '../data';
+import { createExercise, createSession, deleteExercise, getExercise, listExercises, getProfile, listLatestWorkouts, listSessions, saveProfile, saveWorkoutVersion } from '../data';
 import { kcalSuggestion } from '../../session/active';
 import { MemoryUserStorage } from '../storage/memory';
 import { applyImport, countWrites, parseImportFile, planImportFor } from './craft';
@@ -36,6 +36,31 @@ describe('import from Craft', () => {
 		expect(second.exercises.every((p) => p.action === 'unchanged')).toBe(true);
 		expect(second.workouts.every((p) => p.action === 'unchanged')).toBe(true);
 		expect((await storage.list('workouts/')).length).toBe(1);
+	});
+
+	it('brings back a deleted exercise that an imported workout uses, and prefers an active namesake (#46)', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await runImport(storage, example);
+		const pass = (await listLatestWorkouts(storage))[0];
+		const without = pass.exercises.filter((e) => e.exerciseId !== 'ex_plankan');
+		await saveWorkoutVersion(storage, { slug: pass.slug, name: pass.name, createdAt: TODAY, exercises: without });
+		await deleteExercise(storage, 'ex_plankan');
+
+		const again = await runImport(storage, example);
+		expect(again.exercises.find((p) => p.exercise.id === 'ex_plankan')).toMatchObject({ action: 'update', changes: ['återställd'] });
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBeUndefined();
+		expect((await listLatestWorkouts(storage))[0].exercises.map((e) => e.exerciseId)).toContain('ex_plankan');
+
+		// With an active namesake, the import matches that one and leaves the deleted one alone.
+		const latest = (await listLatestWorkouts(storage))[0];
+		await saveWorkoutVersion(storage, { slug: latest.slug, name: latest.name, createdAt: TODAY, exercises: without });
+		await deleteExercise(storage, 'ex_plankan');
+		await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
+		const third = await runImport(storage, example);
+		expect(third.warnings).toEqual([]);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+		expect((await listLatestWorkouts(storage))[0].exercises.map((e) => e.exerciseId)).toContain('ex_plankan_2');
+		expect((await listExercises(storage)).filter((e) => !e.data.deleted && e.data.name === 'Plankan')).toHaveLength(1);
 	});
 
 	it('matches existing exercises by name and merges the log', async () => {
@@ -196,7 +221,9 @@ describe('import with profile, notes and sessions', () => {
 		expect(marklyft.log[0]).toEqual({ sessionId: 's_20260929', date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' });
 		expect(marklyft.log[1].sessionId).toBe('s_20260921');
 		// Day without a session in the file: no link.
-		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ archived: true, log: [{ date: '2026-09-27' }] });
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ log: [{ date: '2026-09-27' }] });
+		// `archived` in older files is ignored (#46).
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data.deleted).toBeUndefined();
 		expect((await getExercise(storage, 'ex_wheel_out'))!.data.log[0].sessionId).toBeUndefined();
 	});
 

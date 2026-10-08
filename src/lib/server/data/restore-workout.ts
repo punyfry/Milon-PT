@@ -1,6 +1,6 @@
 import { targetMatchesType, type WorkoutTemplate } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { getExercise } from './exercises';
+import { findDeletedExercises, getExercise, undeleteExercise } from './exercises';
 import { getWorkout, saveWorkoutVersion } from './workouts';
 
 /** The version can't be restored as it is; the message is shown to the user. */
@@ -14,8 +14,8 @@ export class WorkoutRestoreError extends Error {
 /**
  * Restores an older version by saving it as the next version. Nothing is
  * overwritten. Refuses (#49) if an exercise has changed type since, so its
- * target (reps or seconds) no longer matches. Returns null if the version
- * doesn't exist.
+ * target (reps or seconds) no longer matches. A deleted exercise the version
+ * uses is brought back (#46). Returns null if the version doesn't exist.
  */
 export async function restoreWorkoutVersion(
 	storage: UserStorage,
@@ -39,6 +39,16 @@ export async function restoreWorkoutVersion(
 				: `Övningarna ${names} har bytt typ sedan den här versionen.`
 		);
 	}
+	// A deleted exercise comes back, unless a new active one has taken its name since (#46).
+	const deleted = await findDeletedExercises(storage, old.exercises.map((we) => we.exerciseId));
+	const clash = deleted.filter((d) => d.namesake);
+	if (clash.length) {
+		const names = clash.map((d) => d.stored.data.name).join(', ');
+		throw new WorkoutRestoreError(
+			`${clash.length === 1 ? 'Övningen' : 'Övningarna'} ${names} togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.`
+		);
+	}
+	for (const { stored } of deleted) await undeleteExercise(storage, stored);
 	return saveWorkoutVersion(storage, {
 		slug: old.slug,
 		name: old.name,

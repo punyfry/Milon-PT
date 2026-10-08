@@ -37,7 +37,12 @@ export interface Exercise {
 	name: string;
 	type: ExerciseType;
 	instruction: string;
-	archived: boolean;
+	/**
+	 * Deleted by the user: hidden everywhere exercises are listed or picked, but
+	 * the file and its log are kept so history stays complete and an old workout
+	 * version can bring it back (#46). Missing means active.
+	 */
+	deleted?: true;
 	/** Newest entry first. "Last time" is `log[0]`. */
 	log: LogEntry[];
 }

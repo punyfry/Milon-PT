@@ -6,7 +6,10 @@ import {
 	lastSessionBySlug,
 	listSessionsBetween,
 	createExercise,
+	deleteExercise,
+	findOrCreateExercise,
 	getExercise,
+	listExercises,
 	getProfile,
 	listLatestWorkouts,
 	prependLogEntry,
@@ -128,5 +131,41 @@ describe('editing exercise details', () => {
 		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-01', exercises: [{ exerciseId: 'ex_rodd', sets: 3, target: { reps: 8 } }] });
 		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'time' })).rejects.toThrow(/finns i ett pass \(Pass A\)/);
 		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd 2', type: 'weight' })).resolves.toBeTruthy();
+	});
+});
+
+describe('deleting an exercise (#46)', () => {
+	async function setup() {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		await prependLogEntry(storage, 'ex_rodd', { sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 20, reps: 8 }] });
+		const target = { reps: 8 };
+		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-01', exercises: [{ exerciseId: 'ex_rodd', sets: 3, target }] });
+		return storage;
+	}
+
+	it('is blocked while the latest version of a workout uses the exercise', async () => {
+		const storage = await setup();
+		await expect(deleteExercise(storage, 'ex_rodd')).rejects.toThrow('Övningen används i passet Pass A. Ta bort den ur passet först.');
+		await expect(deleteExercise(storage, 'ex_saknas')).rejects.toThrow(/finns inte/);
+	});
+
+	it('keeps the file and its log, marked deleted, once no latest version uses it', async () => {
+		const storage = await setup();
+		await createExercise(storage, { name: 'Knäböj', type: 'weight', instruction: '' });
+		const target = { reps: 8 };
+		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-02', exercises: [{ exerciseId: 'ex_knaboj', sets: 3, target }] });
+		await deleteExercise(storage, 'ex_rodd');
+
+		const rodd = (await getExercise(storage, 'ex_rodd'))!.data;
+		expect(rodd).toMatchObject({ deleted: true, log: [{ sessionId: 's_20261006' }] });
+		await expect(deleteExercise(storage, 'ex_rodd')).rejects.toThrow(/finns inte/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'weight' })).rejects.toThrow(/finns inte/);
+
+		// A new exercise with the same name is a new one; the deleted one keeps its log.
+		const catalog = (await listExercises(storage)).map((e) => e.data);
+		const { exercise, created } = await findOrCreateExercise(storage, catalog, { name: 'Rodd', type: 'weight', instruction: '' });
+		expect({ id: exercise.id, created }).toEqual({ id: 'ex_rodd_2', created: true });
+		await expect(updateExerciseDetails(storage, 'ex_knaboj', { name: 'rodd', type: 'weight' })).rejects.toThrow(/redan en övning/);
 	});
 });
