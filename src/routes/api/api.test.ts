@@ -205,6 +205,9 @@ describe('POST /api/helper', () => {
 		env.AI_DAILY_LIMIT = '0';
 		const res = await call(helper as Handler, { session, exerciseId: 'ex_planka', question: 'Hur?' });
 		expect(res.status).toBe(429);
+		// A question about the whole workout (no exerciseId) passes validation and is limited the same way.
+		expect((await call(helper as Handler, { session, question: 'Vilken ordning?' })).status).toBe(429);
+		expect((await call(helper as Handler, { session, exerciseId: 'ex_okand', question: 'Hur?' })).status).toBe(400);
 		expect(createMessage).not.toHaveBeenCalled();
 	});
 });

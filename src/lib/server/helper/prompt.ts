@@ -47,11 +47,15 @@ export function formatHistory(exercise: Exercise | undefined): string {
 	);
 }
 
+/**
+ * `current` is the exercise the question is about: undefined means the whole
+ * workout, null an exercise that could not be found.
+ */
 export function buildHelperPrompt(
 	workoutName: string,
 	session: ActiveSession,
 	exercises: ReadonlyMap<string, Exercise>,
-	current: Exercise | undefined,
+	current: Exercise | null | undefined,
 	catalog: readonly Exercise[]
 ): string {
 	// Replacer function, so that "$" in names or instructions is not interpreted.
@@ -61,6 +65,8 @@ export function buildHelperPrompt(
 	return TEMPLATE.replace('{{situation}}', () => situation)
 		.replace('{{workout_name}}', () => workoutName)
 		.replace('{{session_state}}', () => formatSessionState(session, exercises))
-		.replace('{{exercise_history}}', () => '\n' + formatHistory(current))
+		.replace('{{exercise_history}}', () =>
+			current === undefined ? '(frågan gäller hela passet, ingen enskild övning; vill användaren byta och det är oklart vilken övning, fråga först vilken)' : '\n' + formatHistory(current ?? undefined)
+		)
 		.replace('{{exercise_catalog}}', () => '\n' + formatCatalog(catalog));
 }

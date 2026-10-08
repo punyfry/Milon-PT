@@ -16,6 +16,7 @@ export interface HelperTurn {
 
 export interface HelperInput {
 	session: ActiveSession;
+	/** The exercise the question is about; empty when it is about the whole workout. */
 	exerciseId: string;
 	/** Earlier questions and answers in this helper panel, as text. */
 	history: HelperTurn[];
@@ -35,8 +36,10 @@ export function parseHelperInput(raw: unknown): HelperInput {
 	const issues: string[] = [];
 	if (!isObject(raw)) throw new ValidationError('fråga', ['Ogiltig JSON']);
 	const session = checkActiveSession(raw.session, issues);
+	// No exerciseId (or "") means a question about the whole workout; anything else must be a string.
+	if (raw.exerciseId !== undefined && typeof raw.exerciseId !== 'string') issues.push('exerciseId måste vara text');
 	const exerciseId = typeof raw.exerciseId === 'string' ? raw.exerciseId : '';
-	if (session && Array.isArray(session.exercises) && !session.exercises.some((e) => e.exerciseId === exerciseId))
+	if (exerciseId && session && Array.isArray(session.exercises) && !session.exercises.some((e) => e.exerciseId === exerciseId))
 		issues.push('exerciseId finns inte i passet');
 	const question = typeof raw.question === 'string' ? raw.question.trim() : '';
 	if (!question) issues.push('Frågan är tom');
@@ -80,7 +83,7 @@ export async function askHelper(
 		workout?.data.name ?? session.workoutSlug,
 		session,
 		byId,
-		byId.get(input.exerciseId),
+		input.exerciseId ? (byId.get(input.exerciseId) ?? null) : undefined,
 		catalog
 	);
 

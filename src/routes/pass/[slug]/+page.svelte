@@ -8,7 +8,7 @@
 	import SetRow from '$lib/components/SetRow.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
-	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
+	import { formatNumber, formatSeconds } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
 	import { NOTE_MAX, findSameExercise, newExerciseId, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
 	import {
@@ -396,13 +396,17 @@
 				const { from, to } = body.swap as { from: string; to: ExerciseInfo };
 				swap(from, to);
 				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
-				// The help follows the new exercise.
-				help[to.id] = state;
-				delete help[from];
-				sheet = { kind: 'help', exerciseId: to.id };
+				// Help about one exercise follows it to the new one; help about the whole workout stays put.
+				if (exerciseId) {
+					help[to.id] = state;
+					delete help[from];
+					sheet = { kind: 'help', exerciseId: to.id };
+				}
 			}
 		} catch (e) {
-			state.error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
+			// fetch() rejects with a TypeError when offline; show that in Swedish rather than "Failed to fetch".
+			state.error =
+				e instanceof TypeError ? 'Ingen kontakt med servern. Försök igen.' : e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
 		} finally {
 			state.busy = false;
 		}
@@ -574,37 +578,43 @@
 			{#each session.exercises as e (e.exerciseId)}
 				{@const ei = infos.get(e.exerciseId)}
 				{@const target = targetText(e.exerciseId, e.sets.length)}
+				{@const open = !!showInstruction[e.exerciseId]}
 				<li class="ovitem">
-					<div class="ovtop">
-						<h2>{ei?.name ?? e.exerciseId}</h2>
-						{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
-					</div>
-					{#if target}<p class="subline">Mål <span class="num">{target}</span></p>{/if}
-					{#if ei?.lastEntry}
-						<p class="ovlast">
-							<span class="label">Förra · {daysAgo(ei.lastEntry.date, now)}</span>
-							<span class="num">{ei.lastEntry.sets.map((s) => formatSet(ei.type, s)).join(' · ')}</span>
+					<div class="ovmain">
+						<div class="ovtop">
+							<h2>{ei?.name ?? e.exerciseId}</h2>
+							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{:else if ei && !ei.lastEntry}<span class="tag quiet">Ny</span>{/if}
+						</div>
+						<p class="ovmeta">
+							{#if target}<span>Mål <span class="num">{target}</span></span>{/if}
+							{#if ei?.instruction}
+								<button class="link" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
+									Instruktion<Icon name={open ? 'up' : 'down'} size={16} />
+								</button>
+							{:else if data.helperAvailable && ei}
+								<!-- Nothing to unfold: go straight to Milon. -->
+								<button class="link" onclick={() => openHelp(e.exerciseId)}>Fråga Milon</button>
+							{/if}
 						</p>
-						{#if ei.lastEntry.note}<p class="lastnote"><span>Anteckning:</span> {ei.lastEntry.note}</p>{/if}
-					{:else if ei}
-						<p class="muted ovlast">Inte gjord tidigare.</p>
-					{/if}
-					{#if showInstruction[e.exerciseId] && ei?.instruction}<p class="instruction">{ei.instruction}</p>{/if}
-					<div class="actions">
-						<button class="btn small" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })}><Icon name="swap" /> Byt</button>
-						{#if ei?.instruction}
-							{@const open = !!showInstruction[e.exerciseId]}
-							<button class="btn small" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
-								Instruktion <Icon name={open ? 'up' : 'down'} />
-							</button>
-						{/if}
-						{#if data.helperAvailable && ei}
-							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon</button>
-						{/if}
+						{#if ei?.lastEntry?.note}<p class="ovnote"><span>Förra:</span> {ei.lastEntry.note}</p>{/if}
 					</div>
+					<button class="btn small swapbtn" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })} aria-label="Byt {ei?.name ?? e.exerciseId}">
+						<Icon name="swap" /> Byt
+					</button>
+					{#if open && ei?.instruction}
+						<div class="ovinstr">
+							<p class="instruction">{ei.instruction}</p>
+							{#if data.helperAvailable}
+								<button class="btn small" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}"><MilonAvatar size={20} tight /> Fråga Milon</button>
+							{/if}
+						</div>
+					{/if}
 				</li>
 			{/each}
 		</ol>
+		{#if data.helperAvailable}
+			<button class="btn full askall" onclick={() => openHelp('')}><MilonAvatar size={22} tight /> Fråga Milon om passet</button>
+		{/if}
 		{#if session.deviations.length}
 			<button class="btn ghost full reset" onclick={resetPreparation}>Ångra byten</button>
 		{/if}
@@ -851,7 +861,8 @@
 	{@const state = help[id]}
 	<Sheet title="Fråga Milon" onclose={() => (sheet = null)}>
 		<HelpPanel
-			name={infos.get(id)?.name ?? id}
+			name={id ? (infos.get(id)?.name ?? id) : data.workout.name}
+			workout={!id}
 			log={state.log}
 			busy={state.busy}
 			error={state.error}
@@ -1108,17 +1119,20 @@
 	.overview {
 		padding-top: 4px;
 	}
+	/* A plain list with hairlines: the overview is for scanning, not for reading cards. */
 	.ovlist {
 		list-style: none;
-		margin: 20px 0 0;
+		margin: 16px 0 0;
 		padding: 0;
-		display: grid;
-		gap: 12px;
+		border-top: 1px solid var(--line);
 	}
 	.ovitem {
-		padding: 16px;
-		border-radius: var(--radius);
-		background: var(--surface);
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 4px 12px;
+		align-items: center;
+		padding: 12px 0;
+		border-bottom: 1px solid var(--line);
 	}
 	.ovtop {
 		display: flex;
@@ -1127,22 +1141,63 @@
 		flex-wrap: wrap;
 	}
 	.ovtop h2 {
-		font-size: 20px;
+		font-size: 17px;
 		font-weight: 600;
-		color: var(--heading);
 		overflow-wrap: anywhere;
 	}
-	.ovlast {
-		margin: 10px 0 0;
-		display: grid;
-		gap: 2px;
+	.ovmeta {
+		margin: 2px 0 0;
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		flex-wrap: wrap;
 		font-size: 14px;
+		color: var(--muted);
+	}
+	.ovmeta .num {
+		font-size: 13px;
+	}
+	/* 44 px tap target; the negative margin keeps the row compact. */
+	.ovmeta .link {
+		min-height: 44px;
+		margin: -6px 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		padding: 0;
+		text-decoration: none;
+		color: var(--soft);
+	}
+	.ovnote {
+		margin: 2px 0 0;
+		font-size: 13px;
+		color: var(--soft);
+		white-space: pre-line;
+	}
+	.ovnote span {
+		color: var(--muted);
+	}
+	.swapbtn {
+		background: none;
+		color: var(--soft);
+		padding: 0 8px;
+	}
+	.ovinstr {
+		grid-column: 1 / -1;
+		display: grid;
+		gap: 8px;
+		justify-items: start;
+		padding-top: 4px;
+	}
+	.ovinstr .instruction {
+		margin: 0;
+		background: var(--surface);
+	}
+	.askall {
+		margin-top: 20px;
 	}
 	.reset {
-		margin-top: 12px;
-	}
-	.ovitem .instruction {
-		background: var(--surface-2);
+		margin-top: 8px;
 	}
 	.ellipsis {
 		overflow: hidden;
