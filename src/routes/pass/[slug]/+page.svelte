@@ -601,7 +601,7 @@
 						</button>
 						{#if data.helperAvailable && ei}
 							<!-- The same small Milon icon on every row, so the rows look alike whether or not there is an instruction. -->
-							<button class="icon-btn milonbtn" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}">
+							<button class="icon-btn" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}" title="Fråga Milon">
 								<MilonAvatar size={24} tight />
 							</button>
 						{/if}
@@ -1181,6 +1181,7 @@
 	}
 	.ovactions {
 		display: flex;
+		gap: 4px;
 		align-items: center;
 	}
 	.swapbtn {
@@ -1190,9 +1191,6 @@
 	}
 	.ovinstr {
 		grid-column: 1 / -1;
-		display: grid;
-		gap: 8px;
-		justify-items: start;
 		padding-top: 4px;
 	}
 	.ovinstr .instruction {
