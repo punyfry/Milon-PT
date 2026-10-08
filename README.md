@@ -39,6 +39,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/theme.ts` | Theme choice (system, dark, light), stored in localStorage and applied before first paint by `static/theme-init.js` |
 | `static/fonts/` | Self-hosted Bricolage Grotesque and DM Mono (latin subset, SIL Open Font License) so they work offline |
 | `assets/logo/` | The logo (`logo.svg`, an M that is also a dumbbell, drawn in `currentColor`) and `logo-preview.html`, a standalone preview at different sizes |
+| `assets/avatar/` | Milon's avatar (`milon.svg`), the logo-to-Milon animation (`logo-to-milon.svg`/`.gif`) and a preview; see `assets/avatar/README.md` |
 | `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons and favicon, drawn from the logo) |
 | `.claude/` | Agent workflow: the `deliver` skill and the subagents Gregory (review) and Nissa (testing) |
 
