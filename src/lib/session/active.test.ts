@@ -63,6 +63,12 @@ describe('active session', () => {
 		expect(s.exercises[2].sets[0]).toEqual({ reps: 5, done: false });
 	});
 
+	it('prefills a timed set stopped early last time with the planned target', () => {
+		const stopped: ExerciseInfo = { ...plank, lastEntry: { date: '2026-10-01', sets: [{ seconds: 20 }, { seconds: 60 }] } };
+		expect(prefillSets(stopped, 2, { seconds: 45 }).map((s) => ('seconds' in s ? s.seconds : 0))).toEqual([45, 60]);
+		expect(prefillSets(stopped, 2).map((s) => ('seconds' in s ? s.seconds : 0))).toEqual([20, 60]); // no target to go by
+	});
+
 	it('never prefills with fields of the wrong type', () => {
 		const odd: ExerciseInfo = { ...pullup, lastEntry: { date: '2026-10-01', sets: [{ weight: 10, reps: 7 }] } };
 		expect(prefillSets(odd, 1)).toEqual([{ reps: 7, done: false }]);
@@ -102,6 +108,14 @@ describe('active session', () => {
 		addSet(empty, 'time');
 		expect(empty[0]).toEqual({ seconds: 30, done: false });
 	});
+
+	it('copies the plan, not the reached time, when adding a set after an early stop (#37)', () => {
+		const sets: ActiveSet[] = [{ seconds: 30, done: false }];
+		startTimer(sets[0], new Date(0));
+		stopTimer(sets[0], new Date(5000));
+		addSet(sets, 'time');
+		expect(sets[1]).toEqual({ seconds: 30, done: false });
+	});
 });
 
 describe('timer', () => {
@@ -129,7 +143,7 @@ describe('timer', () => {
 		expect(set).toMatchObject({ seconds: 5, plannedSeconds: 30 });
 		expect(timerStartSeconds(set)).toBe(30);
 		startTimer(set, at(10));
-		expect(set).toMatchObject({ timerDuration: 30, timerEndsAt: at(40).toISOString(), done: false });
+		expect(set).toMatchObject({ timerDuration: 30, timerEndsAt: at(40).toISOString(), done: true });
 		stopTimer(set, at(35));
 		expect(set).toEqual({ seconds: 25, done: true, plannedSeconds: 30 });
 	});
@@ -140,7 +154,8 @@ describe('timer', () => {
 		stopTimer(set, at(5));
 		startTimer(set, at(10));
 		cancelTimer(set);
-		expect(set).toEqual({ seconds: 5, done: false, plannedSeconds: 30 });
+		// Discarding the restarted timer leaves the set as it was: done, with the reached time and the plan (#37).
+		expect(set).toEqual({ seconds: 5, done: true, plannedSeconds: 30 });
 		expect(timerStartSeconds(set)).toBe(30);
 	});
 
