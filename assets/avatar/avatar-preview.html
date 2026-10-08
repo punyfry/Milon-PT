@@ -21,14 +21,11 @@
 		.disc { border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; }
 		.chat { display: flex; gap: 10px; align-items: flex-start; max-width: 340px; }
 		.bubble { background: var(--surface); border-radius: 14px; padding: 8px 12px; color: var(--text); }
-		/* Thinking, option 1: the whole symbol pulses between full and dimmed color. */
-		.pulse { animation: pulse 1.6s ease-in-out infinite; }
-		@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-		/* Thinking, option 2: both eyes blink together; the mouth stays. */
+		/* Thinking: both eyes blink together; the mouth stays. */
 		.eye { transform-box: fill-box; transform-origin: center; }
 		.blink .eye { animation: blink 1.6s ease-in-out infinite; }
 		@keyframes blink { 0%, 70%, 100% { transform: scaleY(1); } 80% { transform: scaleY(0.15); } }
-		@media (prefers-reduced-motion: reduce) { .pulse, .blink .eye { animation: none; } }
+		@media (prefers-reduced-motion: reduce) { .blink .eye { animation: none; } }
 	</style>
 </head>
 <body>
@@ -54,8 +51,7 @@
 		</div></section>`;
 		const theme = (cls, title) => `<div class="theme ${cls}"><h1>${title}</h1><p>Intro size and chat size (28 px), in a circle and on its own.</p>` +
 			block('', 'Resting', 'Two short plates as eyes, the V from the logo as mouth.') +
-			block('pulse', 'Thinking 1: pulse', 'The whole symbol pulses between full and dimmed color.') +
-			block('blink', 'Thinking 2: blink', 'Both eyes blink together; the mouth stays.') + '</div>';
+			block('blink', 'Thinking: blink', 'Both eyes blink together; the mouth stays.') + '</div>';
 		document.getElementById('out').innerHTML = theme('', 'Milon avatar, dark') + theme('light', 'Milon avatar, light');
 	</script>
 </body>
