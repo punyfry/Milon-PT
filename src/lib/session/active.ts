@@ -72,11 +72,13 @@ function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
  * Prefills the sets from the exercise's latest log entry, otherwise from the
  * workout target. The number of sets follows the template; if last time had
  * fewer sets, the last one is repeated. A timed set that was stopped early
- * last time starts at the target again: the plan, not the reached time.
+ * last time starts at the target again: the plan, not the reached time. With
+ * `ownHistory` (an exercise swapped in, whose target belongs to the one it
+ * replaced) its own logged times are used as they are.
  */
-export function prefillSets(info: ExerciseInfo, count: number, target?: Target): ActiveSet[] {
+export function prefillSets(info: ExerciseInfo, count: number, target?: Target, options: { ownHistory?: boolean } = {}): ActiveSet[] {
 	const previous = info.lastEntry?.sets ?? [];
-	const planned = target && 'seconds' in target ? target.seconds : 0;
+	const planned = !options.ownHistory && target && 'seconds' in target ? target.seconds : 0;
 	return Array.from({ length: Math.max(count, 1) }, (_, i) => {
 		const from = previous[Math.min(i, previous.length - 1)];
 		const values = from ? setValues(info.type, from) : defaultSet(info.type, target);
@@ -247,7 +249,7 @@ export function cancelTimer(set: ActiveSet): void {
 
 /**
  * Fills in the reached time for timers that hit zero, even if that happened
- * while the page was closed. Returns the number of sets that became done.
+ * while the page was closed. Returns the number of timers that finished.
  */
 export function completeExpiredTimers(session: ActiveSession, now: Date): number {
 	let completed = 0;
@@ -350,7 +352,7 @@ export function applySwap(session: ActiveSession, fromId: string, to: ExerciseIn
 	if (index < 0 || session.exercises.some((e) => e.exerciseId === to.id)) return;
 
 	const old = session.exercises[index];
-	const fresh = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target) };
+	const fresh = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target, { ownHistory: true }) };
 	const done = old.sets.filter((s) => s.done);
 	if (done.length) {
 		old.sets = done;

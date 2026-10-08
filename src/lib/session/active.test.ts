@@ -109,6 +109,43 @@ describe('active session', () => {
 		expect(empty[0]).toEqual({ seconds: 30, done: false });
 	});
 
+	it('keeps a swapped-in exercise on its own logged times, not the replaced target', () => {
+		const s = createActiveSession(workout, infos, new Date('2026-10-06T15:00:00Z'));
+		const sidePlank: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '', lastEntry: { date: '2026-10-01', sets: [{ seconds: 30 }] } };
+		applySwap(s, 'ex_plankan', sidePlank, { seconds: 45 });
+		expect(s.exercises[1].sets).toEqual([
+			{ seconds: 30, done: false },
+			{ seconds: 30, done: false }
+		]);
+		const fresh: ExerciseInfo = { ...sidePlank, id: 'ex_ny', lastEntry: undefined };
+		applySwap(s, 'ex_sidoplanka', fresh, { seconds: 45 });
+		expect(s.exercises[1].sets[0]).toEqual({ seconds: 45, done: false }); // no history: the target
+	});
+
+	it('copies a time changed by hand, and the plan while a timer runs', () => {
+		const edited: ActiveSet[] = [{ seconds: 30, done: false }];
+		startTimer(edited[0], new Date(0));
+		stopTimer(edited[0], new Date(10_000));
+		adjust(edited[0], 'seconds', 1);
+		addSet(edited, 'time');
+		expect(edited[1]).toEqual({ seconds: 15, done: false });
+
+		const running: ActiveSet[] = [{ seconds: 30, done: false }];
+		startTimer(running[0], new Date(0));
+		addSet(running, 'time');
+		expect(running[1]).toEqual({ seconds: 30, done: false });
+	});
+
+	it('leaves the done flag alone when a timer starts or is discarded', () => {
+		const ticked: ActiveSet = { seconds: 30, done: true };
+		startTimer(ticked, new Date(0));
+		cancelTimer(ticked);
+		expect(ticked).toEqual({ seconds: 30, done: true });
+		const open: ActiveSet = { seconds: 30, done: false };
+		startTimer(open, new Date(0));
+		expect(open.done).toBe(false);
+	});
+
 	it('copies the plan, not the reached time, when adding a set after an early stop (#37)', () => {
 		const sets: ActiveSet[] = [{ seconds: 30, done: false }];
 		startTimer(sets[0], new Date(0));
