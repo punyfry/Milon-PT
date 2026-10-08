@@ -36,17 +36,30 @@ export class BlobUserStorage implements UserStorage {
 
 	async readJson<T>(path: string): Promise<StoredJson<T> | null> {
 		const pathname = resolvePath(this.userId, path);
+		let file = await this.#get<T>(pathname);
+		if (file && file.version.startsWith('W/')) {
+			// A weak ETag (W/"…", from a compressed download) never matches a conditional
+			// write. Take the version from head() first and read again, so the version is
+			// never newer than the data: a write in between then fails instead of being lost.
+			console.warn(`[storage] weak ETag on ${path}`);
+			const version = await head(pathname, { token: this.#token }).then((h) => h.etag, () => null);
+			file = await this.#get<T>(pathname);
+			if (file && version) file.version = version;
+		}
+		return file;
+	}
+
+	/** Downloads uncompressed, so the ETag is the strong one that put() and ifMatch use. */
+	async #get<T>(pathname: string): Promise<StoredJson<T> | null> {
 		const result = await get(pathname, {
 			access: 'private',
 			useCache: false,
+			headers: { 'accept-encoding': 'identity' },
 			token: this.#token
 		});
 		if (!result || result.statusCode !== 200) return null;
 		const data = (await new Response(result.stream).json()) as T;
-		// A compressed download can carry a weak ETag (W/"…"), which a conditional
-		// write (ifMatch) never matches. Then the version is taken from head(), as put() reports it.
-		const version = result.blob.etag.startsWith('W/') ? (await head(pathname, { token: this.#token })).etag : result.blob.etag;
-		return { data, version };
+		return { data, version: result.blob.etag };
 	}
 
 	async writeJson(
