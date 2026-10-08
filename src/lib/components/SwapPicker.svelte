@@ -98,7 +98,7 @@
 		{/each}
 	</ul>
 {:else}
-	<p class="muted">{query.trim() ? `Ingen övning matchar "${query.trim()}".` : 'Inga andra övningar finns än.'}</p>
+	<p class="muted">{query.trim() ? `Ingen övning matchar "${query.trim()}".` : 'Alla dina övningar finns redan i passet.'}</p>
 {/if}
 
 <button type="button" class="btn full" onclick={startWriting}><Icon name="plus" /> Skriv in en ny övning</button>
