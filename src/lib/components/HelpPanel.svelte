@@ -4,6 +4,8 @@
 </script>
 
 <script lang="ts">
+	import MilonMessage from './MilonMessage.svelte';
+
 	interface Props {
 		name: string;
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
@@ -36,9 +38,13 @@
 {#if log.length || busy || error}
 	<div class="log" aria-live="polite">
 		{#each log as item, i (i)}
-			<p class="msg {item.role}">{item.text}</p>
+			{#if item.role === 'assistant'}
+				<MilonMessage>{item.text}</MilonMessage>
+			{:else}
+				<p class="msg {item.role}">{item.text}</p>
+			{/if}
 		{/each}
-		{#if busy}<p class="msg assistant typing">Milon tänker…</p>{/if}
+		{#if busy}<MilonMessage thinking>Milon tänker…</MilonMessage>{/if}
 		{#if error}<p class="msg error" role="alert">{error}</p>{/if}
 	</div>
 {/if}
@@ -89,10 +95,6 @@
 		background: var(--surface-2);
 		box-shadow: inset 0 0 0 1px var(--ring);
 	}
-	.msg.assistant {
-		justify-self: start;
-		border: 1px solid var(--line);
-	}
 	.msg.event {
 		justify-self: center;
 		padding: 4px 0;
@@ -104,10 +106,6 @@
 		justify-self: center;
 		color: var(--danger);
 		font-size: 14px;
-	}
-	.typing {
-		color: var(--muted);
-		font-style: italic;
 	}
 	.quick {
 		display: flex;

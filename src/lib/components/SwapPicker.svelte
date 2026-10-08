@@ -9,6 +9,7 @@
 	import { swapCandidates, type ExerciseInfo } from '$lib/session/active';
 	import ExerciseFields, { TYPE_LABEL } from './ExerciseFields.svelte';
 	import Icon from './Icon.svelte';
+	import MilonAvatar from './MilonAvatar.svelte';
 
 	interface Props {
 		/** The exercise being swapped out. */
@@ -77,7 +78,7 @@
 	</form>
 {:else}
 {#if onaskmilon}
-	<button type="button" class="btn full" onclick={onaskmilon}><Icon name="chat" /> Fråga Milon om varianter eller nya övningar</button>
+	<button type="button" class="btn full" onclick={onaskmilon}><MilonAvatar size={20} /> Fråga Milon om varianter eller nya övningar</button>
 {/if}
 
 <input type="search" bind:value={query} placeholder="Sök bland dina övningar" aria-label="Sök övning" enterkeyhint="search" />
