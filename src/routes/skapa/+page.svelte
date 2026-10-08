@@ -4,6 +4,7 @@
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import MilonMessage from '$lib/components/MilonMessage.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
@@ -137,21 +138,21 @@
 			</div>
 		{/if}
 		{#if !view?.log.length}
-			<p class="bubble assistant">
+			<MilonMessage>
 				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
-			</p>
+			</MilonMessage>
 			<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
 				{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
 			</a>
 		{/if}
 		{#each view?.log ?? [] as item, i (i)}
 			{#if item.role === 'assistant'}
-				<div class="bubble assistant"><Markdown text={item.text} /></div>
+				<MilonMessage><Markdown text={item.text} /></MilonMessage>
 			{:else}
 				<p class="bubble {item.role}">{item.text}</p>
 			{/if}
 		{/each}
-		{#if sending}<p class="bubble assistant typing">Milon skriver…</p>{/if}
+		{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
 		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
 		<div class="end" bind:this={logEnd}></div>
 	</section>
@@ -279,10 +280,6 @@
 		background: var(--surface-2);
 		box-shadow: inset 0 0 0 1px var(--ring);
 	}
-	.bubble.assistant {
-		align-self: flex-start;
-		border: 1px solid var(--line);
-	}
 	.bubble.event {
 		align-self: center;
 		font-size: 13px;
@@ -298,10 +295,6 @@
 	.manual {
 		align-self: flex-start;
 		font-size: 14px;
-	}
-	.typing {
-		color: var(--muted);
-		font-style: italic;
 	}
 	/* The last message scrolls into view above the composer and the menu, never behind them. */
 	.end {

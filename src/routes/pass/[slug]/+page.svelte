@@ -4,6 +4,7 @@
 	import { onMount, tick } from 'svelte';
 	import HelpPanel, { swapQuestion } from '$lib/components/HelpPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import MilonAvatar from '$lib/components/MilonAvatar.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
@@ -598,7 +599,7 @@
 							</button>
 						{/if}
 						{#if data.helperAvailable && ei}
-							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
+							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon</button>
 						{/if}
 					</div>
 				</li>
@@ -658,7 +659,7 @@
 					<button class="btn small" onclick={() => guard(() => (sheet = { kind: 'swap', exerciseId: ex.exerciseId }))}><Icon name="swap" /> Byt</button>
 					<button class="btn small" aria-haspopup="dialog" onclick={() => openNote(cur)}><Icon name="note" /> Anteckning</button>
 					{#if data.helperAvailable}
-						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
+						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon</button>
 					{/if}
 				</div>
 				{#if showInstruction[ex.exerciseId]}<p class="instruction">{info.instruction}</p>{/if}

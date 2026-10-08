@@ -35,7 +35,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/markdown.ts` | Simple markdown for the builder's replies, rendered without `{@html}` |
 | `src/service-worker.ts` | Offline support: caches the app's files and visited pages |
 | `src/routes/` | `/` workout cards, `/pass/[slug]` active workout (one exercise at a time) and finish, `/skapa` the builder, `/skapa/manuell` building by hand, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
-| `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `ExerciseFields` (name, type and instruction of an exercise written in), `VersionsSheet` (a workout's versions), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown` |
+| `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `ExerciseFields` (name, type and instruction of an exercise written in), `VersionsSheet` (a workout's versions), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown`, `MilonAvatar` (Milon's face, blinking while he thinks) and `MilonMessage` (a chat message with Milon as sender) |
 | `src/lib/theme.ts` | Theme choice (system, dark, light), stored in localStorage and applied before first paint by `static/theme-init.js` |
 | `static/fonts/` | Self-hosted Bricolage Grotesque and DM Mono (latin subset, SIL Open Font License) so they work offline |
 | `assets/logo/` | The logo (`logo.svg`, an M that is also a dumbbell, drawn in `currentColor`) and `logo-preview.html`, a standalone preview at different sizes |
