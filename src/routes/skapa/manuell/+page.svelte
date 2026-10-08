@@ -62,7 +62,11 @@
 	}
 
 	// The page is reused when another workout (or a new one) is opened, so the form follows the new data.
-	afterNavigate(reset);
+	afterNavigate(() => {
+		reset();
+		failure = null;
+		if (notice?.slug !== data.editing?.slug) notice = null;
+	});
 
 	beforeNavigate((nav) => {
 		if (dirty && !saving && !confirm('Passet är inte sparat. Lämna ändå?')) nav.cancel();

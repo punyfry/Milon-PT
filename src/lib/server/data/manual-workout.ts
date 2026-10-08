@@ -128,7 +128,6 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	const slug = input.editSlug ?? slugify(input.name);
 	const [latest, catalog] = await Promise.all([getLatestWorkout(storage, slug), listExercises(storage).then((all) => all.map((e) => e.data))]);
 	if (input.editSlug && !latest) throw new ValidationError('pass', ['Passet finns inte längre.']);
-	if (input.editSlug && latest!.version !== input.baseVersion) throw new WorkoutChangedError();
 	const base = input.editSlug ? latest : null;
 
 	const byId = new Map(catalog.map((e) => [e.id, e]));
@@ -162,12 +161,14 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	}
 	if (problems.length) throw new ValidationError('pass', problems);
 
-	if (!input.editSlug && latest) {
-		// A repeated save of a new workout (e.g. when the first response was lost) changes nothing.
+	// A new workout whose name is taken, or an edit of a version that is no longer the latest. A repeated
+	// save (e.g. when the first response was lost) matches the latest version and changes nothing.
+	if (latest && (!input.editSlug || latest.version !== input.baseVersion)) {
 		const same =
 			latest.name === input.name &&
 			JSON.stringify(latest.exercises) === JSON.stringify(input.items.map((item) => ({ exerciseId: keyOf(item), sets: item.sets, target: item.target })));
 		if (same) return { slug, version: latest.version, saved: false };
+		if (input.editSlug) throw new WorkoutChangedError();
 		throw new ValidationError('pass', [`Det finns redan ett pass som heter ${latest.name}. Välj ett annat namn eller redigera det passet.`]);
 	}
 

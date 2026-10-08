@@ -184,7 +184,9 @@ export async function resolveNewExercises(storage: UserStorage, input: SaveSessi
 /**
  * What can be checked before anything is written, so a save that will fail
  * creates no exercises: written-in exercises' done sets against their type,
- * and that at least one set is done. Stored exercises are checked in saveSession.
+ * and that at least one set is done. Stored exercises are checked in saveSession,
+ * after any creating; they only fail there if changed elsewhere during the
+ * workout, and a retry then reuses what was created.
  */
 function precheck(session: ActiveSession): void {
 	const issues = new Issues();

@@ -91,6 +91,12 @@ describe('manual workout', () => {
 		await expect(save(storage, { editSlug: 'pass-c', baseVersion: 1, name: 'Pass C', items: [{ ...items[0], sets: 5 }] })).rejects.toBeInstanceOf(
 			WorkoutChangedError
 		);
+		// The same edit sent again (its response was lost) is already saved.
+		expect(await save(storage, { editSlug: 'pass-c', baseVersion: 1, name: 'Pass C', items: [{ ...items[0], sets: 4 }] })).toEqual({
+			slug: 'pass-c',
+			version: 2,
+			saved: false
+		});
 		expect(issues(() => parseManualWorkoutInput({ editSlug: 'pass-c', name: 'A', items: [rows] }))).toMatch(/Ogiltig version/);
 	});
 
