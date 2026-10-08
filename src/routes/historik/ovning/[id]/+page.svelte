@@ -12,7 +12,7 @@
 
 	// --- editing name, type and instruction -----------------------------------
 	let editing = $state(false);
-	let fields = $state({ name: '', type: 'weight' as ExerciseType, instruction: '' });
+	let fields = $state({ name: '', type: 'weight' as ExerciseType, instruction: '', note: '' });
 	let editError = $state<string | null>(null);
 
 	/** No answer from the server (offline) or an unexpected error; the default would show the error page. */
@@ -29,7 +29,7 @@
 	}
 
 	function openEdit() {
-		fields = { name: ex.name, type: ex.type, instruction: ex.instruction };
+		fields = { name: ex.name, type: ex.type, instruction: ex.instruction, note: ex.note };
 		editError = null;
 		editing = true;
 	}
@@ -62,11 +62,11 @@
 	const kind = $derived(ex.type === 'weight' ? 'Vikt' : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
 </script>
 
-<svelte:head><title>{ex.name} · Historik · Milon-PT</title></svelte:head>
+<svelte:head><title>{ex.name} · Bibliotek · Milon-PT</title></svelte:head>
 
 <header class="topbar">
-	<a class="icon-btn" href="/historik" aria-label="Tillbaka till historik"><Icon name="left" /></a>
-	<span class="label">Historik</span>
+	<a class="icon-btn" href="/historik" aria-label="Tillbaka till biblioteket"><Icon name="left" /></a>
+	<span class="label">Bibliotek</span>
 	{#if !ex.deleted}<button class="btn small edit" onclick={openEdit}>Ändra</button>{/if}
 </header>
 
@@ -75,6 +75,7 @@
 		<span class="label">{kind}{ex.deleted ? ' · borttagen' : ''}</span>
 		<h1>{ex.name}</h1>
 	</div>
+	{#if ex.note}<p class="exnote">{ex.note}</p>{/if}
 
 	<section class="chart">
 		<div class="head">
@@ -148,10 +149,18 @@
 				}}
 		>
 			<h2>Ändra övning</h2>
-			<ExerciseFields bind:name={fields.name} bind:type={fields.type} bind:instruction={fields.instruction} typeLock={ex.typeLock} idPrefix="edit" />
+			<ExerciseFields
+				bind:name={fields.name}
+				bind:type={fields.type}
+				bind:instruction={fields.instruction}
+				bind:note={fields.note}
+				typeLock={ex.typeLock}
+				idPrefix="edit"
+			/>
 			<input type="hidden" name="name" value={fields.name} />
 			<input type="hidden" name="type" value={fields.type} />
 			<input type="hidden" name="instruction" value={fields.instruction} />
+			<input type="hidden" name="note" value={fields.note} />
 			{#if editError}<p class="error" role="alert">{editError}</p>{/if}
 			<button type="submit" class="btn primary full">Spara</button>
 			<button type="button" class="btn ghost full" onclick={() => (editing = false)}>Avbryt</button>
@@ -192,6 +201,11 @@
 <style>
 	.edit {
 		justify-self: end;
+	}
+	.exnote {
+		margin: 8px 0 0;
+		white-space: pre-line;
+		color: var(--soft);
 	}
 	.remove {
 		margin-top: 24px;

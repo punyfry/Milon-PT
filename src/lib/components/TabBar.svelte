@@ -4,7 +4,7 @@
 
 	const tabs = [
 		{ href: '/', label: 'Start', icon: 'home' },
-		{ href: '/historik', label: 'Historik', icon: 'chart' },
+		{ href: '/historik', label: 'Bibliotek', icon: 'chart' },
 		{ href: '/skapa', label: 'Skapa', icon: 'plus' },
 		{ href: '/konto', label: 'Konto', icon: 'user' }
 	] as const;

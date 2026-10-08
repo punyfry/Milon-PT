@@ -9,6 +9,8 @@ import {
 	uniqueId,
 	validateExercise,
 	validateExerciseInput,
+	validateExerciseNote,
+	isObject,
 	type Exercise,
 	type LogEntry
 } from '../../model';
@@ -162,27 +164,51 @@ export async function undeleteExercise(storage: UserStorage, stored: StoredJson<
 	await saveExercise(storage, active, stored.version);
 }
 
-/**
- * Changes an exercise's name, type and instruction (`input` as typed by the
- * user). The type is locked as `typeLockReason` says, and the name may not be taken by another active exercise of the same
- * type. Throws ValidationError with messages for the user.
- */
-export async function updateExerciseDetails(storage: UserStorage, id: string, input: unknown): Promise<StoredJson<Exercise>> {
+/** Name, type, instruction and note as typed by the user. Throws ValidationError with messages for the user. */
+function parseExerciseDetails(input: unknown): NewExercise {
 	const issues = new Issues();
 	const fields = validateExerciseInput(input, issues, '');
-	if (!fields) throw new ValidationError('övning', issues.list.map(issueText));
+	const note = isObject(input) ? validateExerciseNote(input.note, issues, 'note') : '';
+	if (!fields || !issues.ok) throw new ValidationError('övning', issues.list.map(issueText));
+	return { ...fields, ...(note ? { note } : {}) };
+}
+
+/** Throws if another active exercise of the same type has the name. */
+function assertNameFree(catalog: readonly StoredJson<Exercise>[], fields: Pick<Exercise, 'name' | 'type'>, id?: string): void {
+	const key = normalizeName(fields.name);
+	const taken = catalog.some(({ data: e }) => e.id !== id && !e.deleted && e.type === fields.type && normalizeName(e.name) === key);
+	if (taken) throw new ValidationError('övning', [`Det finns redan en övning som heter ${fields.name}.`]);
+}
+
+/**
+ * Creates an exercise on its own, outside a workout (#64), from the user's
+ * input. The name may not be taken by another active exercise of the same
+ * type. Throws ValidationError with messages for the user.
+ */
+export async function createExerciseFromInput(storage: UserStorage, input: unknown): Promise<StoredJson<Exercise>> {
+	const fields = parseExerciseDetails(input);
+	const catalog = await listExercises(storage);
+	assertNameFree(catalog, fields);
+	return createExercise(storage, fields, new Set(catalog.map((e) => e.data.id)));
+}
+
+/**
+ * Changes an exercise's name, type, instruction and note (`input` as typed by
+ * the user). The type is locked as `typeLockReason` says, and the name may not
+ * be taken by another active exercise of the same type. Throws ValidationError
+ * with messages for the user.
+ */
+export async function updateExerciseDetails(storage: UserStorage, id: string, input: unknown): Promise<StoredJson<Exercise>> {
+	const fields = parseExerciseDetails(input);
 	const current = await getExercise(storage, id);
 	if (!current || current.data.deleted) throw new ValidationError('övning', ['Övningen finns inte.']);
 	if (fields.type !== current.data.type) {
 		const reason = await typeLockReason(storage, current.data);
 		if (reason) throw new ValidationError('övning', [reason]);
 	}
-	const key = normalizeName(fields.name);
-	const taken = (await listExercises(storage)).some(
-		({ data: e }) => e.id !== id && !e.deleted && e.type === fields.type && normalizeName(e.name) === key
-	);
-	if (taken) throw new ValidationError('övning', [`Det finns redan en övning som heter ${fields.name}.`]);
-	return saveExercise(storage, { ...current.data, ...fields }, current.version);
+	assertNameFree(await listExercises(storage), fields, id);
+	const { note: _, ...rest } = current.data;
+	return saveExercise(storage, { ...rest, ...fields }, current.version);
 }
 
 /** Sorts the log newest first. Stable, so entries on the same day keep their order. */

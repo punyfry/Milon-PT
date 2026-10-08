@@ -6,6 +6,7 @@ import {
 	lastSessionBySlug,
 	listSessionsBetween,
 	createExercise,
+	createExerciseFromInput,
 	deleteExercise,
 	findOrCreateExercise,
 	getExercise,
@@ -167,5 +168,28 @@ describe('deleting an exercise (#46)', () => {
 		const { exercise, created } = await findOrCreateExercise(storage, catalog, { name: 'Rodd', type: 'weight', instruction: '' });
 		expect({ id: exercise.id, created }).toEqual({ id: 'ex_rodd_2', created: true });
 		await expect(updateExerciseDetails(storage, 'ex_knaboj', { name: 'rodd', type: 'weight' })).rejects.toThrow(/redan en övning/);
+	});
+});
+
+describe('an exercise on its own (#64)', () => {
+	it('is created from the user\'s input with an optional note, and the name must be free', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const { data } = await createExerciseFromInput(storage, { name: ' Turkish  get-up ', type: 'weight', instruction: '', note: ' Såg den på gymmet. ' });
+		expect(data).toEqual({ id: 'ex_turkish_get_up', name: 'Turkish get-up', type: 'weight', instruction: '', note: 'Såg den på gymmet.', log: [] });
+		await expect(createExerciseFromInput(storage, { name: 'turkish get-up', type: 'weight' })).rejects.toThrow(/redan en övning/);
+		// Another type is another exercise.
+		expect((await createExerciseFromInput(storage, { name: 'Turkish get-up', type: 'time', note: '' })).data).not.toHaveProperty('note');
+		await expect(createExerciseFromInput(storage, { name: '', type: 'weight' })).rejects.toThrow(/Övningen behöver ett namn\./);
+		await expect(createExerciseFromInput(storage, { name: 'X', type: 'weight', note: 'x'.repeat(1001) })).rejects.toThrow(/högst 1000/);
+	});
+
+	it('keeps, changes or clears the note when edited', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExerciseFromInput(storage, { name: 'Rodd', type: 'weight', note: 'Prova i pass B' });
+		const edited = await updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'weight', note: 'Passar i pass A' });
+		expect(edited.data.note).toBe('Passar i pass A');
+		const cleared = await updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'weight', note: '' });
+		expect(cleared.data).not.toHaveProperty('note');
+		expect((await getExercise(storage, 'ex_rodd'))!.data).not.toHaveProperty('note');
 	});
 });

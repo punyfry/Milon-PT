@@ -127,11 +127,11 @@
 	}
 </script>
 
-<svelte:head><title>{data.workoutName} · Historik · Milon-PT</title></svelte:head>
+<svelte:head><title>{data.workoutName} · Bibliotek · Milon-PT</title></svelte:head>
 
 <header class="topbar">
-	<a class="icon-btn" href={`/historik?vecka=${startDate}`} aria-label="Tillbaka till historik"><Icon name="left" /></a>
-	<span class="label">Historik</span>
+	<a class="icon-btn" href={`/historik?vecka=${startDate}`} aria-label="Tillbaka till biblioteket"><Icon name="left" /></a>
+	<span class="label">Bibliotek</span>
 	<span></span>
 </header>
 

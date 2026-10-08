@@ -56,6 +56,13 @@ describe('validation', () => {
 		}
 	});
 
+	it('keeps a note, drops an empty one and ignores the old archived flag', () => {
+		expect(assertValid('övning', { ...deadlift, note: ' Prova ' }, validateExercise).note).toBe('Prova');
+		expect(assertValid('övning', { ...deadlift, note: '' }, validateExercise)).not.toHaveProperty('note');
+		expect(assertValid('övning', { ...deadlift, archived: true }, validateExercise)).not.toHaveProperty('archived');
+		expect(() => assertValid('övning', { ...deadlift, note: 5 }, validateExercise)).toThrow(/note: måste vara text/);
+	});
+
 	it('drops the old loadClass field', () => {
 		const result = assertValid('övning', { ...deadlift, loadClass: 'heavy' }, validateExercise);
 		expect(result).not.toHaveProperty('loadClass');

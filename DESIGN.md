@@ -95,7 +95,7 @@ No rest timer.
 - **Exercise:** chart and the latest sessions as rows (date, best value, sets, note, volume).
 - **Create workout:** collapsible exercise list at the top, chat, composer that never covers the last message. The user's own messages are grey with a `--ring` border. Versions in a sheet.
 - **Account:** weekly goal, theme, import, sign-out.
-- The main menu (Start, Historik, Skapa, Konto) is fixed at the bottom except during a workout.
+- The main menu (Start, Bibliotek, Skapa, Konto) is fixed at the bottom except during a workout.
 
 ## Accessibility
 

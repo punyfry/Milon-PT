@@ -188,6 +188,7 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 	// they are read, so archived exercises become active (#46).
 	const instruction = str(v, 'instruction', issues, path, { allowEmpty: true });
 	if (v.deleted !== undefined && typeof v.deleted !== 'boolean') issues.add(join(path, 'deleted'), 'måste vara true eller false');
+	const note = validateExerciseNote(v.note, issues, join(path, 'note'));
 	const log = (arr(v, 'log', issues, path) ?? []).map((e, i) =>
 		validateLogEntry(e, type, issues, join(join(path, 'log'), i))
 	);
@@ -197,6 +198,7 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		name: name!,
 		type,
 		instruction: instruction!,
+		...(note ? { note } : {}),
 		...(v.deleted === true ? { deleted: true as const } : {}),
 		log: log as LogEntry[]
 	};
@@ -233,6 +235,18 @@ export function validateExerciseInput(
 	if (instruction.length > MAX_INSTRUCTION) issues.add(join(path, 'instruction'), `får vara högst ${MAX_INSTRUCTION} tecken`);
 	if (issues.list.length !== before) return null;
 	return { name, type: v.type as ExerciseType, instruction };
+}
+
+/** An exercise's own note (`Exercise.note`): optional text, trimmed, empty means none. */
+export function validateExerciseNote(v: unknown, issues: Issues, path: string): string {
+	if (v === undefined || v === null) return '';
+	if (typeof v !== 'string') {
+		issues.add(path, 'måste vara text');
+		return '';
+	}
+	const note = v.trim();
+	if (note.length > NOTE_MAX) issues.add(path, `får vara högst ${NOTE_MAX} tecken`);
+	return note;
 }
 
 export function validateTarget(v: unknown, issues: Issues, path: string): Target | null {

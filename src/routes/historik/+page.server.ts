@@ -1,9 +1,10 @@
-import { error } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
+import { ValidationError } from '$lib/model';
 import { addDays, groupByWorkout, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
-import { getProfile, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
+import { createExerciseFromInput, getProfile, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 
 /** `/historik?vecka=YYYY-MM-DD` shows the week containing the date (default: this week). */
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -24,9 +25,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	// Deleted exercises still count in the week, but are not listed (#46).
 	const active = exercises.filter((e) => !e.deleted);
 
-	// Exercises with history, most recently trained first. Summary only, never the whole log.
+	// Every exercise, most recently trained first and untrained ones last (#64). Summary only, never the whole log.
 	const list = active
-		.filter((e) => e.log.length)
 		.map((e) => {
 			const lastDate = e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
 			const series = progressSeries(e);
@@ -61,4 +61,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		groups,
 		milestones
 	};
+};
+
+export const actions: Actions = {
+	/** Adds an exercise on its own, outside a workout (#64), and opens it. */
+	create: async ({ locals, request }) => {
+		const form = await request.formData();
+		const input = { name: form.get('name'), type: form.get('type'), instruction: form.get('instruction') ?? '', note: form.get('note') ?? '' };
+		let id: string;
+		try {
+			id = (await createExerciseFromInput(storageFor(locals), input)).data.id;
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { createError: e.issues.join(' ') });
+			throw e;
+		}
+		redirect(303, `/historik/ovning/${id}`);
+	}
 };

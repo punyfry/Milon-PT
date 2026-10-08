@@ -37,6 +37,8 @@ export interface Exercise {
 	name: string;
 	type: ExerciseType;
 	instruction: string;
+	/** The user's own note, e.g. why the exercise looked interesting (#64). Not sent to Milon. */
+	note?: string;
 	/**
 	 * Deleted by the user: hidden everywhere exercises are listed or picked, but
 	 * the file and its log are kept so history stays complete and an old workout
