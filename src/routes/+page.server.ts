@@ -1,4 +1,4 @@
-import { addDays, isoWeek, weekStartOf } from '$lib/history/stats';
+import { addDays, isoWeek, weekStartOf, weekSummary } from '$lib/history/stats';
 import { getProfile, lastSessionBySlug, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
@@ -46,6 +46,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		cards,
 		today,
-		week: { number: isoWeek(weekStart), sessions: weekSessions.length, goal: profile.data.weeklySessionGoal ?? null }
+		week: {
+			number: isoWeek(weekStart),
+			// Counted like the history page: sessions plus days with only imported log entries.
+			sessions: weekSummary(weekStart, exercises.map((e) => e.data), weekSessions).sessionCount,
+			goal: profile.data.weeklySessionGoal ?? null
+		}
 	};
 };
