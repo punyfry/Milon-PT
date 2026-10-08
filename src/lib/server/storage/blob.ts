@@ -43,7 +43,10 @@ export class BlobUserStorage implements UserStorage {
 		});
 		if (!result || result.statusCode !== 200) return null;
 		const data = (await new Response(result.stream).json()) as T;
-		return { data, version: result.blob.etag };
+		// A compressed download can carry a weak ETag (W/"…"), which a conditional
+		// write (ifMatch) never matches. Then the version is taken from head(), as put() reports it.
+		const version = result.blob.etag.startsWith('W/') ? (await head(pathname, { token: this.#token })).etag : result.blob.etag;
+		return { data, version };
 	}
 
 	async writeJson(

@@ -7,7 +7,7 @@ import {
 	conversationView,
 	loadConversation,
 	runTurn,
-	saveConversation,
+	saveTurn,
 	startConversation,
 	type BuilderConversation
 } from '$lib/server/builder/conversation';
@@ -56,6 +56,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw e;
 	}
 
+	const baseMessages = conversation.messages.length;
 	let apiError: unknown = null;
 	try {
 		await runTurn(storage, conversation, message, {
@@ -68,7 +69,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 	// Save even after an error, so exercises and workouts already created stay in the log.
 	try {
-		await saveConversation(storage, conversation, version);
+		await saveTurn(storage, conversation, version, baseMessages);
 	} catch (e) {
 		if (e instanceof StorageConflictError) error(409, 'Konversationen ändrades i ett annat fönster. Ladda om sidan.');
 		throw e;

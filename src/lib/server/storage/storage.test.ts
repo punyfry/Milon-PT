@@ -83,6 +83,14 @@ describe('Vercel Blob storage', () => {
 		expect(blob.get.mock.calls[0]).toEqual(['users/u1/profile.json', { access: 'private', useCache: false, token: 'token' }]);
 	});
 
+	it('takes the version from head() when the read has a weak ETag, so a conditional write can match', async () => {
+		blob.get.mockResolvedValue({ statusCode: 200, stream: new Response('{}').body, blob: { etag: 'W/"e1"', url: 'https://hemlig.blob/x' } });
+		blob.head.mockResolvedValue({ etag: '"e1"', url: 'https://hemlig.blob/x' });
+		const read = await new BlobUserStorage('u1', 'token').readJson('builder/b_abcdef.json');
+		expect(read?.version).toBe('"e1"');
+		expect(blob.head.mock.calls[0]).toEqual(['users/u1/builder/b_abcdef.json', { token: 'token' }]);
+	});
+
 	it("lists only the user's prefix and strips it from the path", async () => {
 		blob.list.mockResolvedValue({
 			blobs: [{ pathname: 'users/u1/exercises/ex_a.json', size: 2, uploadedAt: new Date(0), etag: 'e', url: 'https://hemlig.blob/a' }],
