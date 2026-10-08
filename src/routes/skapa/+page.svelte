@@ -16,6 +16,7 @@
 	let input = $state('');
 	let sending = $state(false);
 	let failure = $state<string | null>(null);
+	let restoreFailure = $state<string | null>(null);
 	let logEnd: HTMLElement | undefined = $state();
 	let draftOpen = $state(false);
 	let versionsOpen = $state(false);
@@ -76,17 +77,31 @@
 		draftOpen = false;
 	}
 
+	function openVersions() {
+		restoreFailure = null;
+		versionsOpen = true;
+	}
+
 	async function restore(version: number) {
 		if (!data.editing || !confirm(`Återställa version ${version}? Den sparas som en ny version.`)) return;
-		const res = await fetch(`/api/workouts/${data.editing.slug}/restore`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ version })
-		});
-		if (res.ok) {
-			versionsOpen = false;
-			await invalidateAll();
-		} else failure = 'Kunde inte återställa versionen.';
+		restoreFailure = null;
+		try {
+			const res = await fetch(`/api/workouts/${data.editing.slug}/restore`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ version })
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => null);
+				restoreFailure = res.status === 409 && body?.message ? body.message : 'Kunde inte återställa versionen.';
+				return;
+			}
+		} catch {
+			restoreFailure = 'Kunde inte nå servern. Försök igen.';
+			return;
+		}
+		versionsOpen = false;
+		await invalidateAll();
 	}
 
 	/** Enter sends with a keyboard; on a phone Enter adds a new line and the send button sends. */
@@ -105,7 +120,7 @@
 		<div class="row">
 			<h1>{title}</h1>
 			{#if data.versions.length}
-				<button class="btn small" onclick={() => (versionsOpen = true)}>Versioner</button>
+				<button class="btn small" onclick={openVersions}>Versioner</button>
 			{:else if data.editing}
 				<a class="btn small" href="/skapa">Nytt pass</a>
 			{/if}
@@ -175,7 +190,13 @@
 </div>
 
 {#if versionsOpen && data.versions.length && data.editing}
-	<VersionsSheet name={data.editing.name} versions={data.versions} onrestore={restore} onclose={() => (versionsOpen = false)} />
+	<VersionsSheet
+		name={data.editing.name}
+		versions={data.versions}
+		failure={restoreFailure}
+		onrestore={restore}
+		onclose={() => (versionsOpen = false)}
+	/>
 {/if}
 
 <style>

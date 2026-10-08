@@ -44,6 +44,7 @@
 	let saved = $state(snapshot());
 	let saving = $state(false);
 	let failure = $state<string | null>(null);
+	let restoreFailure = $state<string | null>(null);
 	let notice = $state<{ text: string; slug: string } | null>(null);
 	let versionsOpen = $state(false);
 
@@ -175,14 +176,29 @@
 		}
 	}
 
+	function openVersions() {
+		restoreFailure = null;
+		versionsOpen = true;
+	}
+
 	async function restore(version: number) {
 		if (!data.editing || !confirm(`Återställa version ${version}? Den sparas som en ny version.`)) return;
-		const res = await fetch(`/api/workouts/${data.editing.slug}/restore`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ version })
-		});
-		if (!res.ok) return void (failure = 'Kunde inte återställa versionen.');
+		restoreFailure = null;
+		try {
+			const res = await fetch(`/api/workouts/${data.editing.slug}/restore`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ version })
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => null);
+				restoreFailure = res.status === 409 && body?.message ? body.message : 'Kunde inte återställa versionen.';
+				return;
+			}
+		} catch {
+			restoreFailure = 'Kunde inte nå servern. Försök igen.';
+			return;
+		}
 		versionsOpen = false;
 		await invalidateAll();
 		reset();
@@ -195,7 +211,7 @@
 	<header class="top">
 		<h1>{title}</h1>
 		<div class="actions">
-			{#if data.versions.length}<button class="btn small" onclick={() => (versionsOpen = true)}>Versioner</button>{/if}
+			{#if data.versions.length}<button class="btn small" onclick={openVersions}>Versioner</button>{/if}
 			{#if data.editing}<a class="btn small" href="/skapa/manuell">Nytt pass</a>{/if}
 		</div>
 	</header>
@@ -304,7 +320,13 @@
 {/if}
 
 {#if versionsOpen && data.editing}
-	<VersionsSheet name={data.editing.name} versions={data.versions} onrestore={restore} onclose={() => (versionsOpen = false)} />
+	<VersionsSheet
+		name={data.editing.name}
+		versions={data.versions}
+		failure={restoreFailure}
+		onrestore={restore}
+		onclose={() => (versionsOpen = false)}
+	/>
 {/if}
 
 <style>
