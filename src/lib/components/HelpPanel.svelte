@@ -13,9 +13,11 @@
 		error: string | null;
 		onask: (question: string) => void;
 		onclose: () => void;
+		/** A question about the whole workout rather than one exercise: no exercise shortcuts. */
+		workout?: boolean;
 	}
 
-	let { name, log, busy, error, onask, onclose }: Props = $props();
+	let { name, log, busy, error, onask, onclose, workout = false }: Props = $props();
 	let input = $state('');
 
 	function submit(e: SubmitEvent) {
@@ -33,7 +35,7 @@
 		<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
 	</button>
 </div>
-<p class="muted intro">Om {name}. Milon svarar bara på det du frågar.</p>
+<p class="muted intro">{workout ? `Om hela ${name}.` : `Om ${name}.`} Milon svarar bara på det du frågar.</p>
 
 {#if log.length || busy || error}
 	<div class="log" aria-live="polite">
@@ -49,13 +51,13 @@
 	</div>
 {/if}
 
-<div class="quick">
+{#if !workout}<div class="quick">
 	<button type="button" class="btn small" disabled={busy} onclick={() => onask(`Ge mig mer instruktion för ${name}.`)}>Mer instruktion</button>
 	<button type="button" class="btn small" disabled={busy} onclick={() => onask(swapQuestion(name))}>Byt övning</button>
-</div>
+</div>{/if}
 
 <form onsubmit={submit}>
-	<input bind:value={input} maxlength="500" placeholder="Fråga om {name}…" aria-label="Fråga till Milon" enterkeyhint="send" disabled={busy} />
+	<input bind:value={input} maxlength="500" placeholder={workout ? 'Fråga om passet…' : `Fråga om ${name}…`} aria-label="Fråga till Milon" enterkeyhint="send" disabled={busy} />
 	<button type="submit" class="btn" disabled={busy || !input.trim()}>Skicka</button>
 </form>
 

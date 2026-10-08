@@ -66,6 +66,18 @@ const input = (question: string, history: { role: 'user' | 'assistant'; text: st
 	parseHelperInput({ session: session(), exerciseId: 'ex_hantelpress', history, question });
 
 describe('helper', () => {
+	it('answers about the whole workout when no exercise is given', async () => {
+		const storage = await setup();
+		const { create, calls } = scripted(reply([text('Kör hantelpressen först.')], 'end_turn'));
+		const whole = parseHelperInput({ session: { ...session(), preparing: true }, question: 'Vilken ordning?' });
+		const result = await askHelper(storage, whole, { model: 'claude-haiku-4-5', createMessage: create });
+		expect(result.reply).toBe('Kör hantelpressen först.');
+		const system = calls[0].system as string;
+		expect(system).toContain('(frågan gäller hela passet, ingen enskild övning)');
+		expect(system).toContain('- Hantelpress (ex_hantelpress, weight)');
+		expect(system).not.toContain('(okänd övning)');
+	});
+
 	it('sends small context: workout name, the sets so far, five latest log entries and the catalog', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Sänk vikten lite.')], 'end_turn'));
@@ -166,6 +178,7 @@ describe('helper', () => {
 
 	it('rejects malformed input', () => {
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_okand', question: 'x' })).toThrow(/exerciseId/);
+		expect(parseHelperInput({ session: session(), question: 'x' }).exerciseId).toBe('');
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_plankan', question: '' })).toThrow(/tom/);
 		expect(() =>
 			parseHelperInput({ session: session(), exerciseId: 'ex_plankan', question: 'x', history: [{ role: 'assistant', text: 'hej' }] })
