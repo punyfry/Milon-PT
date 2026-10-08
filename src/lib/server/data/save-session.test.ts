@@ -269,7 +269,8 @@ describe('exercises written in during the session', () => {
 		const storage = await setup();
 		await saveSession(storage, input(withNew()));
 		const created = (await getExercise(storage, 'ex_hantelrodd'))!.data;
-		expect(created).toMatchObject({ ...rows, archived: false });
+		expect(created).toMatchObject(rows);
+		expect(created.deleted).toBeUndefined();
 		expect(created.log).toEqual([{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 14, reps: 10 }, { weight: 14, reps: 9 }] }]);
 		const record = (await getSession(storage, 's_20261006'))!.data;
 		expect(record.exerciseIds).toContain('ex_hantelrodd');

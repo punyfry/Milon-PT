@@ -7,7 +7,6 @@ const deadlift = {
 	name: 'Marklyft',
 	type: 'weight',
 	instruction: 'Stång över mellanfoten.',
-	archived: false,
 	log: [{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 40, reps: 8 }] }]
 };
 
@@ -49,7 +48,7 @@ describe('validation', () => {
 
 	it('collects all issues', () => {
 		try {
-			assertValid('övning', { ...deadlift, name: '', archived: 'nej', id: 'ex marklyft' }, validateExercise);
+			assertValid('övning', { ...deadlift, name: '', deleted: 'nej', id: 'ex marklyft' }, validateExercise);
 			expect.unreachable();
 		} catch (e) {
 			expect(e).toBeInstanceOf(ValidationError);

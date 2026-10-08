@@ -1,6 +1,6 @@
 import { targetMatchesType, type WorkoutTemplate } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { getExercise } from './exercises';
+import { getExercise, saveExercise } from './exercises';
 import { getWorkout, saveWorkoutVersion } from './workouts';
 
 /** The version can't be restored as it is; the message is shown to the user. */
@@ -14,8 +14,8 @@ export class WorkoutRestoreError extends Error {
 /**
  * Restores an older version by saving it as the next version. Nothing is
  * overwritten. Refuses (#49) if an exercise has changed type since, so its
- * target (reps or seconds) no longer matches. Returns null if the version
- * doesn't exist.
+ * target (reps or seconds) no longer matches. A deleted exercise the version
+ * uses is brought back (#46). Returns null if the version doesn't exist.
  */
 export async function restoreWorkoutVersion(
 	storage: UserStorage,
@@ -38,6 +38,12 @@ export async function restoreWorkoutVersion(
 				? `Övningen ${names} har bytt typ sedan den här versionen.`
 				: `Övningarna ${names} har bytt typ sedan den här versionen.`
 		);
+	}
+	for (const stored of exercises) {
+		if (stored?.data.deleted) {
+			const { deleted: _, ...active } = stored.data;
+			await saveExercise(storage, active, stored.version);
+		}
 	}
 	return saveWorkoutVersion(storage, {
 		slug: old.slug,

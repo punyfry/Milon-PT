@@ -22,7 +22,6 @@ const deadlift: Exercise = {
 	name: 'Marklyft',
 	type: 'weight',
 	instruction: '',
-	archived: false,
 	log: [
 		{ sessionId: 's3', date: '2026-10-06', sets: [{ weight: 45, reps: 6 }, { weight: 40, reps: 8 }] },
 		{ sessionId: 's2', date: '2026-10-01', sets: [{ weight: 50, reps: 3 }] },
@@ -34,7 +33,6 @@ const plank: Exercise = {
 	name: 'Plankan',
 	type: 'time',
 	instruction: '',
-	archived: false,
 	log: [{ sessionId: 's3', date: '2026-10-06', sets: [{ seconds: 45 }, { seconds: 60 }] }]
 };
 
@@ -134,8 +132,8 @@ describe('milestones', () => {
 	it('picks the most recently trained matching exercise', () => {
 		const empty: Exercise = { ...plank, id: 'ex_chin_ups', name: 'Chin-ups', log: [] };
 		const used: Exercise = { ...plank, id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', log: [{ date: '2026-10-01', sets: [{ reps: 5 }] }] };
-		const archived: Exercise = { ...used, id: 'ex_pullup_old', name: 'Pullup', archived: true, log: [{ date: '2026-10-05', sets: [{ reps: 6 }] }] };
-		expect(milestoneExercises([empty, archived, used])[0].exercise?.id).toBe('ex_pull_up');
+		const older: Exercise = { ...used, id: 'ex_pullup_old', name: 'Pullup', log: [{ date: '2026-09-05', sets: [{ reps: 6 }] }] };
+		expect(milestoneExercises([empty, older, used])[0].exercise?.id).toBe('ex_pull_up');
 	});
 });
 
@@ -175,7 +173,7 @@ describe('date check', () => {
 });
 
 describe('groupByWorkout', () => {
-	const ex = (id: string, archived = false) => ({ id, archived });
+	const ex = (id: string) => ({ id });
 	const workouts = [
 		{ name: 'Pass B', exercises: [{ exerciseId: 'squat' }, { exerciseId: 'plank' }] },
 		{ name: 'Pass A', exercises: [{ exerciseId: 'deadlift' }, { exerciseId: 'plank' }, { exerciseId: 'gone' }] }
@@ -200,7 +198,7 @@ describe('groupByWorkout', () => {
 		expect(groups[1].exercises).toEqual([ex('curl')]);
 	});
 
-	it('leaves out archived exercises and empty workouts', () => {
-		expect(groupByWorkout([ex('squat', true), ex('curl', true)], workouts)).toEqual([]);
+	it('leaves out empty workouts', () => {
+		expect(groupByWorkout([], workouts)).toEqual([]);
 	});
 });

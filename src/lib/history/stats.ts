@@ -210,12 +210,12 @@ export const MILESTONES = [
 ] as const;
 
 const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
-/** Most recently trained first, archived last. */
-const byRecent = (a: Exercise, b: Exercise) => Number(a.archived) - Number(b.archived) || lastDate(b).localeCompare(lastDate(a));
+/** Most recently trained first. */
+const byRecent = (a: Exercise, b: Exercise) => lastDate(b).localeCompare(lastDate(a));
 
 /**
  * The exercise shown per milestone. If a goal exercise has history, it is
- * shown (most recently trained, archived only if there is no other).
+ * shown (the most recently trained one).
  * Otherwise the most recently trained progression exercise is shown and
  * `progress` is true. `others` are the remaining progression exercises with
  * history.
@@ -243,14 +243,13 @@ export function milestoneExercises(exercises: readonly Exercise[]) {
 /**
  * Groups exercises by workout, in each workout's own order, workouts sorted
  * by name. An exercise in several workouts shows under the first one only;
- * exercises in no workout go under "Övrigt". Archived exercises are left out
- * (the history page lists them separately).
+ * exercises in no workout go under "Övrigt".
  */
-export function groupByWorkout<T extends { id: string; archived: boolean }>(
+export function groupByWorkout<T extends { id: string }>(
 	exercises: readonly T[],
 	workouts: readonly { name: string; exercises: readonly { exerciseId: string }[] }[]
 ): { name: string; exercises: T[] }[] {
-	const left = new Map(exercises.filter((e) => !e.archived).map((e) => [e.id, e]));
+	const left = new Map(exercises.map((e) => [e.id, e]));
 	const groups: { name: string; exercises: T[] }[] = [];
 	for (const w of [...workouts].sort((a, b) => a.name.localeCompare(b.name, 'sv'))) {
 		const items = w.exercises.map((we) => left.get(we.exerciseId)).filter((e) => e !== undefined);

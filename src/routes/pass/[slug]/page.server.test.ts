@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createExercise, saveWorkoutVersion } from '$lib/server/data';
+import { createExercise, saveExercise, saveWorkoutVersion } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -26,8 +26,10 @@ beforeEach(async () => {
 	];
 	await createExercise(s, { name: 'Dips', type: 'bodyweight', instruction: '', log });
 	await createExercise(s, { name: 'Bänkpress', type: 'weight', instruction: '' });
-	await createExercise(s, { name: 'Gammal', type: 'bodyweight', instruction: '', archived: true });
-	await createExercise(s, { name: 'Arkiverad extra', type: 'bodyweight', instruction: '', archived: true });
+	for (const name of ['Gammal', 'Borttagen extra']) {
+		const created = await createExercise(s, { name, type: 'bodyweight', instruction: '' });
+		await saveExercise(s, { ...created.data, deleted: true }, created.version);
+	}
 	await saveWorkoutVersion(s, {
 		slug: 'pass-a',
 		name: 'Pass A',
@@ -40,17 +42,17 @@ beforeEach(async () => {
 });
 
 describe('/pass/[slug] load', () => {
-	it('sends the non-archived catalog in Swedish order, with only the latest log entry', async () => {
+	it('sends the catalog without deleted exercises in Swedish order, with only the latest log entry', async () => {
 		const { catalog } = await run();
 		expect(catalog.map((e) => e.name)).toEqual(['Bänkpress', 'Dips']);
 		expect(catalog.find((e) => e.id === 'ex_dips')?.lastEntry).toEqual({ date: '2026-10-05', sets: [{ reps: 8 }] });
 		expect(JSON.stringify(catalog)).not.toContain('2026-10-01');
 	});
 
-	it('adds archived exercises from the workout and ?ex= next to the catalog, and drops unknown ids', async () => {
+	it('adds deleted exercises from the workout and ?ex= next to the catalog, and drops unknown ids', async () => {
 		expect((await run()).exercises.map((e) => e.id)).toEqual(['ex_gammal']);
-		const { exercises } = await run('?ex=ex_arkiverad_extra,ex_finns_inte,../x');
-		expect(exercises.map((e) => e.id)).toEqual(['ex_gammal', 'ex_arkiverad_extra']);
+		const { exercises } = await run('?ex=ex_borttagen_extra,ex_finns_inte,../x');
+		expect(exercises.map((e) => e.id)).toEqual(['ex_gammal', 'ex_borttagen_extra']);
 	});
 });
 

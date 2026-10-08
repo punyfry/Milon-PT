@@ -31,7 +31,6 @@
 			.map((g) => ({ ...g, exercises: g.exercises.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)) }))
 			.filter((g) => g.exercises.length)
 	);
-	const archived = $derived(data.archived.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)));
 </script>
 
 <svelte:head><title>Historik · Milon-PT</title></svelte:head>
@@ -139,7 +138,7 @@
 		{/each}
 	</div>
 
-	{#snippet exerciseList(list: typeof data.archived)}
+	{#snippet exerciseList(list: (typeof data.groups)[number]['exercises'])}
 		<ul class="list">
 			{#each list as ex (ex.id)}
 				<li>
@@ -161,17 +160,10 @@
 			<h3 class="group">{g.name}</h3>
 			{@render exerciseList(g.exercises)}
 		{:else}
-			{#if !archived.length}<p class="muted">Ingen övning matchar ”{query}”.</p>{/if}
+			<p class="muted">Ingen övning matchar ”{query}”.</p>
 		{/each}
-	{:else if !data.archived.length}
+	{:else}
 		<p class="muted">Inga loggade pass än.</p>
-	{/if}
-	{#if archived.length}
-		<!-- Opens by itself when a search only matches archived exercises. -->
-		<details class="archived" open={!!q && !groups.length}>
-			<summary>Arkiverade ({archived.length})</summary>
-			{@render exerciseList(archived)}
-		</details>
 	{/if}
 </main>
 
@@ -356,15 +348,5 @@
 		grid-column: 2;
 		font-size: 15px;
 		color: var(--soft);
-	}
-	.archived {
-		margin-top: 20px;
-	}
-	.archived summary {
-		min-height: 44px;
-		display: flex;
-		align-items: center;
-		color: var(--soft);
-		cursor: pointer;
 	}
 </style>

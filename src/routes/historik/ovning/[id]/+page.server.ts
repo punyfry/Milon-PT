@@ -1,8 +1,8 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { SAFE_ID, ValidationError } from '$lib/model';
 import { bestSet, metricFor, progressSeries, recordEntries } from '$lib/history/stats';
 import { volume } from '$lib/session/active';
-import { getExercise, typeLockReason, updateExerciseDetails } from '$lib/server/data';
+import { deleteExercise, deleteLockReason, getExercise, typeLockReason, updateExerciseDetails } from '$lib/server/data';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -16,7 +16,16 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const records = recordEntries(ex);
 
 	return {
-		exercise: { id: ex.id, name: ex.name, type: ex.type, archived: ex.archived, instruction: ex.instruction, typeLock: await typeLockReason(storage, ex) },
+		exercise: {
+			id: ex.id,
+			name: ex.name,
+			type: ex.type,
+			instruction: ex.instruction,
+			// A deleted exercise is still shown (an old session links here), but can't be changed.
+			deleted: ex.deleted === true,
+			typeLock: await typeLockReason(storage, ex),
+			deleteLock: await deleteLockReason(storage, ex)
+		},
 		metric: metricFor(ex.type),
 		points: progressSeries(ex).map((p) => ({ date: p.date, value: p.value })),
 		entries: ex.log.slice(0, 15).map((e, i) => ({
@@ -45,5 +54,18 @@ export const actions: Actions = {
 			throw e;
 		}
 		return { edited: true };
+	},
+
+	/** Deletes the exercise from the catalog; its log stays in history (#46). */
+	delete: async ({ locals, params }) => {
+		if (!SAFE_ID.test(params.id)) error(404, 'Övningen finns inte');
+		try {
+			await deleteExercise(storageFor(locals), params.id);
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { deleteError: e.issues.join(' ') });
+			if (e instanceof StorageConflictError) return fail(409, { deleteError: 'Övningen ändrades samtidigt. Försök igen.' });
+			throw e;
+		}
+		redirect(303, '/historik');
 	}
 };

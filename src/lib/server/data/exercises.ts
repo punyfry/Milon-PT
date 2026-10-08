@@ -38,7 +38,7 @@ export async function listExercises(storage: UserStorage): Promise<StoredJson<Ex
 	return all.filter((e): e is StoredJson<Exercise> => e !== null);
 }
 
-export type NewExercise = Omit<Exercise, 'id' | 'archived' | 'log'> & Partial<Pick<Exercise, 'archived' | 'log'>>;
+export type NewExercise = Omit<Exercise, 'id' | 'deleted' | 'log'> & Partial<Pick<Exercise, 'log'>>;
 
 /**
  * Creates an exercise with a free id derived from the name (`ex_marklyft`,
@@ -55,7 +55,6 @@ export async function createExercise(
 		const exercise: Exercise = assertValid(
 			'övning',
 			{
-				archived: false,
 				log: [],
 				...input,
 				id: uniqueId(exerciseIdBase(input.name), taken)
@@ -83,7 +82,7 @@ export async function findOrCreateExercise(
 	catalog: Exercise[],
 	input: Pick<Exercise, 'name' | 'type' | 'instruction'>
 ): Promise<{ exercise: Exercise; created: boolean }> {
-	const existing = findSameExercise(catalog.filter((e) => !e.archived), input);
+	const existing = findSameExercise(catalog.filter((e) => !e.deleted), input);
 	if (existing) return { exercise: existing, created: false };
 	const { data } = await createExercise(storage, input, new Set(catalog.map((e) => e.id)));
 	catalog.push(data);
@@ -107,9 +106,38 @@ export async function saveExercise(
  */
 export async function typeLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
 	if (exercise.log.length) return 'Typen går inte att ändra när det finns loggade set.';
-	const using = (await listLatestWorkouts(storage)).filter((w) => w.exercises.some((e) => e.exerciseId === exercise.id));
-	if (using.length) return `Typen går inte att ändra när övningen finns i ett pass (${using.map((w) => w.name).join(', ')}).`;
+	const using = await workoutsUsing(storage, exercise.id);
+	if (using.length) return `Typen går inte att ändra när övningen finns i ett pass (${using.join(', ')}).`;
 	return null;
+}
+
+/** Names of the workouts whose latest version uses the exercise. */
+async function workoutsUsing(storage: UserStorage, id: string): Promise<string[]> {
+	return (await listLatestWorkouts(storage)).filter((w) => w.exercises.some((e) => e.exerciseId === id)).map((w) => w.name);
+}
+
+/**
+ * Why the exercise can't be deleted, or null if it can: the latest version of
+ * a workout uses it. Older versions don't count; restoring one brings the
+ * exercise back.
+ */
+export async function deleteLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
+	const using = await workoutsUsing(storage, exercise.id);
+	if (!using.length) return null;
+	return `Övningen används i ${using.length === 1 ? 'passet' : 'passen'} ${using.join(', ')}. Ta bort den ur passet först.`;
+}
+
+/**
+ * Deletes an exercise from the catalog (#46). The file is kept, marked
+ * `deleted`, so its logged sets stay in history and in old sessions. Throws
+ * ValidationError with a message for the user.
+ */
+export async function deleteExercise(storage: UserStorage, id: string): Promise<void> {
+	const current = await getExercise(storage, id);
+	if (!current || current.data.deleted) throw new ValidationError('övning', ['Övningen finns inte.']);
+	const reason = await deleteLockReason(storage, current.data);
+	if (reason) throw new ValidationError('övning', [reason]);
+	await saveExercise(storage, { ...current.data, deleted: true }, current.version);
 }
 
 /**
@@ -122,14 +150,14 @@ export async function updateExerciseDetails(storage: UserStorage, id: string, in
 	const fields = validateExerciseInput(input, issues, '');
 	if (!fields) throw new ValidationError('övning', issues.list.map(issueText));
 	const current = await getExercise(storage, id);
-	if (!current) throw new ValidationError('övning', ['Övningen finns inte.']);
+	if (!current || current.data.deleted) throw new ValidationError('övning', ['Övningen finns inte.']);
 	if (fields.type !== current.data.type) {
 		const reason = await typeLockReason(storage, current.data);
 		if (reason) throw new ValidationError('övning', [reason]);
 	}
 	const key = normalizeName(fields.name);
 	const taken = (await listExercises(storage)).some(
-		({ data: e }) => e.id !== id && !e.archived && e.type === fields.type && normalizeName(e.name) === key
+		({ data: e }) => e.id !== id && !e.deleted && e.type === fields.type && normalizeName(e.name) === key
 	);
 	if (taken) throw new ValidationError('övning', [`Det finns redan en övning som heter ${fields.name}.`]);
 	return saveExercise(storage, { ...current.data, ...fields }, current.version);

@@ -196,7 +196,9 @@ describe('import with profile, notes and sessions', () => {
 		expect(marklyft.log[0]).toEqual({ sessionId: 's_20260929', date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' });
 		expect(marklyft.log[1].sessionId).toBe('s_20260921');
 		// Day without a session in the file: no link.
-		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ archived: true, log: [{ date: '2026-09-27' }] });
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data).toMatchObject({ log: [{ date: '2026-09-27' }] });
+		// `archived` in older files is ignored (#46).
+		expect((await getExercise(storage, 'ex_wheel_out'))!.data.deleted).toBeUndefined();
 		expect((await getExercise(storage, 'ex_wheel_out'))!.data.log[0].sessionId).toBeUndefined();
 	});
 

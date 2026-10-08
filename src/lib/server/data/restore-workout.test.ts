@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryUserStorage } from '../storage/memory';
-import { WorkoutRestoreError, createExercise, getLatestWorkout, restoreWorkoutVersion, saveWorkoutVersion, updateExerciseDetails } from '.';
+import {
+	WorkoutRestoreError,
+	createExercise,
+	deleteExercise,
+	getExercise,
+	getLatestWorkout,
+	restoreWorkoutVersion,
+	saveWorkoutVersion,
+	updateExerciseDetails
+} from '.';
 
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
@@ -47,5 +56,13 @@ describe('restore workout version', () => {
 		const storage = await setup();
 		await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'weight', instruction: '' });
 		expect((await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08'))!.version).toBe(3);
+	});
+
+	it('brings back an exercise deleted since the version (#46)', async () => {
+		const storage = await setup();
+		await deleteExercise(storage, 'ex_plankan');
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+		expect((await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08'))!.version).toBe(3);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBeUndefined();
 	});
 });
