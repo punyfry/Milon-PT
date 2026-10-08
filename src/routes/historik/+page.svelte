@@ -1,10 +1,26 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import ExerciseFields from '$lib/components/ExerciseFields.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import Sheet from '$lib/components/Sheet.svelte';
+	import type { ExerciseType } from '$lib/model';
 	import LineChart from '$lib/components/LineChart.svelte';
 	import { formatDuration, formatMetric, formatNumber, formatSeconds } from '$lib/format';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	// --- a new exercise on its own (#64) -----------------------------------
+	let creating = $state(false);
+	let fresh = $state({ name: '', type: 'weight' as ExerciseType, instruction: '', note: '' });
+	let createError = $state<string | null>(null);
+	let saving = $state(false);
+
+	function openCreate() {
+		fresh = { name: '', type: 'weight', instruction: '', note: '' };
+		createError = null;
+		creating = true;
+	}
 
 	const weekdays = ['M', 'T', 'O', 'T', 'F', 'L', 'S'];
 	const dayNum = (d: string) => Number(d.slice(8, 10));
@@ -33,11 +49,11 @@
 	);
 </script>
 
-<svelte:head><title>Historik · Milon-PT</title></svelte:head>
+<svelte:head><title>Bibliotek · Milon-PT</title></svelte:head>
 
 <main>
 	<div class="pagehead">
-		<span class="label">Historik</span>
+		<span class="label">Bibliotek</span>
 		<h1>Din träning</h1>
 	</div>
 
@@ -144,15 +160,18 @@
 				<li>
 					<a href={`/historik/ovning/${ex.id}`}>
 						<span class="name">{ex.name}</span>
-						<span class="when">senast {shortDate(ex.lastDate)}</span>
-						<span class="best num">{shortMetric(ex.metric)}{formatMetric(ex.type, ex.best)}</span>
+						<span class="when">{ex.lastDate ? `senast ${shortDate(ex.lastDate)}` : 'inte tränad än'}</span>
+						{#if ex.lastDate}<span class="best num">{shortMetric(ex.metric)}{formatMetric(ex.type, ex.best)}</span>{/if}
 					</a>
 				</li>
 			{/each}
 		</ul>
 	{/snippet}
 
-	<div class="section-title">Övningar</div>
+	<div class="section-head">
+		<div class="section-title">Övningar</div>
+		<button class="btn small" onclick={openCreate}>Ny övning</button>
+	</div>
 	{#if data.groups.length}
 		<label class="sr-only" for="search">Sök övning</label>
 		<input id="search" class="search" type="search" placeholder="Sök övning" bind:value={query} />
@@ -163,9 +182,39 @@
 			<p class="muted">Ingen övning matchar ”{query}”.</p>
 		{/each}
 	{:else}
-		<p class="muted">Inga loggade pass än.</p>
+		<p class="muted">Inga övningar än.</p>
 	{/if}
 </main>
+
+{#if creating}
+	<Sheet title="Ny övning" onclose={() => (creating = false)}>
+		<form
+			method="POST"
+			action="?/create"
+			class="createform"
+			use:enhance={() => {
+				saving = true;
+				return async ({ result, update }) => {
+					saving = false;
+					if (result.type === 'failure') createError = String(result.data?.createError ?? 'Kunde inte spara.');
+					else if (result.type === 'error') createError = 'Något gick fel. Kontrollera nätet och försök igen.';
+					else await update();
+				};
+			}}
+		>
+			<h2>Ny övning</h2>
+			<p class="muted">Sparas i biblioteket utan att läggas i ett pass.</p>
+			<ExerciseFields bind:name={fresh.name} bind:type={fresh.type} bind:instruction={fresh.instruction} bind:note={fresh.note} idPrefix="create" />
+			<input type="hidden" name="name" value={fresh.name} />
+			<input type="hidden" name="type" value={fresh.type} />
+			<input type="hidden" name="instruction" value={fresh.instruction} />
+			<input type="hidden" name="note" value={fresh.note} />
+			{#if createError}<p class="error" role="alert">{createError}</p>{/if}
+			<button type="submit" class="btn primary full" disabled={saving}>{saving ? 'Sparar…' : 'Spara'}</button>
+			<button type="button" class="btn ghost full" onclick={() => (creating = false)}>Avbryt</button>
+		</form>
+	</Sheet>
+{/if}
 
 <style>
 	.week {
@@ -304,6 +353,27 @@
 	}
 	.more {
 		font-size: 14px;
+	}
+	.section-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		margin: 28px 0 10px;
+	}
+	.section-head .section-title {
+		margin: 0;
+	}
+	.createform {
+		display: grid;
+		gap: 12px;
+	}
+	.createform h2 {
+		font-size: 20px;
+		font-weight: 600;
+	}
+	.createform p {
+		margin: 0;
 	}
 	.search {
 		width: 100%;

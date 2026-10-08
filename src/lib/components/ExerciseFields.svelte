@@ -10,20 +10,24 @@
 </script>
 
 <script lang="ts">
-	/** Name, type and instruction of an exercise the user writes in. Used when building a workout, swapping and editing. */
-	import { MAX_EXERCISE_NAME, MAX_INSTRUCTION } from '$lib/model';
+	/**
+	 * Name, type and instruction of an exercise the user writes in. Used when building a workout, swapping and editing.
+	 * With `note` bound, the exercise's own note is shown too (the library, #64).
+	 */
+	import { MAX_EXERCISE_NAME, MAX_INSTRUCTION, NOTE_MAX } from '$lib/model';
 
 	interface Props {
 		name: string;
 		type: ExerciseType;
 		instruction: string;
+		note?: string;
 		/** Why the type can't change (see `typeLockReason`), or null if it can. */
 		typeLock?: string | null;
 		/** Prefix for the field ids, so several forms can be on one page. */
 		idPrefix?: string;
 	}
 
-	let { name = $bindable(), type = $bindable(), instruction = $bindable(), typeLock = null, idPrefix = 'ex' }: Props = $props();
+	let { name = $bindable(), type = $bindable(), instruction = $bindable(), note = $bindable(), typeLock = null, idPrefix = 'ex' }: Props = $props();
 </script>
 
 <div class="fields">
@@ -46,6 +50,13 @@
 		<span class="label">Instruktion till dig själv (valfritt)</span>
 		<textarea bind:value={instruction} rows="3" maxlength={MAX_INSTRUCTION} placeholder="T.ex. rak rygg, dra armbågen mot höften"></textarea>
 	</label>
+
+	{#if note !== undefined}
+		<label class="field">
+			<span class="label">Anteckning (valfritt)</span>
+			<textarea bind:value={note} rows="3" maxlength={NOTE_MAX} placeholder="T.ex. varför den verkar intressant eller vilket pass den kan passa i"></textarea>
+		</label>
+	{/if}
 </div>
 
 <style>

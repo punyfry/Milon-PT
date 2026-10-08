@@ -21,6 +21,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			name: ex.name,
 			type: ex.type,
 			instruction: ex.instruction,
+			note: ex.note ?? '',
 			// A deleted exercise is still shown (an old session links here), but can't be changed.
 			deleted: ex.deleted === true,
 			typeLock: await typeLockReason(storage, ex),
@@ -45,7 +46,7 @@ export const actions: Actions = {
 	edit: async ({ locals, params, request }) => {
 		if (!SAFE_ID.test(params.id)) error(404, 'Övningen finns inte');
 		const form = await request.formData();
-		const input = { name: form.get('name'), type: form.get('type'), instruction: form.get('instruction') ?? '' };
+		const input = { name: form.get('name'), type: form.get('type'), instruction: form.get('instruction') ?? '', note: form.get('note') ?? '' };
 		try {
 			await updateExerciseDetails(storageFor(locals), params.id, input);
 		} catch (e) {
