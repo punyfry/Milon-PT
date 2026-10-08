@@ -197,6 +197,7 @@
 				return async ({ result, update }) => {
 					saving = false;
 					if (result.type === 'failure') createError = String(result.data?.createError ?? 'Kunde inte spara.');
+					else if (result.type === 'error') createError = 'Något gick fel. Kontrollera nätet och försök igen.';
 					else await update();
 				};
 			}}
