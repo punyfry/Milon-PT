@@ -2,11 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
-	import HelpPanel from '$lib/components/HelpPanel.svelte';
+	import HelpPanel, { swapQuestion } from '$lib/components/HelpPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
-	import { formatNumber, formatSeconds } from '$lib/format';
+	import SwapPicker from '$lib/components/SwapPicker.svelte';
+	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
 	import type { ActiveSession, ActiveSet, ExerciseType } from '$lib/model';
 	import {
@@ -21,6 +22,7 @@
 		localIsoString,
 		removeSet,
 		setField,
+		startPreparedSession,
 		startTimer,
 		stopTimer,
 		touch,
@@ -35,9 +37,9 @@
 
 	let { data }: PageProps = $props();
 
-	/** Exercises swapped in during the workout that were not in the page data. */
+	/** Exercises swapped in (by Milon) that were not in the page data, e.g. newly created ones. */
 	let swappedIn = $state<ExerciseInfo[]>([]);
-	const infos = $derived(new Map<string, ExerciseInfo>([...data.exercises, ...swappedIn].map((e) => [e.id, e])));
+	const infos = $derived(new Map<string, ExerciseInfo>([...data.catalog, ...data.exercises, ...swappedIn].map((e) => [e.id, e])));
 
 	let session = $state<ActiveSession | null>(null);
 	/** Another workout is already in progress; shown instead of overwriting it. */
@@ -50,7 +52,12 @@
 	let showInstruction = $state<Record<string, boolean>>({});
 	let slide = $state<'' | 'in-left' | 'in-right'>('');
 
-	type SheetState = { kind: 'timer'; then: () => void } | { kind: 'close' } | { kind: 'discard' } | { kind: 'help'; exerciseId: string };
+	type SheetState =
+		| { kind: 'timer'; then: () => void }
+		| { kind: 'close' }
+		| { kind: 'discard' }
+		| { kind: 'help'; exerciseId: string }
+		| { kind: 'swap'; exerciseId: string };
 	let sheet = $state<SheetState | null>(null);
 	let undo = $state<{ text: string; run: () => void } | null>(null);
 	let undoTimer: ReturnType<typeof setTimeout> | undefined;
@@ -63,11 +70,17 @@
 
 	onMount(() => {
 		kcal = data.kcalSuggestion;
-		const stored = loadActiveSession();
+		let stored = loadActiveSession();
 		if (stored && stored.workoutSlug !== data.workout.slug) {
-			other = stored;
-			return;
+			// A workout that is only prepared gives way; one in progress is kept.
+			if (!stored.preparing) {
+				other = stored;
+				return;
+			}
+			stored = null;
 		}
+		// A preparation without swaps is rebuilt, so it follows a newer version of the workout.
+		if (stored?.preparing && !stored.deviations.length && stored.workoutVersion !== data.workout.version) stored = null;
 		if (stored) {
 			// The right version and every swapped-in exercise must be loaded.
 			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id));
@@ -84,8 +97,9 @@
 			}
 			session = stored;
 		} else {
-			session = createActiveSession(data.workout, infos, new Date());
-			persist();
+			// Every workout starts with the overview; the clock starts with "Starta passet".
+			// It is saved on the first change, so only looking at a workout leaves nothing behind.
+			session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
 		}
 		if (completeExpiredTimers(session, new Date())) persist();
 	});
@@ -345,9 +359,13 @@
 		sheet = { kind: 'help', exerciseId };
 	}
 
+	/** Bumped by "Ångra byten", so a reply that arrives afterwards does not swap again. */
+	let helpRound = 0;
+
 	async function ask(exerciseId: string, question: string) {
 		const state = help[exerciseId];
 		if (!session || !state || state.busy) return;
+		const round = helpRound;
 		state.busy = true;
 		state.error = null;
 		state.log.push({ role: 'user', text: question });
@@ -366,17 +384,13 @@
 			if (!res.ok) throw new Error(body?.message ?? `Servern svarade ${res.status}`);
 			state.turns.push({ role: 'user', text: question }, { role: 'assistant', text: body.reply });
 			state.log.push({ role: 'assistant', text: body.reply });
-			if (body.swap) {
+			if (body.swap && round === helpRound) {
 				const { from, to } = body.swap as { from: string; to: ExerciseInfo };
-				const target = templateTarget(from);
-				swappedIn.push(to);
-				change((s) => applySwap(s, from, to, target));
+				swap(from, to);
 				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
-				// The help follows the new exercise, which is also shown.
+				// The help follows the new exercise.
 				help[to.id] = state;
 				delete help[from];
-				const index = session.exercises.findIndex((e) => e.exerciseId === to.id);
-				if (index >= 0) change((s) => (s.current = index));
 				sheet = { kind: 'help', exerciseId: to.id };
 			}
 		} catch (e) {
@@ -384,6 +398,51 @@
 		} finally {
 			state.busy = false;
 		}
+	}
+
+	// --- swapping and starting ---------------------------------------------
+
+	/** Swaps for this workout only; during the workout the new exercise is shown. */
+	function swap(from: string, to: ExerciseInfo) {
+		if (!session) return;
+		const target = templateTarget(from);
+		if (!infos.has(to.id)) swappedIn.push(to);
+		change((s) => applySwap(s, from, to, target));
+		if (session.preparing) {
+			// Swapped back to the plan: nothing is prepared any more.
+			if (!session.deviations.length) clearActiveSession();
+			return;
+		}
+		const index = session.exercises.findIndex((e) => e.exerciseId === to.id);
+		if (index >= 0) change((s) => (s.current = index));
+	}
+
+	function pick(from: string, to: ExerciseInfo) {
+		swap(from, to);
+		sheet = null;
+	}
+
+	/** From the swap list to Milon, with the swap question already asked. */
+	function askMilonToSwap(exerciseId: string) {
+		openHelp(exerciseId);
+		void ask(exerciseId, swapQuestion(infos.get(exerciseId)?.name ?? exerciseId));
+	}
+
+	/** Back to the workout as planned: the preparation is dropped. */
+	function resetPreparation() {
+		clearActiveSession();
+		helpRound++;
+		help = {};
+		// An older version (?v=) was kept for the swaps; without them the latest applies.
+		if (page.url.search) return location.replace(`/pass/${data.workout.slug}`);
+		session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
+	}
+
+	function startWorkout() {
+		unlockAudio();
+		change((s) => startPreparedSession(s, new Date()));
+		focus = {};
+		now = new Date();
 	}
 
 	// --- finish -----------------------------------------------------------
@@ -457,6 +516,62 @@
 		<a class="btn primary full" href={`/pass/${other.workoutSlug}?v=${other.workoutVersion}`} data-sveltekit-reload>Fortsätt pågående pass</a>
 		<a class="btn ghost full" href="/">Till start</a>
 	</main>
+{:else if session?.preparing}
+	<header class="topbar">
+		<a class="icon-btn" href="/" aria-label="Till start"><Icon name="x" /></a>
+		<div class="mid"><span>Översikt</span></div>
+		<span></span>
+	</header>
+	<main class="overview">
+		{#if storageWarning}
+			<p class="error warning">Kunde inte spara i telefonen. Byten kan försvinna om du stänger sidan.</p>
+		{/if}
+		<div class="pagehead">
+			<span class="label">{session.exercises.length} övningar · {totalSets} set</span>
+			<h1>{data.workout.name}</h1>
+		</div>
+		<ol class="ovlist">
+			{#each session.exercises as e (e.exerciseId)}
+				{@const ei = infos.get(e.exerciseId)}
+				{@const target = targetText(e.exerciseId, e.sets.length)}
+				<li class="ovitem">
+					<div class="ovtop">
+						<h2>{ei?.name ?? e.exerciseId}</h2>
+						{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
+					</div>
+					{#if target}<p class="subline">Mål <span class="num">{target}</span></p>{/if}
+					{#if ei?.lastEntry}
+						<p class="ovlast">
+							<span class="label">Förra · {daysAgo(ei.lastEntry.date, now)}</span>
+							<span class="num">{ei.lastEntry.sets.map((s) => formatSet(ei.type, s)).join(' · ')}</span>
+						</p>
+						{#if ei.lastEntry.note}<p class="lastnote"><span>Anteckning:</span> {ei.lastEntry.note}</p>{/if}
+					{:else if ei}
+						<p class="muted ovlast">Inte gjord tidigare.</p>
+					{/if}
+					{#if showInstruction[e.exerciseId] && ei?.instruction}<p class="instruction">{ei.instruction}</p>{/if}
+					<div class="actions">
+						<button class="btn small" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })}><Icon name="swap" /> Byt</button>
+						{#if ei?.instruction}
+							{@const open = !!showInstruction[e.exerciseId]}
+							<button class="btn small" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
+								Instruktion <Icon name={open ? 'up' : 'down'} />
+							</button>
+						{/if}
+						{#if data.helperAvailable && ei}
+							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
+						{/if}
+					</div>
+				</li>
+			{/each}
+		</ol>
+		{#if session.deviations.length}
+			<button class="btn ghost full reset" onclick={resetPreparation}>Ångra byten</button>
+		{/if}
+	</main>
+	<div class="actionbar single">
+		<button class="btn primary" onclick={startWorkout}>Starta passet</button>
+	</div>
 {:else if session && ex && mode === 'active'}
 	<header class="topbar">
 		<button class="icon-btn" onclick={() => guard(() => (sheet = { kind: 'close' }))} aria-label="Stäng passet"><Icon name="x" /></button>
@@ -501,6 +616,7 @@
 							Instruktion <Icon name={showInstruction[ex.exerciseId] ? 'up' : 'down'} />
 						</button>
 					{/if}
+					<button class="btn small" onclick={() => guard(() => (sheet = { kind: 'swap', exerciseId: ex.exerciseId }))}><Icon name="swap" /> Byt</button>
 					{#if data.helperAvailable}
 						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><Icon name="chat" /> Fråga Milon</button>
 					{/if}
@@ -655,6 +771,19 @@
 		<button class="btn primary full" onclick={discard}>Släng passet</button>
 		<button class="btn ghost full" onclick={() => (sheet = null)}>Avbryt</button>
 	</Sheet>
+{:else if sheet?.kind === 'swap' && session}
+	{@const id = sheet.exerciseId}
+	<Sheet title="Byt övning" onclose={() => (sheet = null)}>
+		<SwapPicker
+			name={infos.get(id)?.name ?? id}
+			type={infos.get(id)?.type}
+			catalog={data.catalog}
+			{session}
+			onaskmilon={data.helperAvailable ? () => askMilonToSwap(id) : undefined}
+			onpick={(to) => pick(id, to)}
+			onclose={() => (sheet = null)}
+		/>
+	</Sheet>
 {:else if sheet?.kind === 'help' && help[sheet.exerciseId]}
 	{@const id = sheet.exerciseId}
 	{@const state = help[id]}
@@ -664,7 +793,6 @@
 			log={state.log}
 			busy={state.busy}
 			error={state.error}
-			canSwap={!isSwappedIn(id)}
 			onask={(q) => ask(id, q)}
 			onclose={() => (sheet = null)}
 		/>
@@ -878,8 +1006,50 @@
 		max-width: 30rem;
 		margin: 0 auto;
 	}
-	.actionbar .btn:first-child {
+	.actionbar:not(.single) .btn:first-child {
 		padding: 0;
+	}
+	.actionbar.single {
+		grid-template-columns: 1fr;
+	}
+	.overview {
+		padding-top: 4px;
+	}
+	.ovlist {
+		list-style: none;
+		margin: 20px 0 0;
+		padding: 0;
+		display: grid;
+		gap: 12px;
+	}
+	.ovitem {
+		padding: 16px;
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+	.ovtop {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.ovtop h2 {
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--heading);
+		overflow-wrap: anywhere;
+	}
+	.ovlast {
+		margin: 10px 0 0;
+		display: grid;
+		gap: 2px;
+		font-size: 14px;
+	}
+	.reset {
+		margin-top: 12px;
+	}
+	.ovitem .instruction {
+		background: var(--surface-2);
 	}
 	.ellipsis {
 		overflow: hidden;

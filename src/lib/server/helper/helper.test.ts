@@ -91,6 +91,17 @@ describe('helper', () => {
 		expect(params).not.toHaveProperty('fallbacks');
 	});
 
+	it('tells Milon whether the workout is under way or only being prepared', async () => {
+		const storage = await setup();
+		const { create, calls } = scripted(reply([text('Ok.')], 'end_turn'), reply([text('Ok.')], 'end_turn'));
+		await askHelper(storage, input('Hur tung?'), { model: 'claude-haiku-4-5', createMessage: create });
+		const preparing = parseHelperInput({ session: { ...session(), preparing: true }, exerciseId: 'ex_hantelpress', history: [], question: 'Byta?' });
+		await askHelper(storage, preparing, { model: 'claude-haiku-4-5', createMessage: create });
+		expect(calls[0].system).toContain('Användaren tränar just nu');
+		expect(calls[1].system).toContain('Användaren förbereder passet och har inte börjat än');
+		expect(calls[1].system).not.toContain('{{');
+	});
+
 	it('includes earlier questions and answers in the panel', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Ok.')], 'end_turn'));
