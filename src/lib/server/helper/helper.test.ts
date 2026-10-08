@@ -6,6 +6,7 @@ import type { CreateMessage } from '../ai/models';
 import { createExercise, getExercise, prependLogEntry, saveWorkoutVersion } from '../data';
 import { MemoryUserStorage } from '../storage/memory';
 import { askHelper, parseHelperInput } from './ask';
+import { formatCatalog } from '../builder/prompt';
 import { buildHelperPrompt } from './prompt';
 
 async function setup() {
@@ -193,6 +194,14 @@ describe('buildHelperPrompt', () => {
 		const system = buildHelperPrompt('Pass B', session(), new Map(), null, []);
 		expect(system).toContain('(okänd övning)');
 		expect(system).not.toContain('hela passet');
+	});
+
+	it('never includes the exercise\'s own note (#64)', () => {
+		const plankan = { id: 'ex_plankan', name: 'Plankan', type: 'time' as const, instruction: '', note: 'HEMLIG ANTECKNING', log: [] };
+		const system = buildHelperPrompt('Pass B', session(), new Map([[plankan.id, plankan]]), plankan, [plankan]);
+		expect(system).toContain('Plankan');
+		expect(system).not.toContain('HEMLIG ANTECKNING');
+		expect(formatCatalog([plankan])).not.toContain('HEMLIG ANTECKNING');
 	});
 });
 

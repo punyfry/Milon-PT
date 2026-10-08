@@ -359,13 +359,10 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: 12px;
-		margin-top: 28px;
+		margin: 28px 0 10px;
 	}
 	.section-head .section-title {
 		margin: 0;
-	}
-	.section-head + * {
-		margin-top: 10px;
 	}
 	.createform {
 		display: grid;

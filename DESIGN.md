@@ -91,8 +91,8 @@ No rest timer.
 
 - **Start:** greeting with first name and date, this week's sessions against the weekly goal, a card for a workout in progress, workout cards with their first exercises.
 - **Workout overview** (before "Starta passet"): a list with hairlines, per exercise the name ("Inbytt"/"Ny" tag), target, last time's note and an "Instruktion" toggle when there is one; on the right "Byt" and a small Milon icon (icon only, with an aria-label). One "Fråga Milon om passet" below the list. No weights or reps here.
-- **History:** week card (today outlined in the accent, volume per type without a heading), milestones, exercises grouped by workout with search.
-- **Exercise:** chart and the latest sessions as rows (date, best value, sets, note, volume).
+- **Library (Bibliotek):** week card (today outlined in the accent, volume per type without a heading), milestones, every exercise grouped by workout with search (untrained ones show "inte tränad än"), and "Ny övning" next to the Övningar heading, opening a sheet.
+- **Exercise:** the user's own note under the name when there is one, a chart and the latest sessions as rows (date, best value, sets, note, volume).
 - **Create workout:** collapsible exercise list at the top, chat, composer that never covers the last message. The user's own messages are grey with a `--ring` border. Versions in a sheet.
 - **Account:** weekly goal, theme, import, sign-out.
 - The main menu (Start, Bibliotek, Skapa, Konto) is fixed at the bottom except during a workout.
