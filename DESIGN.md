@@ -36,7 +36,7 @@ CSS variables in `src/routes/+layout.svelte`. The theme follows the phone by def
 
 The light theme uses a darker mint so the same color works everywhere: as a fill, as text and in charts. Error messages use a muted red (`--danger`); destructive buttons have no color of their own and are protected by placement and confirmation instead.
 
-Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly in both themes: `--surface-2` is about 1.19:1 or more against both `--bg` and `--surface`, so buttons and fields stand out on cards and sheets. Mint `#0D6B63` is 5.7:1 on the light background and 4.8:1 on `--surface-2`; white text on it is 6.4:1.
+Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly in both themes: `--surface-2` is about 1.19:1 or more against both `--bg` and `--surface`, so buttons and fields stand out on cards and sheets. The active set card has no hairline above it, so in dark `--active-set` must stay at least 1.19:1 against `--bg` (it is 1.20:1). Mint `#0D6B63` is 5.7:1 on the light background and 4.8:1 on `--surface-2`; white text on it is 6.4:1.
 
 ### Typography
 
