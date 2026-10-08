@@ -1106,6 +1106,10 @@
 		padding-bottom: 8px;
 		border-bottom: 1px solid var(--line);
 	}
+	/* No hairline directly above the active set card; the card itself marks the boundary. */
+	.sets > :global(:has(+ .active)) {
+		border-bottom-color: transparent;
+	}
 	.sethead.one {
 		grid-template-columns: 28px 64px 1fr 44px;
 	}

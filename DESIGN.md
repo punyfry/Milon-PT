@@ -20,7 +20,8 @@ CSS variables in `src/routes/+layout.svelte`. The theme follows the phone by def
 |---|---|---|---|
 | `--bg` | `#0A0A0B` | `#F3F2EE` | Screen background |
 | `--surface` | `#17171A` | `#FAFAF8` | Cards, sheets |
-| `--surface-2` | `#26262A` | `#E2DFD7` | Active set background, buttons, fields |
+| `--surface-2` | `#26262A` | `#E2DFD7` | Buttons, fields |
+| `--active-set` | `#1F1F22` | `#E2DFD7` | Active set card (darker than buttons in dark, so its grey text reads better) |
 | `--step` | `#37373C` | `#CFCBC1` | −/+ buttons in the active set |
 | `--seg` | `#26262A` | `#D6D3CA` | Inactive progress segments |
 | `--text` | `#F2F2F0` | `#18181A` | Body text, numbers of done sets |
@@ -35,7 +36,7 @@ CSS variables in `src/routes/+layout.svelte`. The theme follows the phone by def
 
 The light theme uses a darker mint so the same color works everywhere: as a fill, as text and in charts. Error messages use a muted red (`--danger`); destructive buttons have no color of their own and are protected by placement and confirmation instead.
 
-Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly in both themes: `--surface-2` is about 1.19:1 or more against both `--bg` and `--surface`, so buttons and fields stand out on cards and sheets. Mint `#0D6B63` is 5.7:1 on the light background and 4.8:1 on `--surface-2`; white text on it is 6.4:1.
+Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly in both themes: `--surface-2` is about 1.19:1 or more against both `--bg` and `--surface`, so buttons and fields stand out on cards and sheets. The active set card has no hairline above it, so in dark `--active-set` must stay at least 1.19:1 against `--bg` (it is 1.20:1). Mint `#0D6B63` is 5.7:1 on the light background and 4.8:1 on `--surface-2`; white text on it is 6.4:1.
 
 ### Typography
 
@@ -69,7 +70,7 @@ Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly 
 2. **Progress:** one segment per exercise. Done in `--accent`, current in `--text`, upcoming in `--seg`. The segments can be tapped.
 3. **Exercise block:** overline, heading, target and last time. The "Instruktion" and "Fråga Milon" buttons. Last session's note.
 4. **Set list:** columns `28px 64px 1fr 1fr 44px` (Set, Förra, Kg, Reps, done). Reps-only and timed exercises have one value column.
-   - Active set: card in `--surface-2`. Weight is typed, reps use −/+, time uses −5/+5 and Starta/Stopp. "Ta bort set" sits far from the done button and can be undone.
+   - Active set: card in `--active-set`, with no hairline directly above it. Weight is typed, reps use −/+, time uses −5/+5 and Starta/Stopp. "Ta bort set" sits far from the done button and can be undone.
    - Done set: values in `--text`, check in `--accent`, PR tag for a new record.
    - Upcoming set: prefilled values in `--dim`, empty ring.
    - Every set can be tapped and changed until the workout is finished.

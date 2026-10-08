@@ -171,7 +171,7 @@
 		border: 1.5px solid var(--ring);
 	}
 	.active {
-		background: var(--surface-2);
+		background: var(--active-set);
 		border-radius: 6px;
 		padding: 6px 8px 8px;
 		margin: 6px -8px;
