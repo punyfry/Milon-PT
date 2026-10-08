@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
-	<title id="title">Milon</title>
-	<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-		<path class="eye eye-l" d="M30 28V44" />
-		<path class="eye eye-r" d="M66 28V44" />
-		<path class="mouth" d="M30 62Q48 80 66 62" />
-	</g>
-</svg>
