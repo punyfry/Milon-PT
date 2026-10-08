@@ -16,9 +16,9 @@
 <span class="avatar" class:framed style:--size="{size}px" aria-hidden="true">
 	<svg viewBox="0 0 96 96" class:blink={thinking}>
 		<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-			<path class="eye" d="M30 26V46" />
-			<path class="eye" d="M66 26V46" />
-			<path d="M34 62L48 74L62 62" />
+			<path class="eye eye-l" d="M30 26V46" />
+			<path class="eye eye-r" d="M66 26V46" />
+			<path class="mouth" d="M34 62L48 74L62 62" />
 		</g>
 	</svg>
 </span>

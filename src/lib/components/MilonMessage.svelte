@@ -18,6 +18,7 @@
 
 <style>
 	.from-milon {
+		/* Both: the builder's log is a flex column, the helper's a grid. */
 		align-self: flex-start;
 		justify-self: start;
 		display: flex;
