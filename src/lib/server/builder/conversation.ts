@@ -5,7 +5,7 @@ import { modelOptions, type CreateMessage } from '../ai/models';
 import { listExercises } from '../data/exercises';
 import { getProfile } from '../data/profile';
 import { getLatestWorkout } from '../data/workouts';
-import type { UserStorage } from '../storage/types';
+import { StorageConflictError, type UserStorage } from '../storage/types';
 import { buildSystemPrompt } from './prompt';
 import { BUILDER_TOOLS, executeTool, type BuilderState } from './tools';
 
@@ -71,6 +71,24 @@ export async function startConversation(storage: UserStorage, editSlug: string |
 export async function saveConversation(storage: UserStorage, conversation: BuilderConversation, version?: string) {
 	const result = await storage.writeJson(path(conversation.id), conversation, version ? { ifMatch: version } : { createOnly: true });
 	return result.version;
+}
+
+/**
+ * Saves a turn that started from `baseMessages` messages. If the version
+ * check fails but the stored conversation still has exactly those messages,
+ * nobody else added a turn (the stored version just didn't match), so the
+ * turn is saved on top of it. Throws StorageConflictError if another turn
+ * really was saved in between.
+ */
+export async function saveTurn(storage: UserStorage, conversation: BuilderConversation, version: string | undefined, baseMessages: number) {
+	try {
+		return await saveConversation(storage, conversation, version);
+	} catch (e) {
+		if (!(e instanceof StorageConflictError) || version === undefined) throw e;
+		const stored = await loadConversation(storage, conversation.id);
+		if (!stored || stored.conversation.messages.length !== baseMessages) throw e;
+		return saveConversation(storage, conversation, stored.version);
+	}
 }
 
 // --- a turn -------------------------------------------------------------

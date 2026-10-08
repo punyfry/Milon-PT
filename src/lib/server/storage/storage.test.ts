@@ -80,7 +80,24 @@ describe('Vercel Blob storage', () => {
 		const read = await s.readJson('profile.json');
 		expect(read).toEqual({ data: { goals: 'x' }, version: 'e1' });
 		expect(JSON.stringify(read)).not.toContain('hemlig');
-		expect(blob.get.mock.calls[0]).toEqual(['users/u1/profile.json', { access: 'private', useCache: false, token: 'token' }]);
+		expect(blob.get.mock.calls[0]).toEqual([
+			'users/u1/profile.json',
+			{ access: 'private', useCache: false, headers: { 'accept-encoding': 'identity' }, token: 'token' }
+		]);
+		expect(blob.head).not.toHaveBeenCalled();
+	});
+
+	it('takes the version from head() when the read has a weak ETag, so a conditional write can match', async () => {
+		const download = (n: number) => ({ statusCode: 200, stream: new Response(JSON.stringify({ n })).body, blob: { etag: `W/"e${n}"`, url: 'https://hemlig.blob/x' } });
+		blob.get.mockResolvedValueOnce(download(1)).mockResolvedValueOnce(download(2));
+		blob.head.mockResolvedValue({ etag: '"e1"', url: 'https://hemlig.blob/x' });
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const read = await new BlobUserStorage('u1', 'token').readJson('builder/b_abcdef.json');
+		// The version comes from head() before the second download, so it is never newer than the data:
+		// if the file changed in between, the next conditional write fails instead of overwriting.
+		expect(read).toEqual({ data: { n: 2 }, version: '"e1"' });
+		expect(blob.head.mock.calls[0]).toEqual(['users/u1/builder/b_abcdef.json', { token: 'token' }]);
+		expect(blob.head.mock.invocationCallOrder[0]).toBeLessThan(blob.get.mock.invocationCallOrder[1]);
 	});
 
 	it("lists only the user's prefix and strips it from the path", async () => {

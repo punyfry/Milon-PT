@@ -2,7 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { createExercise, getExercise, listLatestWorkouts, saveProfile, saveWorkoutVersion } from '../data';
 import { MemoryUserStorage } from '../storage/memory';
-import { requestParams, runTurn, startConversation, type CreateMessage } from './conversation';
+import { loadConversation, requestParams, runTurn, saveConversation, saveTurn, startConversation, type CreateMessage } from './conversation';
+import { StorageConflictError } from '../storage/types';
 import { buildSystemPrompt } from './prompt';
 import { executeTool, type BuilderState } from './tools';
 
@@ -287,5 +288,34 @@ describe('tool schemas', () => {
 				}
 			}
 		}
+	});
+});
+
+describe('saving a turn', () => {
+	it('saves when only the stored version differs, and refuses when another turn was saved', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const conversation = await startConversation(storage, null);
+		await saveConversation(storage, conversation);
+		const loaded = (await loadConversation(storage, conversation.id))!;
+		// The same content written again: a new version, but no new turn.
+		await saveConversation(storage, loaded.conversation, loaded.version);
+
+		const mine = structuredClone(loaded.conversation);
+		mine.messages.push({ role: 'user', content: 'Hej' });
+		await saveTurn(storage, mine, loaded.version, 0);
+		expect((await loadConversation(storage, conversation.id))!.conversation.messages).toHaveLength(1);
+
+		const stale = structuredClone(loaded.conversation);
+		stale.messages.push({ role: 'user', content: 'Från en annan flik' });
+		await expect(saveTurn(storage, stale, loaded.version, 0)).rejects.toBeInstanceOf(StorageConflictError);
+	});
+
+	it('never retries creating a conversation, nor one that is gone', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const conversation = await startConversation(storage, null);
+		await saveConversation(storage, conversation);
+		await expect(saveTurn(storage, conversation, undefined, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		const gone = { ...conversation, id: 'b_finnsinte1' };
+		await expect(saveTurn(storage, gone, 'v-gammal', 0)).rejects.toBeInstanceOf(StorageConflictError);
 	});
 });

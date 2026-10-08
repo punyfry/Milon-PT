@@ -11,10 +11,12 @@ vi.mock('$lib/server/storage', async (original) => ({
 	...(await original<typeof import('$lib/server/storage')>()),
 	storageFor: () => state.storage
 }));
-vi.mock('$lib/server/ai/client', async (original) => ({
-	...(await original<typeof import('$lib/server/ai/client')>()),
-	createMessage
-}));
+vi.mock('$lib/server/ai/client', async (original) => {
+	const actual = await original<typeof import('$lib/server/ai/client')>();
+	// limitedCreateMessage defaults to the module's own createMessage, which this mock can't reach,
+	// so it gets the mock passed in: no test ever calls the real API.
+	return { ...actual, createMessage, limitedCreateMessage: (storage: never) => actual.limitedCreateMessage(storage, createMessage) };
+});
 
 const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
