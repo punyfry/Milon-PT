@@ -41,6 +41,8 @@ export interface SaveSessionResult {
 }
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
+/** Same limit as `validateLogEntry`. */
+export const NOTE_MAX = 1000;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
@@ -65,6 +67,8 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 		s.exercises.forEach((ex, i) => {
 			if (!isObject(ex) || typeof ex.exerciseId !== 'string' || !ID.test(ex.exerciseId) || !Array.isArray(ex.sets))
 				issues.push(`session.exercises[${i}] är ogiltig`);
+			else if (ex.note !== undefined && (typeof ex.note !== 'string' || ex.note.length > NOTE_MAX))
+				issues.push(`session.exercises[${i}].note får vara högst ${NOTE_MAX} tecken`);
 		});
 	if (s.preparing !== undefined && typeof s.preparing !== 'boolean') issues.push('session.preparing är ogiltig');
 	if (!Array.isArray(s.deviations)) issues.push('session.deviations måste vara en lista');
@@ -133,6 +137,7 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	// Read the exercises and validate the done sets against their type.
 	const exercises = new Map<string, Exercise>();
 	const doneSets = new Map<string, ExerciseSet[]>();
+	const notes = new Map<string, string>();
 	const issues = new Issues();
 	for (const [i, ex] of session.exercises.entries()) {
 		const stored = await getExercise(storage, ex.exerciseId);
@@ -147,6 +152,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 			.map(({ set, j }) => validateSet(set, stored.data.type, issues, `session.exercises[${i}].sets[${j}]`))
 			.filter((s) => s !== null);
 		if (sets.length) doneSets.set(ex.exerciseId, [...(doneSets.get(ex.exerciseId) ?? []), ...sets]);
+		const note = typeof ex.note === 'string' ? ex.note.trim() : '';
+		if (note) notes.set(ex.exerciseId, note);
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (doneSets.size === 0) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
@@ -168,7 +175,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	for (const [exerciseId, sets] of doneSets) {
 		if (alreadySaved) break;
 		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId)) continue;
-		await prependLogEntry(storage, exerciseId, { sessionId, date, sets });
+		const note = notes.get(exerciseId);
+		await prependLogEntry(storage, exerciseId, { sessionId, date, sets, ...(note ? { note } : {}) });
 	}
 
 	// New workout version with the deviations, if the user wants it.

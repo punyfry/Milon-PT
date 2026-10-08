@@ -22,6 +22,7 @@ import {
 import { stockholmIso } from '../../time';
 import { StorageConflictError, type UserStorage } from '../storage/types';
 import { getExercise, saveExercise, sortLog } from './exercises';
+import { NOTE_MAX } from './save-session';
 import { deleteSessionRecord, getSession, saveSessionRecord } from './sessions';
 import { getWorkout } from './workouts';
 
@@ -68,8 +69,8 @@ export interface EditSessionInput {
 	/** End as YYYY-MM-DDTHH:MM, Stockholm time. */
 	end: string;
 	kcalEstimate: number | null;
-	/** The exercises to keep, with their sets. Exercises left out are removed from the session. */
-	exercises: { exerciseId: string; sets: unknown[] }[];
+	/** The exercises to keep, with their sets and note (empty = none). Exercises left out are removed from the session. */
+	exercises: { exerciseId: string; sets: unknown[]; note?: string }[];
 }
 
 /** Shape check before anything is read. The sets are checked against each exercise's type in `editSession`. */
@@ -91,6 +92,8 @@ export function parseEditSessionInput(raw: unknown): EditSessionInput {
 		}
 		seen.add(e.exerciseId);
 		if (!Array.isArray(e.sets) || e.sets.length < 1 || e.sets.length > 50) issues.push(`Varje övning måste ha minst ett set (exercises[${i}]).`);
+		if (e.note !== undefined && (typeof e.note !== 'string' || e.note.length > NOTE_MAX))
+			issues.push(`En anteckning får vara högst ${NOTE_MAX} tecken (exercises[${i}]).`);
 	});
 	if (issues.length) throw new ValidationError('ändring', issues);
 	const input = raw as unknown as EditSessionInput;
@@ -140,6 +143,7 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	// Sets, checked against each exercise's type.
 	const inSession = new Set(record.exerciseIds);
 	const kept = new Map<string, ExerciseSet[]>();
+	const notes = new Map(input.exercises.map((e) => [e.exerciseId, e.note?.trim() ?? '']));
 	for (const [i, e] of input.exercises.entries()) {
 		if (!inSession.has(e.exerciseId)) {
 			issues.add(`exercises[${i}]`, `${e.exerciseId} ingår inte i passet`);
@@ -163,12 +167,14 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	// Logs first: changed sets replace the entry, removed exercises lose it.
 	for (const exerciseId of record.exerciseIds) {
 		const sets = kept.get(exerciseId);
+		const note = notes.get(exerciseId);
 		await updateLog(storage, exerciseId, (log) => {
 			const i = log.findIndex((l) => l.sessionId === id);
 			if (!sets) return i < 0 ? null : log.filter((l) => l.sessionId !== id);
-			if (i < 0) return sortLog([{ sessionId: id, date: startDate, sets }, ...log]);
-			if (JSON.stringify(log[i].sets) === JSON.stringify(sets)) return null;
-			return log.map((l, j) => (j === i ? { ...l, sets } : l));
+			const entry: LogEntry = { sessionId: id, date: i < 0 ? startDate : log[i].date, sets, ...(note ? { note } : {}) };
+			if (i < 0) return sortLog([entry, ...log]);
+			if (JSON.stringify(log[i]) === JSON.stringify(entry)) return null;
+			return log.map((l, j) => (j === i ? entry : l));
 		});
 	}
 

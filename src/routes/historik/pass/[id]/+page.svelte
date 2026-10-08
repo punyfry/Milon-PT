@@ -29,7 +29,7 @@
 		startTime: string;
 		end: string;
 		kcal: string;
-		exercises: { id: string; name: string; type: ExerciseType; removed: boolean; sets: DraftSet[] }[];
+		exercises: { id: string; name: string; type: ExerciseType; removed: boolean; sets: DraftSet[]; note: string }[];
 	}
 	let draft = $state<Draft | null>(null);
 	let saving = $state(false);
@@ -52,7 +52,7 @@
 			startTime: s.startedAt.slice(11, 16),
 			end: s.endedAt.slice(0, 16),
 			kcal: s.kcalEstimate === undefined ? '' : String(s.kcalEstimate),
-			exercises: data.exercises.map((e) => ({ id: e.id, name: e.name, type: e.type, removed: false, sets: e.sets.map(toDraft) }))
+			exercises: data.exercises.map((e) => ({ id: e.id, name: e.name, type: e.type, removed: false, sets: e.sets.map(toDraft), note: e.note ?? '' }))
 		};
 	}
 
@@ -77,7 +77,7 @@
 		for (const e of draft.exercises.filter((x) => !x.removed)) {
 			const sets = toSets(e.type, e.sets);
 			if (!sets) return void (error = `Kontrollera värdena för ${e.name}.`);
-			exercises.push({ exerciseId: e.id, sets });
+			exercises.push({ exerciseId: e.id, sets, note: e.note.trim() });
 		}
 		const kcal = draft.kcal.trim();
 		if (kcal && !(/^\d{1,4}$/.test(kcal) && Number(kcal) <= 5000)) return void (error = 'Ange kcal som ett heltal mellan 0 och 5000.');
@@ -216,6 +216,10 @@
 						</div>
 					{/each}
 					<button class="btn small" onclick={() => e.sets.push({ ...e.sets[e.sets.length - 1] })}><Icon name="plus" /> Lägg till set</button>
+					<label class="notefield">
+						<span class="label">Anteckning</span>
+						<textarea bind:value={e.note} maxlength="1000" rows="2" placeholder="T.ex. prova 25 kg nästa gång"></textarea>
+					</label>
 				{/if}
 			</section>
 		{/each}
@@ -396,6 +400,21 @@
 	.n {
 		color: var(--muted);
 		font-size: 13px;
+	}
+	.notefield {
+		width: 100%;
+		display: grid;
+		gap: 4px;
+	}
+	textarea {
+		width: 100%;
+		padding: 10px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--line);
+		background: var(--surface-2);
+		color: var(--text);
+		font: inherit;
+		resize: vertical;
 	}
 	.small {
 		margin: 0;

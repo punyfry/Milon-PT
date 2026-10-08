@@ -122,7 +122,25 @@ describe('editing a session', () => {
 		]);
 	});
 
-	it('removes an exercise from the session and its log', async () => {
+	it('adds, changes and removes the note of an exercise', async () => {
+		const { storage, detail } = await setup();
+		const withNote = (note: string) =>
+			input(detail.version, {
+				exercises: [
+					{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }], note },
+					{ exerciseId: 'ex_plankan', sets: [{ seconds: 45 }] }
+				]
+			});
+		await editSession(storage, 's_20261006', withNote(' Prova 50 kg '), now);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBe('Prova 50 kg');
+		const second = (await getSessionDetail(storage, 's_20261006'))!;
+		expect(second.exercises[0].note).toBe('Prova 50 kg');
+		await editSession(storage, 's_20261006', { ...withNote(''), version: second.version }, now);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0]).not.toHaveProperty('note');
+		expect(() => parseEditSessionInput({ ...withNote('x'.repeat(1001)), version: 'v' })).toThrow(/högst 1000/);
+	});
+
+		it('removes an exercise from the session and its log', async () => {
 		const { storage, detail } = await setup();
 		const updated = await editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] }] }), now);
 		expect(updated?.exerciseIds).toEqual(['ex_marklyft']);

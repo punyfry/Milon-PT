@@ -137,7 +137,8 @@ export interface ActiveSession {
 	workoutVersion: number;
 	startedAt: string;
 	lastActivityAt: string;
-	exercises: { exerciseId: string; sets: ActiveSet[] }[];
+	/** `note` is the user's note for the exercise today, saved with its log entry. */
+	exercises: { exerciseId: string; sets: ActiveSet[]; note?: string }[];
 	deviations: Deviation[];
 	/** Index of the exercise shown, so a paused workout resumes where it was. */
 	current?: number;

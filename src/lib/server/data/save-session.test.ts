@@ -85,7 +85,26 @@ describe('save session', () => {
 		});
 	});
 
-	it('can be retried without duplicates', async () => {
+	it("saves an exercise's note with its log entry, trimmed, and only for exercises with done sets", async () => {
+		const storage = await setup();
+		const session = active();
+		session.exercises[0].note = '  Prova 50 kg nästa gång ';
+		session.exercises[1].note = 'Ingen anteckning sparas här';
+		session.exercises[1].sets = [{ weight: 12.5, reps: 10, done: false }];
+		session.exercises[2].note = '   ';
+		await saveSession(storage, input(session));
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBe('Prova 50 kg nästa gång');
+		expect((await getExercise(storage, 'ex_hantelpress'))!.data.log).toEqual([]);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.log[0]).not.toHaveProperty('note');
+	});
+
+	it('refuses a note that is too long', () => {
+		const session = active();
+		session.exercises[0].note = 'x'.repeat(1001);
+		expect(() => input(session)).toThrow(/note/);
+	});
+
+		it('can be retried without duplicates', async () => {
 		const storage = await setup();
 		await saveSession(storage, input(active()));
 		const again = await saveSession(storage, input(active()));
