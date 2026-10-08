@@ -19,17 +19,18 @@ const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
+const { PUT: editSessionHandler, DELETE: deleteSessionHandler } = await import('./sessions/[id]/+server');
 
 type Handler = (event: never) => Promise<Response>;
 
 /** Calls an endpoint and returns status and JSON, even when it throws an HTTP error. */
-async function call(handler: Handler, body: unknown, headers: Record<string, string> = {}) {
+async function call(handler: Handler, body: unknown, headers: Record<string, string> = {}, params: Record<string, string> = {}) {
 	const request = new Request('https://milon.test/api', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', ...headers },
 		body: typeof body === 'string' ? body : JSON.stringify(body)
 	});
-	const event = { request, locals: { user: { id: 'u1', email: 'a@b.c', name: null } }, params: {} };
+	const event = { request, locals: { user: { id: 'u1', email: 'a@b.c', name: null } }, params };
 	try {
 		const res = await handler(event as never);
 		return { status: res.status, body: await res.json() };
@@ -91,6 +92,34 @@ describe('POST /api/sessions', () => {
 		expect(res.status).toBe(400);
 		expect(res.body.message).toMatch(/inte startat/);
 		expect(await state.storage.list()).toEqual([]);
+	});
+});
+
+describe('PUT and DELETE /api/sessions/[id]', () => {
+	it('validates input and answers 404 for unknown sessions', async () => {
+		const id = { id: 's_20261007' };
+		expect((await call(editSessionHandler as Handler, 'x', {}, id)).status).toBe(400);
+		expect((await call(editSessionHandler as Handler, { version: 'v', startTime: '99:00' }, {}, id)).status).toBe(400);
+		const valid = { version: 'v', startTime: '10:00', end: '2026-10-07T11:00', kcalEstimate: null, exercises: [{ exerciseId: 'ex_a', sets: [{ reps: 5 }] }] };
+		expect((await call(editSessionHandler as Handler, valid, {}, id)).status).toBe(404);
+		expect((await call(deleteSessionHandler as Handler, {}, {}, id)).status).toBe(400);
+		expect((await call(deleteSessionHandler as Handler, { version: 'v' }, {}, id)).status).toBe(404);
+		expect(await state.storage.list()).toEqual([]);
+	});
+
+	it('answers 409 when the session changed since it was loaded', async () => {
+		await state.storage.writeJson('sessions/s_20261007.json', {
+			id: 's_20261007',
+			workoutSlug: 'pass-a',
+			workoutVersion: 1,
+			startedAt: '2026-10-07T10:00:00+02:00',
+			endedAt: '2026-10-07T11:00:00+02:00',
+			exerciseIds: [],
+			deviations: []
+		});
+		const res = await call(deleteSessionHandler as Handler, { version: 'stale' }, {}, { id: 's_20261007' });
+		expect(res.status).toBe(409);
+		expect(res.body.message).toMatch(/Ladda om/);
 	});
 });
 

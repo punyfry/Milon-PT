@@ -44,9 +44,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		points: m.exercise ? progressSeries(m.exercise).map((p) => ({ date: p.date, value: p.value })) : []
 	}));
 
+	const names = new Map(workouts.map((w) => [w.slug, w.name]));
 	return {
 		today,
 		week: weekSummary(start, exercises, sessions),
+		/** The week's saved sessions, oldest first; each opens /historik/pass/[id]. */
+		sessions: sessions
+			.map((s) => ({ id: s.id, name: names.get(s.workoutSlug) ?? s.workoutSlug, startedAt: s.startedAt, endedAt: s.endedAt }))
+			.sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
 		weeklyGoal: profile.data.weeklySessionGoal ?? null,
 		prevWeek: isValidDate(addDays(start, -7)) ? addDays(start, -7) : null,
 		nextWeek: start < currentStart ? addDays(start, 7) : null,

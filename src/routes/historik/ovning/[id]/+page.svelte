@@ -74,7 +74,11 @@
 			{#each data.entries as e, i (i)}
 				<li>
 					<div class="top">
-						<span class="date">{date(e.date)}</span>
+						{#if e.sessionId}
+							<a class="date" href={`/historik/pass/${e.sessionId}`} aria-label="{date(e.date)}, visa passet">{date(e.date)} <Icon name="right" size={14} /></a>
+						{:else}
+							<span class="date">{date(e.date)}</span>
+						{/if}
 						<span class="value num">
 							{#if e.record.length}<span class="tag" title={recordLabel(e.record)}>PR<span class="sr-only">, {recordLabel(e.record)}</span></span>{/if}
 							{e.best === null ? '–' : fmt(e.best)}
@@ -158,6 +162,16 @@
 	.date {
 		font-size: 14px;
 		font-weight: 500;
+	}
+	a.date {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		color: var(--text);
+		text-decoration: none;
+	}
+	a.date :global(svg) {
+		color: var(--muted);
 	}
 	.value {
 		font-size: 15px;

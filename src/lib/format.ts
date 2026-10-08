@@ -56,3 +56,13 @@ export function formatMetric(type: 'weight' | 'bodyweight' | 'time', value: numb
 export function firstName(name: string | null | undefined): string | null {
 	return name?.trim().split(/\s+/)[0] || null;
 }
+
+/** Length of a session: "55 min", "1 h 20 min", "2 d 3 h". */
+export function formatDuration(ms: number): string {
+	const minutes = Math.max(0, Math.round(ms / 60_000));
+	if (minutes < 60) return `${minutes} min`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+	const days = Math.floor(hours / 24);
+	return hours % 24 ? `${days} d ${hours % 24} h` : `${days} d`;
+}
