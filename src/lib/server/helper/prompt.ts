@@ -66,7 +66,7 @@ export function buildHelperPrompt(
 		.replace('{{workout_name}}', () => workoutName)
 		.replace('{{session_state}}', () => formatSessionState(session, exercises))
 		.replace('{{exercise_history}}', () =>
-			current === undefined ? '(frågan gäller hela passet, ingen enskild övning)' : '\n' + formatHistory(current ?? undefined)
+			current === undefined ? '(frågan gäller hela passet, ingen enskild övning; vill användaren byta och det är oklart vilken övning, fråga först vilken)' : '\n' + formatHistory(current ?? undefined)
 		)
 		.replace('{{exercise_catalog}}', () => '\n' + formatCatalog(catalog));
 }

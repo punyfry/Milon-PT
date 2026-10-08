@@ -36,6 +36,8 @@ export function parseHelperInput(raw: unknown): HelperInput {
 	const issues: string[] = [];
 	if (!isObject(raw)) throw new ValidationError('fråga', ['Ogiltig JSON']);
 	const session = checkActiveSession(raw.session, issues);
+	// No exerciseId (or "") means a question about the whole workout; anything else must be a string.
+	if (raw.exerciseId !== undefined && typeof raw.exerciseId !== 'string') issues.push('exerciseId måste vara text');
 	const exerciseId = typeof raw.exerciseId === 'string' ? raw.exerciseId : '';
 	if (exerciseId && session && Array.isArray(session.exercises) && !session.exercises.some((e) => e.exerciseId === exerciseId))
 		issues.push('exerciseId finns inte i passet');

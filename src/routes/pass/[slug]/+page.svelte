@@ -404,7 +404,9 @@
 				}
 			}
 		} catch (e) {
-			state.error = e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
+			// fetch() rejects with a TypeError when offline; show that in Swedish rather than "Failed to fetch".
+			state.error =
+				e instanceof TypeError ? 'Ingen kontakt med servern. Försök igen.' : e instanceof Error ? e.message : 'Något gick fel. Försök igen.';
 		} finally {
 			state.busy = false;
 		}
@@ -585,22 +587,25 @@
 						</div>
 						<p class="ovmeta">
 							{#if target}<span>Mål <span class="num">{target}</span></span>{/if}
-							{#if ei?.instruction || data.helperAvailable}
+							{#if ei?.instruction}
 								<button class="link" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
 									Instruktion<Icon name={open ? 'up' : 'down'} size={16} />
 								</button>
+							{:else if data.helperAvailable && ei}
+								<!-- Nothing to unfold: go straight to Milon. -->
+								<button class="link" onclick={() => openHelp(e.exerciseId)}>Fråga Milon</button>
 							{/if}
 						</p>
-						{#if ei?.lastEntry?.note}<p class="ovnote">{ei.lastEntry.note}</p>{/if}
+						{#if ei?.lastEntry?.note}<p class="ovnote"><span>Förra:</span> {ei.lastEntry.note}</p>{/if}
 					</div>
 					<button class="btn small swapbtn" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })} aria-label="Byt {ei?.name ?? e.exerciseId}">
 						<Icon name="swap" /> Byt
 					</button>
-					{#if open}
+					{#if open && ei?.instruction}
 						<div class="ovinstr">
-							{#if ei?.instruction}<p class="instruction">{ei.instruction}</p>{/if}
-							{#if data.helperAvailable && ei}
-								<button class="btn small" onclick={() => openHelp(e.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon om {ei.name}</button>
+							<p class="instruction">{ei.instruction}</p>
+							{#if data.helperAvailable}
+								<button class="btn small" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}"><MilonAvatar size={20} tight /> Fråga Milon</button>
 							{/if}
 						</div>
 					{/if}
@@ -1152,8 +1157,10 @@
 	.ovmeta .num {
 		font-size: 13px;
 	}
+	/* 44 px tap target; the negative margin keeps the row compact. */
 	.ovmeta .link {
-		min-height: 32px;
+		min-height: 44px;
+		margin: -6px 0;
 		display: inline-flex;
 		align-items: center;
 		gap: 2px;
@@ -1166,6 +1173,9 @@
 		font-size: 13px;
 		color: var(--soft);
 		white-space: pre-line;
+	}
+	.ovnote span {
+		color: var(--muted);
 	}
 	.swapbtn {
 		background: none;

@@ -6,6 +6,7 @@ import type { CreateMessage } from '../ai/models';
 import { createExercise, getExercise, prependLogEntry, saveWorkoutVersion } from '../data';
 import { MemoryUserStorage } from '../storage/memory';
 import { askHelper, parseHelperInput } from './ask';
+import { buildHelperPrompt } from './prompt';
 
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
@@ -73,7 +74,7 @@ describe('helper', () => {
 		const result = await askHelper(storage, whole, { model: 'claude-haiku-4-5', createMessage: create });
 		expect(result.reply).toBe('Kör hantelpressen först.');
 		const system = calls[0].system as string;
-		expect(system).toContain('(frågan gäller hela passet, ingen enskild övning)');
+		expect(system).toContain('frågan gäller hela passet, ingen enskild övning');
 		expect(system).toContain('- Hantelpress (ex_hantelpress, weight)');
 		expect(system).not.toContain('(okänd övning)');
 	});
@@ -179,10 +180,19 @@ describe('helper', () => {
 	it('rejects malformed input', () => {
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_okand', question: 'x' })).toThrow(/exerciseId/);
 		expect(parseHelperInput({ session: session(), question: 'x' }).exerciseId).toBe('');
+		expect(() => parseHelperInput({ session: session(), exerciseId: 123, question: 'x' })).toThrow(/exerciseId/);
 		expect(() => parseHelperInput({ session: session(), exerciseId: 'ex_plankan', question: '' })).toThrow(/tom/);
 		expect(() =>
 			parseHelperInput({ session: session(), exerciseId: 'ex_plankan', question: 'x', history: [{ role: 'assistant', text: 'hej' }] })
 		).toThrow(/history/);
+	});
+});
+
+describe('buildHelperPrompt', () => {
+	it('says the exercise is unknown when it is missing, not that the question is about the whole workout', () => {
+		const system = buildHelperPrompt('Pass B', session(), new Map(), null, []);
+		expect(system).toContain('(okänd övning)');
+		expect(system).not.toContain('hela passet');
 	});
 });
 
