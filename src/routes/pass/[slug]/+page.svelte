@@ -591,22 +591,24 @@
 								<button class="link" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
 									Instruktion<Icon name={open ? 'up' : 'down'} size={16} />
 								</button>
-							{:else if data.helperAvailable && ei}
-								<!-- Nothing to unfold: go straight to Milon. -->
-								<button class="link" onclick={() => openHelp(e.exerciseId)}>Fråga Milon</button>
 							{/if}
 						</p>
 						{#if ei?.lastEntry?.note}<p class="ovnote"><span>Förra:</span> {ei.lastEntry.note}</p>{/if}
 					</div>
-					<button class="btn small swapbtn" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })} aria-label="Byt {ei?.name ?? e.exerciseId}">
-						<Icon name="swap" /> Byt
-					</button>
+					<div class="ovactions">
+						<button class="btn small swapbtn" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })} aria-label="Byt {ei?.name ?? e.exerciseId}">
+							<Icon name="swap" /> Byt
+						</button>
+						{#if data.helperAvailable && ei}
+							<!-- The same small Milon icon on every row, so the rows look alike whether or not there is an instruction. -->
+							<button class="icon-btn milonbtn" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}">
+								<MilonAvatar size={24} tight />
+							</button>
+						{/if}
+					</div>
 					{#if open && ei?.instruction}
 						<div class="ovinstr">
 							<p class="instruction">{ei.instruction}</p>
-							{#if data.helperAvailable}
-								<button class="btn small" onclick={() => openHelp(e.exerciseId)} aria-label="Fråga Milon om {ei.name}"><MilonAvatar size={20} tight /> Fråga Milon</button>
-							{/if}
 						</div>
 					{/if}
 				</li>
@@ -1176,6 +1178,10 @@
 	}
 	.ovnote span {
 		color: var(--muted);
+	}
+	.ovactions {
+		display: flex;
+		align-items: center;
 	}
 	.swapbtn {
 		background: none;
