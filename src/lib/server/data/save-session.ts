@@ -29,7 +29,7 @@ import {
 } from '../../model';
 import type { UserStorage } from '../storage/types';
 import { findOrCreateExercise, getExercise, listExercises, prependLogEntry } from './exercises';
-import { createSession, getSession, listSessionIds } from './sessions';
+import { createSession, getSession, listSessionIds, sessionIdDate } from './sessions';
 import { getLatestWorkout, getWorkout, saveWorkoutVersion } from './workouts';
 
 export interface SaveSessionInput {
@@ -208,9 +208,10 @@ function precheck(session: ActiveSession): void {
 const savedStart = (record: SessionRecord) => record.originalStartedAt ?? record.startedAt;
 
 /**
- * The id of another record from `date` (`s_YYYYMMDD` or `s_YYYYMMDD_N`) saved
- * with this start time. The client always sends the day's base id, so a
- * retried save of the day's second session is only found here.
+ * The id of a record from `date` saved with this start time, other than `skip`
+ * (already checked). The client always sends the day's base id, so a retried
+ * save of the day's second session is only found here, also if the first
+ * session has since been deleted.
  */
 async function findSameDaySession(
 	storage: UserStorage,
@@ -219,13 +220,9 @@ async function findSameDaySession(
 	startedAt: string,
 	skip: string
 ): Promise<string | null> {
-	const base = sessionIdFor(date, new Set());
-	const sameDay = ids.filter((id) => id !== skip && id.startsWith(base) && (id === base || /^_\d+$/.test(id.slice(base.length))));
-	for (const id of sameDay) {
-		const record = await getSession(storage, id);
-		if (record && savedStart(record.data) === startedAt) return id;
-	}
-	return null;
+	const sameDay = ids.filter((id) => id !== skip && sessionIdDate(id) === date);
+	const records = await Promise.all(sameDay.map((id) => getSession(storage, id)));
+	return records.find((r) => r && savedStart(r.data) === startedAt)?.data.id ?? null;
 }
 
 export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
@@ -264,16 +261,14 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	let sessionId = session.sessionId;
 	let alreadySaved = false;
 	const existing = await getSession(storage, sessionId);
-	if (existing) {
-		if (savedStart(existing.data) === session.startedAt) alreadySaved = true;
-		else {
-			const taken = await listSessionIds(storage);
-			const retryOf = await findSameDaySession(storage, taken, date, session.startedAt, sessionId);
-			if (retryOf) {
-				sessionId = retryOf;
-				alreadySaved = true;
-			} else sessionId = sessionIdFor(date, new Set(taken));
-		}
+	if (existing && savedStart(existing.data) === session.startedAt) alreadySaved = true;
+	else {
+		const taken = await listSessionIds(storage);
+		const retryOf = await findSameDaySession(storage, taken, date, session.startedAt, sessionId);
+		if (retryOf) {
+			sessionId = retryOf;
+			alreadySaved = true;
+		} else if (existing) sessionId = sessionIdFor(date, new Set(taken));
 	}
 
 	// Exercise logs, without duplicates on retry. The record is written last, so
