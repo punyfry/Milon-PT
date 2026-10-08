@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const records = recordEntries(ex);
 
 	return {
-		exercise: { id: ex.id, name: ex.name, type: ex.type, archived: ex.archived, loadClass: ex.loadClass ?? null, instruction: ex.instruction },
+		exercise: { id: ex.id, name: ex.name, type: ex.type, archived: ex.archived, instruction: ex.instruction },
 		metric: metricFor(ex.type),
 		points: progressSeries(ex).map((p) => ({ date: p.date, value: p.value })),
 		entries: ex.log.slice(0, 15).map((e, i) => ({

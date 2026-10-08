@@ -14,10 +14,10 @@ import {
 
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
-	await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
+	await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
 	await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 	await createExercise(storage, { name: 'Sidoplanka', type: 'time', instruction: '' });
-	await createExercise(storage, { name: 'Hantelpress', type: 'weight', loadClass: 'light', instruction: '' });
+	await createExercise(storage, { name: 'Hantelpress', type: 'weight', instruction: '' });
 	await createExercise(storage, { name: 'Armhävning', type: 'bodyweight', instruction: '' });
 	await saveWorkoutVersion(storage, {
 		slug: 'pass-b',

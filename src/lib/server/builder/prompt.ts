@@ -6,7 +6,7 @@ const TEMPLATE = `Du är Milon, en personlig tränare. Du hjälper användaren a
 Användarens mål och regler:
 {{goals_and_rules}}
 
-Befintliga övningar (id | namn | typ | loadClass):
+Befintliga övningar (id | namn | typ):
 {{exercise_catalog}}
 
 Passet som redigeras (tomt om nytt):
@@ -18,7 +18,7 @@ Arbetssätt:
 3. Föreslå en övning i taget med en mening om varför den passar passet.
 4. När användaren godkänner en övning, anropa verktyget propose_exercise. Skriv aldrig övningsdata som JSON i texten.
 5. När användaren vill spara passet, anropa set_workout med övningarna i ordning.
-6. Typ är weight (vikt x reps), bodyweight (bara reps) eller time (sekunder). Föreslå loadClass för weight: light (hantlar, isolationsövningar, steg 1,25 kg) eller heavy (stång, tunga basövningar, steg 5 kg).
+6. Typ är weight (vikt x reps), bodyweight (bara reps) eller time (sekunder).
 7. Instruktionen ska vara 2-4 korta punkter om utgångsläge, rörelse och vanligaste felet.`;
 
 export function formatTarget(target: Target): string {
@@ -37,7 +37,7 @@ export function formatGoalsAndRules(profile: Profile): string {
 export function formatCatalog(exercises: readonly Exercise[]): string {
 	const active = exercises.filter((e) => !e.archived).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 	if (!active.length) return '(inga än)';
-	return active.map((e) => `${e.id} | ${e.name} | ${e.type} | ${e.loadClass ?? '-'}`).join('\n');
+	return active.map((e) => `${e.id} | ${e.name} | ${e.type}`).join('\n');
 }
 
 export function formatWorkout(workout: WorkoutTemplate | null, names: ReadonlyMap<string, string>): string {

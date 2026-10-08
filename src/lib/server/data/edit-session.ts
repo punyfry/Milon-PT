@@ -15,7 +15,6 @@ import {
 	validateSet,
 	type ExerciseSet,
 	type ExerciseType,
-	type LoadClass,
 	type LogEntry,
 	type SessionRecord
 } from '../../model';
@@ -36,7 +35,7 @@ export interface SessionDetail {
 	/** Version of the record, sent back with an edit or delete. */
 	version: string;
 	workoutName: string;
-	exercises: { id: string; name: string; type: ExerciseType; loadClass?: LoadClass; sets: ExerciseSet[]; note?: string }[];
+	exercises: { id: string; name: string; type: ExerciseType; sets: ExerciseSet[]; note?: string }[];
 }
 
 export async function getSessionDetail(storage: UserStorage, id: string): Promise<SessionDetail | null> {
@@ -55,8 +54,8 @@ export async function getSessionDetail(storage: UserStorage, id: string): Promis
 		exercises: exercises.flatMap((e) => {
 			const entry = e?.data.log.find((l) => l.sessionId === id);
 			if (!e || !entry) return [];
-			const { id: exId, name, type, loadClass } = e.data;
-			return [{ id: exId, name, type, ...(loadClass ? { loadClass } : {}), sets: entry.sets, ...(entry.note ? { note: entry.note } : {}) }];
+			const { id: exId, name, type } = e.data;
+			return [{ id: exId, name, type, sets: entry.sets, ...(entry.note ? { note: entry.note } : {}) }];
 		})
 	};
 }

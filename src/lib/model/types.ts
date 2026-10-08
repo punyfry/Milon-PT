@@ -10,9 +10,6 @@
 
 export type ExerciseType = 'weight' | 'bodyweight' | 'time';
 
-/** `light` = 1.25 kg steps, `heavy` = 5 kg steps. Only for `weight`. */
-export type LoadClass = 'light' | 'heavy';
-
 export interface WeightSet {
 	weight: number;
 	reps: number;
@@ -39,8 +36,6 @@ export interface Exercise {
 	id: string;
 	name: string;
 	type: ExerciseType;
-	/** Only present when `type` is `weight`. */
-	loadClass?: LoadClass;
 	instruction: string;
 	archived: boolean;
 	/** Newest entry first. "Last time" is `log[0]`. */
@@ -149,7 +144,3 @@ export interface ActiveSession {
 }
 
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
-
-export const LOAD_STEP_KG: Record<LoadClass, number> = { light: 1.25, heavy: 5 };
-/** Step for timed exercises (±5 s). */
-export const TIME_STEP_SECONDS = 5;

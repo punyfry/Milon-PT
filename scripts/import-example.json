@@ -3,7 +3,6 @@
 		{
 			"name": "Marklyft",
 			"type": "weight",
-			"loadClass": "heavy",
 			"instruction": "",
 			"log": [{ "date": "2026-09-29", "sets": [{ "weight": 40, "reps": 8 }] }]
 		},

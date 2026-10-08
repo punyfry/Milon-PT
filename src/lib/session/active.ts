@@ -3,14 +3,11 @@
  * get, so they work directly on Svelte state and can be tested without a DOM.
  */
 import {
-	LOAD_STEP_KG,
-	TIME_STEP_SECONDS,
 	normalizeName,
 	type ActiveSession,
 	type ActiveSet,
 	type ExerciseSet,
 	type ExerciseType,
-	type LoadClass,
 	type LogEntry,
 	type Profile,
 	type Target,
@@ -22,7 +19,6 @@ export interface ExerciseInfo {
 	id: string;
 	name: string;
 	type: ExerciseType;
-	loadClass?: LoadClass;
 	instruction: string;
 	lastEntry?: LogEntry;
 	/** Best value so far (1RM, reps or seconds), to mark records when finishing. */
@@ -153,23 +149,6 @@ export function swapCandidates(
 export type SetField = 'weight' | 'reps' | 'seconds';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-export function stepFor(field: SetField, loadClass?: LoadClass): number {
-	if (field === 'weight') return LOAD_STEP_KG[loadClass ?? 'light'];
-	if (field === 'seconds') return TIME_STEP_SECONDS;
-	return 1;
-}
-
-/** −/+ on a field. Never below zero. */
-export function adjust(set: ActiveSet, field: SetField, direction: 1 | -1, loadClass?: LoadClass): void {
-	const values = set as unknown as Partial<Record<SetField, number>>;
-	const current = values[field];
-	if (current === undefined) return;
-	const next = Math.max(0, round2(current + direction * stepFor(field, loadClass)));
-	// A time changed by hand replaces the plan from an earlier timer run.
-	if (field === 'seconds' && next !== current) delete set.plannedSeconds;
-	values[field] = next;
-}
 
 /** Sets a field to a typed value. Invalid values are ignored. */
 export function setField(set: ActiveSet, field: SetField, value: number): void {

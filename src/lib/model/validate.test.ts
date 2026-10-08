@@ -5,7 +5,6 @@ const deadlift = {
 	id: 'ex_marklyft',
 	name: 'Marklyft',
 	type: 'weight',
-	loadClass: 'heavy',
 	instruction: 'Stång över mellanfoten.',
 	archived: false,
 	log: [{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 40, reps: 8 }] }]
@@ -47,14 +46,19 @@ describe('validation', () => {
 		expect(() => assertValid('övning', bad, validateExercise)).toThrow(/log\[0\]\.sets\[0\]\.weight/);
 	});
 
-	it('requires loadClass for weight and collects all issues', () => {
+	it('collects all issues', () => {
 		try {
-			assertValid('övning', { ...deadlift, loadClass: undefined, archived: 'nej', id: 'ex marklyft' }, validateExercise);
+			assertValid('övning', { ...deadlift, name: '', archived: 'nej', id: 'ex marklyft' }, validateExercise);
 			expect.unreachable();
 		} catch (e) {
 			expect(e).toBeInstanceOf(ValidationError);
 			expect((e as ValidationError).issues).toHaveLength(3);
 		}
+	});
+
+	it('drops the old loadClass field', () => {
+		const result = assertValid('övning', { ...deadlift, loadClass: 'heavy' }, validateExercise);
+		expect(result).not.toHaveProperty('loadClass');
 	});
 
 	it('strips unknown fields', () => {

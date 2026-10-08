@@ -22,7 +22,7 @@ const now = new Date('2026-10-08T12:00:00Z');
 /** A saved session on 6 Oct (Marklyft and Plankan done), plus an older Marklyft entry from another session. */
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
-	await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
+	await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
 	await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 	await createExercise(storage, { name: 'Armhävning', type: 'bodyweight', instruction: '' });
 	await saveWorkoutVersion(storage, {
@@ -75,7 +75,7 @@ describe('session detail', () => {
 		const { detail } = await setup();
 		expect(detail.workoutName).toBe('Pass B');
 		expect(detail.exercises).toEqual([
-			{ id: 'ex_marklyft', name: 'Marklyft', type: 'weight', loadClass: 'heavy', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }] },
+			{ id: 'ex_marklyft', name: 'Marklyft', type: 'weight', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }] },
 			{ id: 'ex_plankan', name: 'Plankan', type: 'time', sets: [{ seconds: 45 }] }
 		]);
 	});

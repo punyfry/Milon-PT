@@ -1,15 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { isExerciseType, isLoadClass, isObject, normalizeName, type ActiveSession, type Exercise } from '../../model';
+import { isExerciseType, isObject, normalizeName, type ActiveSession, type Exercise } from '../../model';
 import { bestEver, heaviestEver } from '../../history/stats';
 import type { ExerciseInfo } from '../../session/active';
 import { createExercise } from '../data/exercises';
 import type { UserStorage } from '../storage/types';
-
-const nullableEnum = (values: string[], description?: string) => ({
-	// Strict tools don't accept enum with the type array ['string', 'null'], so null is expressed with anyOf.
-	anyOf: [{ type: 'string', enum: values }, { type: 'null' }],
-	...(description ? { description } : {})
-});
 
 export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 	name: 'swap_exercise',
@@ -29,13 +23,9 @@ export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 						properties: {
 							name: { type: 'string', description: 'Svenskt namn när det finns ett vedertaget, t.ex. Hantelrodd' },
 							type: { type: 'string', enum: ['weight', 'bodyweight', 'time'] },
-							loadClass: nullableEnum(
-								['light', 'heavy'],
-								'Bara för weight, annars null. Styr viktstegen: light (hantlar, kabel, isolationsövningar, steg 1,25 kg) eller heavy (skivstång, tunga basövningar, steg 5 kg).'
-							),
 							instruction: { type: 'string', description: '2-4 korta punkter, en per rad' }
 						},
-						required: ['name', 'type', 'loadClass', 'instruction'],
+						required: ['name', 'type', 'instruction'],
 						additionalProperties: false
 					},
 					{ type: 'null' }
@@ -54,7 +44,6 @@ export function toInfo(e: Exercise): ExerciseInfo {
 		id: e.id,
 		name: e.name,
 		type: e.type,
-		...(e.loadClass ? { loadClass: e.loadClass } : {}),
 		instruction: e.instruction,
 		...(e.log[0] ? { lastEntry: e.log[0] } : {}),
 		...(best !== null ? { best } : {}),
@@ -91,14 +80,12 @@ export async function executeSwap(
 		to = catalog.find((e) => normalizeName(e.name) === normalizeName(name) && !e.archived);
 		if (!to) {
 			if (!isExerciseType(n.type)) return { ok: false, error: 'newExercise.type måste vara weight, bodyweight eller time.' };
-			if (n.type === 'weight' && !isLoadClass(n.loadClass)) return { ok: false, error: 'loadClass krävs för en weight-övning.' };
 			to = (
 				await createExercise(
 					storage,
 					{
 						name,
 						type: n.type,
-						...(n.type === 'weight' && isLoadClass(n.loadClass) ? { loadClass: n.loadClass } : {}),
 						instruction: typeof n.instruction === 'string' ? n.instruction.trim() : ''
 					},
 					new Set(catalog.map((e) => e.id))

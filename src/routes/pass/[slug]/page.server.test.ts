@@ -25,7 +25,7 @@ beforeEach(async () => {
 		{ date: '2026-10-01', sets: [{ reps: 6 }] }
 	];
 	await createExercise(s, { name: 'Dips', type: 'bodyweight', instruction: '', log });
-	await createExercise(s, { name: 'Bänkpress', type: 'weight', loadClass: 'heavy', instruction: '' });
+	await createExercise(s, { name: 'Bänkpress', type: 'weight', instruction: '' });
 	await createExercise(s, { name: 'Gammal', type: 'bodyweight', instruction: '', archived: true });
 	await createExercise(s, { name: 'Arkiverad extra', type: 'bodyweight', instruction: '', archived: true });
 	await saveWorkoutVersion(s, {

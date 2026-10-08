@@ -108,7 +108,6 @@ Four file types per user, plus conversations and counters. Sets live on the exer
   "id": "ex_marklyft",
   "name": "Marklyft",
   "type": "weight",
-  "loadClass": "heavy",
   "instruction": "Stång över mellanfoten, rak rygg, tryck golvet ifrån dig.",
   "archived": false,
   "log": [{ "sessionId": "s_20261006", "date": "2026-10-06", "sets": [{ "weight": 40, "reps": 8 }], "note": "Marginal kvar" }]
@@ -116,7 +115,7 @@ Four file types per user, plus conversations and counters. Sets live on the exer
 ```
 
 - `type`: `weight` (weight × reps), `bodyweight` (reps) or `time` (seconds). Sets per type: `{ weight, reps }`, `{ reps }` or `{ seconds }`.
-- `loadClass` (`weight` only): `light` = 1.25 kg steps, `heavy` = 5 kg steps. Timed exercises step by 5 s.
+- Older files may have a `loadClass` (weight steps). It is no longer used and is dropped when the exercise is read.
 - Session ids are `s_YYYYMMDD` (Swedish time), with `_2`, `_3` … for several workouts the same day.
 - The ongoing workout is in localStorage under `milonpt.activeSession`; workouts waiting for the network under `milonpt.pendingSaves`.
 

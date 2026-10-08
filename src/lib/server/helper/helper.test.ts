@@ -9,8 +9,8 @@ import { askHelper, parseHelperInput } from './ask';
 
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
-	await createExercise(storage, { name: 'Hantelpress', type: 'weight', loadClass: 'light', instruction: '' });
-	await createExercise(storage, { name: 'Axelpress', type: 'weight', loadClass: 'light', instruction: '' });
+	await createExercise(storage, { name: 'Hantelpress', type: 'weight', instruction: '' });
+	await createExercise(storage, { name: 'Axelpress', type: 'weight', instruction: '' });
 	await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 	for (let d = 1; d <= 7; d++) {
 		await prependLogEntry(storage, 'ex_hantelpress', { date: `2026-09-0${d}`, sets: [{ weight: 10 + d, reps: 8 }] });
@@ -80,11 +80,10 @@ describe('helper', () => {
 		expect(system).toContain('- 2026-09-07: 17 kg × 8');
 		expect(system).toContain('- 2026-09-03: 13 kg × 8');
 		expect(system).not.toContain('2026-09-02'); // only the five latest
-		expect(system).toContain('ex_axelpress | Axelpress | weight | light');
+		expect(system).toContain('ex_axelpress | Axelpress | weight');
 		expect(system).toContain('ge direkt två konkreta alternativ i första svaret, utan motfrågor');
 		expect(system).toContain('Föreslå aldrig en katalogövning som tränar en annan muskelgrupp');
 		expect(system).toContain('Skriv ren text utan markdown');
-		expect(system).toContain('light (hantlar, kabel, isolationsövningar, steg 1,25 kg)');
 		expect(params.messages).toEqual([{ role: 'user', content: 'Är 17,5 för tungt?' }]);
 		// Helper model: no thinking, effort or fallback parameters.
 		expect(params).not.toHaveProperty('thinking');
@@ -123,7 +122,7 @@ describe('helper', () => {
 		);
 		const result = await askHelper(storage, input('Axelpress'), { model: 'claude-haiku-4-5', createMessage: create });
 		expect(result.reply).toBe('Då tar vi axelpress.');
-		expect(result.swap).toMatchObject({ from: 'ex_hantelpress', to: { id: 'ex_axelpress', type: 'weight', loadClass: 'light' }, created: false });
+		expect(result.swap).toMatchObject({ from: 'ex_hantelpress', to: { id: 'ex_axelpress', type: 'weight' }, created: false });
 	});
 
 	it('creates a new exercise when none in the catalog fits', async () => {
@@ -134,7 +133,7 @@ describe('helper', () => {
 					swapCall({
 						fromExerciseId: 'ex_plankan',
 						toExerciseId: null,
-						newExercise: { name: 'Sidoplanka', type: 'time', loadClass: null, instruction: 'Armbåge under axeln.' }
+						newExercise: { name: 'Sidoplanka', type: 'time', instruction: 'Armbåge under axeln.' }
 					})
 				],
 				'tool_use'
@@ -179,7 +178,6 @@ describe('swap in the session', () => {
 		id: 'ex_axelpress',
 		name: 'Axelpress',
 		type: 'weight',
-		loadClass: 'light',
 		instruction: '',
 		lastEntry: { date: '2026-09-01', sets: [{ weight: 12.5, reps: 10 }] }
 	};

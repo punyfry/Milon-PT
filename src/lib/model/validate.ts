@@ -3,7 +3,6 @@ import type {
 	Exercise,
 	ExerciseSet,
 	ExerciseType,
-	LoadClass,
 	LogEntry,
 	Profile,
 	SessionRecord,
@@ -127,14 +126,9 @@ function id(o: Obj, key: string, issues: Issues, path: string): string | undefin
 // --- the model -----------------------------------------------------------
 
 export const EXERCISE_TYPES: readonly ExerciseType[] = ['weight', 'bodyweight', 'time'];
-export const LOAD_CLASSES: readonly LoadClass[] = ['light', 'heavy'];
 
 export function isExerciseType(v: unknown): v is ExerciseType {
 	return EXERCISE_TYPES.includes(v as ExerciseType);
-}
-
-export function isLoadClass(v: unknown): v is LoadClass {
-	return LOAD_CLASSES.includes(v as LoadClass);
 }
 
 /** Validates a set against the exercise type and returns it without extra fields. */
@@ -188,11 +182,7 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
 		return null;
 	}
-	let loadClass: LoadClass | undefined;
-	if (type === 'weight') {
-		if (isLoadClass(v.loadClass)) loadClass = v.loadClass;
-		else issues.add(join(path, 'loadClass'), `måste vara ${LOAD_CLASSES.join(' eller ')} för weight`);
-	}
+	// `loadClass` (weight steps) is no longer used; it is dropped from older files when they are read.
 	const instruction = str(v, 'instruction', issues, path, { allowEmpty: true });
 	if (typeof v.archived !== 'boolean') issues.add(join(path, 'archived'), 'måste vara true eller false');
 	const log = (arr(v, 'log', issues, path) ?? []).map((e, i) =>
@@ -203,7 +193,6 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		id: exId!,
 		name: name!,
 		type,
-		...(loadClass ? { loadClass } : {}),
 		instruction: instruction!,
 		archived: v.archived as boolean,
 		log: log as LogEntry[]

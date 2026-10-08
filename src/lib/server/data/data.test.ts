@@ -18,8 +18,8 @@ import {
 describe('data layer', () => {
 	it('creates exercises with unique ids', async () => {
 		const storage = new MemoryUserStorage('u1');
-		const a = await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
-		const b = await createExercise(storage, { name: 'marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
+		const a = await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		const b = await createExercise(storage, { name: 'marklyft', type: 'weight', instruction: '' });
 		expect(a.data.id).toBe('ex_marklyft');
 		expect(b.data.id).toBe('ex_marklyft_2');
 		expect((await getExercise(storage, 'ex_marklyft'))?.data.name).toBe('Marklyft');

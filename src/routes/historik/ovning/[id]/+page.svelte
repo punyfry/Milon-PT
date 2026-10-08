@@ -30,8 +30,8 @@
 		return `rekord i ${kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM')).join(' och ')}`;
 	}
 	const best = $derived(data.points.reduce((b, p) => Math.max(b, p.value), 0));
-	/** Equipment or exercise type, shown above the name. */
-	const kind = $derived(ex.type === 'weight' ? (ex.loadClass === 'heavy' ? 'Skivstång' : 'Hantlar') : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
+	/** Exercise type, shown above the name. */
+	const kind = $derived(ex.type === 'weight' ? 'Vikt' : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
 </script>
 
 <svelte:head><title>{ex.name} · Historik · Milon-PT</title></svelte:head>
