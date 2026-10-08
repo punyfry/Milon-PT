@@ -3,6 +3,7 @@ import type { ActiveSession } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
 import {
 	createExercise,
+	deleteSessionRecord,
 	getExercise,
 	getSession,
 	listExercises,
@@ -10,6 +11,7 @@ import {
 	listSessionIds,
 	parseSaveSessionInput,
 	saveSession,
+	saveSessionRecord,
 	saveWorkoutVersion
 } from '.';
 
@@ -123,6 +125,56 @@ describe('save session', () => {
 		expect(second.sessionId).toBe('s_20261006_2');
 		const log = (await getExercise(storage, 'ex_marklyft'))!.data.log;
 		expect(log.map((l) => l.sessionId)).toEqual(['s_20261006_2', 's_20261006']);
+	});
+
+	it('recognises a retry of the second and third session of a day (#48)', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(active()));
+		const second = input(active({ startedAt: '2026-10-06T19:00:00+02:00' }));
+		const third = input(active({ startedAt: '2026-10-06T21:00:00+02:00' }));
+		await saveSession(storage, second);
+		await saveSession(storage, third);
+
+		expect(await saveSession(storage, second)).toEqual({ sessionId: 's_20261006_2', alreadySaved: true });
+		expect(await saveSession(storage, third)).toEqual({ sessionId: 's_20261006_3', alreadySaved: true });
+		expect((await listSessionIds(storage)).sort()).toEqual(['s_20261006', 's_20261006_2', 's_20261006_3']);
+		const log = (await getExercise(storage, 'ex_marklyft'))!.data.log;
+		expect(log.map((l) => l.sessionId)).toEqual(['s_20261006_3', 's_20261006_2', 's_20261006']);
+	});
+
+	it('recognises a retry of the second session after the first was deleted', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(active()));
+		const second = input(active({ startedAt: '2026-10-06T19:00:00+02:00' }));
+		await saveSession(storage, second);
+		await deleteSessionRecord(storage, 's_20261006');
+
+		expect(await saveSession(storage, second)).toEqual({ sessionId: 's_20261006_2', alreadySaved: true });
+		expect(await listSessionIds(storage)).toEqual(['s_20261006_2']);
+	});
+
+	it('does not take a session from another day with the same clock time for a retry', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(active({ sessionId: 's_20261005', startedAt: '2026-10-05T19:00:00+02:00' })));
+		await saveSession(storage, input(active()));
+		const second = await saveSession(storage, input(active({ startedAt: '2026-10-06T19:00:00+02:00' })));
+		expect(second).toEqual({ sessionId: 's_20261006_2', alreadySaved: false });
+	});
+
+	it('recognises a retry of a later session whose start was edited', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(active()));
+		await saveSession(storage, input(active({ startedAt: '2026-10-06T19:00:00+02:00' })));
+		const stored = (await getSession(storage, 's_20261006_2'))!;
+		await saveSessionRecord(
+			storage,
+			{ ...stored.data, startedAt: '2026-10-06T18:45:00+02:00', originalStartedAt: stored.data.startedAt },
+			stored.version
+		);
+
+		const again = await saveSession(storage, input(active({ startedAt: '2026-10-06T19:00:00+02:00' })));
+		expect(again).toEqual({ sessionId: 's_20261006_2', alreadySaved: true });
+		expect(await listSessionIds(storage)).toHaveLength(2);
 	});
 
 	it('refuses to save without done sets or with sets of the wrong type', async () => {

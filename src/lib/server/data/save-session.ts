@@ -29,7 +29,7 @@ import {
 } from '../../model';
 import type { UserStorage } from '../storage/types';
 import { findOrCreateExercise, getExercise, listExercises, prependLogEntry } from './exercises';
-import { createSession, getSession, listSessionIds } from './sessions';
+import { createSession, getSession, listSessionIds, sessionIdDate } from './sessions';
 import { getLatestWorkout, getWorkout, saveWorkoutVersion } from './workouts';
 
 export interface SaveSessionInput {
@@ -204,6 +204,27 @@ function precheck(session: ActiveSession): void {
 	if (!anyDone) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
 }
 
+/** The start time a save is recognised by: the original one if the start was edited afterwards. */
+const savedStart = (record: SessionRecord) => record.originalStartedAt ?? record.startedAt;
+
+/**
+ * The id of a record from `date` saved with this start time, other than `skip`
+ * (already checked). The client always sends the day's base id, so a retried
+ * save of the day's second session is only found here, also if the first
+ * session has since been deleted.
+ */
+async function findSameDaySession(
+	storage: UserStorage,
+	ids: readonly string[],
+	date: string,
+	startedAt: string,
+	skip: string
+): Promise<string | null> {
+	const sameDay = ids.filter((id) => id !== skip && sessionIdDate(id) === date);
+	const records = await Promise.all(sameDay.map((id) => getSession(storage, id)));
+	return records.find((r) => r && savedStart(r.data) === startedAt)?.data.id ?? null;
+}
+
 export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
 	const base = (await getWorkout(storage, input.session.workoutSlug, input.session.workoutVersion))?.data;
 	if (!base) throw new ValidationError('sparning', [`Passet ${input.session.workoutSlug} v${input.session.workoutVersion} finns inte`]);
@@ -235,15 +256,19 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (doneSets.size === 0) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
 
-	// Pick the session id. An existing record with the same id and start time
+	// Pick the session id. A record from the same day with the same start time
 	// means a retry; otherwise a free id for the day is chosen.
 	let sessionId = session.sessionId;
 	let alreadySaved = false;
 	const existing = await getSession(storage, sessionId);
-	if (existing) {
-		const savedStart = existing.data.originalStartedAt ?? existing.data.startedAt;
-		if (savedStart === session.startedAt) alreadySaved = true;
-		else sessionId = sessionIdFor(date, new Set(await listSessionIds(storage)));
+	if (existing && savedStart(existing.data) === session.startedAt) alreadySaved = true;
+	else {
+		const taken = await listSessionIds(storage);
+		const retryOf = await findSameDaySession(storage, taken, date, session.startedAt, sessionId);
+		if (retryOf) {
+			sessionId = retryOf;
+			alreadySaved = true;
+		} else if (existing) sessionId = sessionIdFor(date, new Set(taken));
 	}
 
 	// Exercise logs, without duplicates on retry. The record is written last, so

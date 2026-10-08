@@ -24,7 +24,7 @@ export async function listSessions(storage: UserStorage): Promise<SessionRecord[
 }
 
 /** The date in a session id (`s_YYYYMMDD` or `s_YYYYMMDD_2`), otherwise null. */
-function idDate(id: string): string | null {
+export function sessionIdDate(id: string): string | null {
 	const m = /^s_(\d{4})(\d{2})(\d{2})(_\d+)?$/.exec(id);
 	return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
@@ -40,7 +40,7 @@ async function readSessions(storage: UserStorage, ids: readonly string[]): Promi
  */
 export async function listSessionsBetween(storage: UserStorage, from: string, to: string): Promise<SessionRecord[]> {
 	const ids = (await listSessionIds(storage)).filter((id) => {
-		const d = idDate(id);
+		const d = sessionIdDate(id);
 		return d === null || (d >= from && d < to);
 	});
 	return (await readSessions(storage, ids))
@@ -54,7 +54,7 @@ export async function listSessionsBetween(storage: UserStorage, from: string, to
  */
 export async function lastSessionBySlug(storage: UserStorage, slugs: readonly string[]): Promise<Map<string, string>> {
 	const ids = (await listSessionIds(storage)).sort(
-		(a, b) => (idDate(b) ?? '9999').localeCompare(idDate(a) ?? '9999') || b.localeCompare(a)
+		(a, b) => (sessionIdDate(b) ?? '9999').localeCompare(sessionIdDate(a) ?? '9999') || b.localeCompare(a)
 	);
 	const wanted = new Set(slugs);
 	const last = new Map<string, string>();
@@ -65,8 +65,8 @@ export async function lastSessionBySlug(storage: UserStorage, slugs: readonly st
 			if (!prev || Date.parse(s.startedAt) > Date.parse(prev)) last.set(s.workoutSlug, s.startedAt);
 		}
 		// An id only gives the date, so finish reading that day before stopping.
-		const nextDate = end < ids.length ? idDate(ids[end]) : null;
-		if ([...wanted].every((slug) => last.has(slug)) && (nextDate === null || nextDate !== idDate(ids[end - 1]))) break;
+		const nextDate = end < ids.length ? sessionIdDate(ids[end]) : null;
+		if ([...wanted].every((slug) => last.has(slug)) && (nextDate === null || nextDate !== sessionIdDate(ids[end - 1]))) break;
 	}
 	return last;
 }
