@@ -25,15 +25,16 @@ export async function restoreWorkoutVersion(
 ): Promise<WorkoutTemplate | null> {
 	const old = (await getWorkout(storage, slug, version))?.data;
 	if (!old) return null;
-	const changed: string[] = [];
-	for (const we of old.exercises) {
-		const exercise = (await getExercise(storage, we.exerciseId))?.data;
-		if (exercise && !targetMatchesType(we.target, exercise.type)) changed.push(exercise.name);
-	}
-	if (changed.length) {
-		const names = changed.join(', ');
+	const exercises = await Promise.all(old.exercises.map((we) => getExercise(storage, we.exerciseId)));
+	const changed = new Set<string>();
+	old.exercises.forEach((we, i) => {
+		const exercise = exercises[i]?.data;
+		if (exercise && !targetMatchesType(we.target, exercise.type)) changed.add(exercise.name);
+	});
+	if (changed.size) {
+		const names = [...changed].join(', ');
 		throw new WorkoutRestoreError(
-			changed.length === 1
+			changed.size === 1
 				? `Övningen ${names} har bytt typ sedan den här versionen.`
 				: `Övningarna ${names} har bytt typ sedan den här versionen.`
 		);
