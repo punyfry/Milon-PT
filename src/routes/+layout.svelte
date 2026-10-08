@@ -30,6 +30,7 @@
 		--surface: #fafaf8;
 		--surface-2: #e2dfd7;
 		--step: #cfcbc1;
+		--active-set: #e2dfd7;
 		--seg: #d6d3ca;
 		--text: #18181a;
 		--heading: #3c3c40;
@@ -56,6 +57,7 @@
 			--surface: #17171a;
 			--surface-2: #26262a;
 			--step: #37373c;
+			--active-set: #1f1f22;
 			--seg: #26262a;
 			--text: #f2f2f0;
 			--heading: #c8c8cd;
@@ -76,6 +78,7 @@
 		--surface: #17171a;
 		--surface-2: #26262a;
 		--step: #37373c;
+		--active-set: #1f1f22;
 		--seg: #26262a;
 		--text: #f2f2f0;
 		--heading: #c8c8cd;
