@@ -18,6 +18,7 @@
 		cancelTimer,
 		remainingMs,
 		completeExpiredTimers,
+		EXPIRED_TIMER_GRACE_MS,
 		createActiveSession,
 		isTimerRunning,
 		localIsoString,
@@ -109,7 +110,8 @@
 			// It is saved on the first change, so only looking at a workout leaves nothing behind.
 			session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
 		}
-		if (completeExpiredTimers(session, new Date())) persist();
+		// Opening the page: a timer that ran out long ago is from an app that was closed, not a locked screen.
+		if (completeExpiredTimers(session, new Date(), EXPIRED_TIMER_GRACE_MS)) persist();
 	});
 
 	function persist() {

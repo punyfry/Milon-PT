@@ -227,22 +227,35 @@ export function cancelTimer(set: ActiveSet): void {
 }
 
 /**
- * Fills in the reached time for timers that hit zero, even if that happened
- * while the page was closed. Returns the number of timers that finished.
+ * How long after zero a timer found on opening the workout still counts. A
+ * timer that ran out longer ago is most likely from an app that Android killed
+ * in the background, so its time is dropped (#57).
  */
-export function completeExpiredTimers(session: ActiveSession, now: Date): number {
-	let completed = 0;
+export const EXPIRED_TIMER_GRACE_MS = 3 * 60_000;
+
+/**
+ * Fills in the reached time for timers that hit zero, even if that happened
+ * while the page was closed. With `graceMs`, a timer that hit zero longer ago
+ * than that is cancelled instead (no time, done flag unchanged). Returns the
+ * number of timers that finished or were cancelled.
+ */
+export function completeExpiredTimers(session: ActiveSession, now: Date, graceMs = Infinity): number {
+	let changed = 0;
 	for (const ex of session.exercises) {
 		for (const set of ex.sets) {
 			if (!isTimerRunning(set) || remainingMs(set, now) > 0 || !('seconds' in set)) continue;
+			changed++;
+			if (now.getTime() - Date.parse(set.timerEndsAt!) > graceMs) {
+				cancelTimer(set);
+				continue;
+			}
 			set.seconds = set.timerDuration ?? set.seconds;
 			delete set.plannedSeconds;
 			set.done = true;
 			clearTimer(set);
-			completed++;
 		}
 	}
-	return completed;
+	return changed;
 }
 
 export function anyTimerRunning(session: ActiveSession): boolean {
