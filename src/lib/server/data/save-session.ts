@@ -8,21 +8,24 @@
  */
 import {
 	Issues,
+	NEW_EXERCISE_ID,
 	ValidationError,
 	isObject,
 	sessionIdFor,
 	targetMatchesType,
+	validateExerciseInput,
 	validateSet,
 	type ActiveSession,
 	type Deviation,
 	type Exercise,
 	type ExerciseSet,
+	type NewSessionExercise,
 	type SessionRecord,
 	type Target,
 	type WorkoutTemplate
 } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { getExercise, prependLogEntry } from './exercises';
+import { findOrCreateExercise, getExercise, listExercises, prependLogEntry } from './exercises';
 import { createSession, getSession, listSessionIds } from './sessions';
 import { getLatestWorkout, getWorkout, saveWorkoutVersion } from './workouts';
 
@@ -73,8 +76,22 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 			if (!isObject(d) || d.type !== 'swap' || typeof d.from !== 'string' || !ID.test(d.from) || typeof d.to !== 'string' || !ID.test(d.to))
 				issues.push(`session.deviations[${i}] är ogiltig`);
 		});
+	if (s.newExercises !== undefined) {
+		if (!Array.isArray(s.newExercises) || s.newExercises.length > MAX_NEW_EXERCISES)
+			issues.push(`session.newExercises måste vara en lista med högst ${MAX_NEW_EXERCISES} övningar`);
+		else
+			s.newExercises.forEach((n, i) => {
+				const p = `session.newExercises[${i}]`;
+				if (!isObject(n) || typeof n.id !== 'string' || !NEW_EXERCISE_ID.test(n.id)) return issues.push(`${p}.id är ogiltigt`);
+				const found = new Issues();
+				validateExerciseInput(n, found, p);
+				issues.push(...found.list);
+			});
+	}
 	return s as unknown as ActiveSession;
 }
+
+const MAX_NEW_EXERCISES = 20;
 
 /** Basic check of the save input before anything is read from storage. */
 export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
@@ -123,8 +140,44 @@ export function applyDeviations(
 	});
 }
 
-export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
+/**
+ * Creates the exercises written in during the session and returns the
+ * session with their real ids. Only those that are used are created: with a
+ * done set, or swapped into the workout when it is saved as a new version.
+ * Creating finds an exercise with the same name and type, so a retry reuses
+ * what an earlier attempt created. Deviations to an exercise that was not
+ * created are dropped.
+ */
+export async function resolveNewExercises(storage: UserStorage, input: SaveSessionInput): Promise<ActiveSession> {
 	const { session } = input;
+	const pending = new Map((session.newExercises ?? []).map((n) => [n.id, n]));
+	const { newExercises: _, ...rest } = session;
+	if (!pending.size) return rest;
+
+	const hasDoneSet = (id: string) => session.exercises.some((e) => e.exerciseId === id && e.sets.some((s) => isObject(s) && s.done === true));
+	const keepInWorkout = (id: string) => input.saveAsNewVersion && session.deviations.some((d) => d.to === id);
+	const used = [...pending.values()].filter((n) => hasDoneSet(n.id) || keepInWorkout(n.id));
+
+	const realId = new Map<string, string>();
+	if (used.length) {
+		const catalog = (await listExercises(storage)).map((e) => e.data);
+		for (const n of used) {
+			const fields = validateExerciseInput(n, new Issues(), '') as Pick<NewSessionExercise, 'name' | 'type' | 'instruction'>;
+			realId.set(n.id, (await findOrCreateExercise(storage, catalog, fields)).exercise.id);
+		}
+	}
+	const map = (id: string) => realId.get(id) ?? id;
+	return {
+		...rest,
+		exercises: session.exercises.filter((e) => !pending.has(e.exerciseId) || realId.has(e.exerciseId)).map((e) => ({ ...e, exerciseId: map(e.exerciseId) })),
+		deviations: session.deviations
+			.filter((d) => (!pending.has(d.to) || realId.has(d.to)) && !pending.has(d.from))
+			.map((d) => ({ ...d, to: map(d.to) }))
+	};
+}
+
+export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
+	const session = await resolveNewExercises(storage, input);
 	const date = session.startedAt.slice(0, 10);
 
 	const base = (await getWorkout(storage, session.workoutSlug, session.workoutVersion))?.data;

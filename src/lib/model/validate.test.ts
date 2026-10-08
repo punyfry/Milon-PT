@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertValid, validateExercise, validateSession, validateWorkout, ValidationError } from './validate';
+import { coachEnabled } from './profile';
+import { assertValid, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -64,5 +65,19 @@ describe('validation', () => {
 	it('strips unknown fields', () => {
 		const result = assertValid('övning', { ...deadlift, extra: 1 }, validateExercise);
 		expect(result).not.toHaveProperty('extra');
+	});
+});
+
+describe('profile', () => {
+	it('keeps the coach setting and rejects anything but a boolean', () => {
+		expect(assertValid('profil', { coach: false }, validateProfile)).toEqual({ coach: false });
+		expect(assertValid('profil', {}, validateProfile)).toEqual({});
+		expect(() => assertValid('profil', { coach: 'nej' }, validateProfile)).toThrow(/coach/);
+	});
+
+	it('treats a missing setting as on', () => {
+		expect(coachEnabled({})).toBe(true);
+		expect(coachEnabled({ coach: true })).toBe(true);
+		expect(coachEnabled({ coach: false })).toBe(false);
 	});
 });

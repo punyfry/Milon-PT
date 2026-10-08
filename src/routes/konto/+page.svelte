@@ -96,6 +96,20 @@
 		</form>
 		{#if form?.goalError}<p class="error" role="alert">{form.goalError}</p>{/if}
 
+		{#if data.aiConfigured}
+			<form method="POST" action="?/coach" class="row" use:enhance={() => ({ update }) => update({ reset: false })}>
+				<div class="t">
+					Milon
+					<span>{data.coach ? 'Hjälper dig bygga pass och svarar under passet' : 'Avstängd, du bygger passen själv'}{form?.coachSaved ? ' · sparat' : ''}</span>
+				</div>
+				<div class="seg" role="group" aria-label="Milon">
+					<button name="coach" value="on" aria-pressed={data.coach}>På</button>
+					<button name="coach" value="off" aria-pressed={!data.coach}>Av</button>
+				</div>
+			</form>
+			{#if form?.coachError}<p class="error" role="alert">{form.coachError}</p>{/if}
+		{/if}
+
 		<div class="row">
 			<div class="t">Tema<span>Följer telefonen som standard</span></div>
 			<div class="seg" role="group" aria-label="Tema">

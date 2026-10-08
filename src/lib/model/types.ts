@@ -92,6 +92,8 @@ export interface KcalRange {
 }
 
 export interface Profile {
+	/** Whether Milon, the AI coach, is on. Missing means on. */
+	coach?: boolean;
 	/** Free-text goals. */
 	goals?: string;
 	/** Sessions per week, for the week view. */
@@ -125,6 +127,17 @@ export type ActiveSet = ExerciseSet & {
 	plannedSeconds?: number;
 };
 
+/**
+ * An exercise written in by hand during the session. It has a temporary id
+ * (`new_…`) and is created when the session is saved, so it works offline.
+ */
+export interface NewSessionExercise {
+	id: string;
+	name: string;
+	type: ExerciseType;
+	instruction: string;
+}
+
 /** Active session in localStorage under the key `milonpt.activeSession`. */
 export interface ActiveSession {
 	sessionId: string;
@@ -134,6 +147,8 @@ export interface ActiveSession {
 	lastActivityAt: string;
 	exercises: { exerciseId: string; sets: ActiveSet[] }[];
 	deviations: Deviation[];
+	/** Exercises written in during the session; see `NewSessionExercise`. */
+	newExercises?: NewSessionExercise[];
 	/** Index of the exercise shown, so a paused workout resumes where it was. */
 	current?: number;
 	/**

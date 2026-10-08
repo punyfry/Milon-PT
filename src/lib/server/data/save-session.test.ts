@@ -5,6 +5,7 @@ import {
 	createExercise,
 	getExercise,
 	getSession,
+	listExercises,
 	listLatestWorkouts,
 	listSessionIds,
 	parseSaveSessionInput,
@@ -173,5 +174,74 @@ describe('save session', () => {
 		expect(() => parseSaveSessionInput({ session: { ...active(), sessionId: '../x' }, endedAt: 'nu' })).toThrow(
 			/sessionId[\s\S]*endedAt/
 		);
+	});
+});
+
+describe('exercises written in during the session', () => {
+	const rows = { name: 'Hantelrodd', type: 'weight' as const, instruction: 'Rak rygg.' };
+	/** Hantelpress swapped for a new exercise with two done sets. */
+	const withNew = (overrides: Partial<ActiveSession> = {}) =>
+		active({
+			exercises: [
+				active().exercises[0],
+				{ exerciseId: 'new_abc', sets: [{ weight: 14, reps: 10, done: true }, { weight: 14, reps: 9, done: true }] },
+				active().exercises[2]
+			],
+			deviations: [{ type: 'swap', from: 'ex_hantelpress', to: 'new_abc' }],
+			newExercises: [{ id: 'new_abc', ...rows }],
+			...overrides
+		});
+
+	it('creates the exercise with its log and records the swap with the real id', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(withNew()));
+		const created = (await getExercise(storage, 'ex_hantelrodd'))!.data;
+		expect(created).toMatchObject({ ...rows, archived: false });
+		expect(created.log).toEqual([{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 14, reps: 10 }, { weight: 14, reps: 9 }] }]);
+		const record = (await getSession(storage, 's_20261006'))!.data;
+		expect(record.exerciseIds).toContain('ex_hantelrodd');
+		expect(record.deviations).toEqual([{ type: 'swap', from: 'ex_hantelpress', to: 'ex_hantelrodd' }]);
+	});
+
+	it('is safe to retry: the second save reuses the exercise and logs nothing twice', async () => {
+		const storage = await setup();
+		await saveSession(storage, input(withNew()));
+		const again = await saveSession(storage, input(withNew()));
+		expect(again.alreadySaved).toBe(true);
+		expect((await listExercises(storage)).map((e) => e.data.id).filter((id) => id.startsWith('ex_hantelrodd'))).toEqual(['ex_hantelrodd']);
+		expect((await getExercise(storage, 'ex_hantelrodd'))!.data.log).toHaveLength(1);
+	});
+
+	it('uses an existing exercise with the same name and type', async () => {
+		const storage = await setup();
+		const session = withNew({ newExercises: [{ id: 'new_abc', name: ' sidoplanka ', type: 'time', instruction: '' }] });
+		session.exercises[1].sets = [{ seconds: 30, done: true }];
+		await saveSession(storage, input(session));
+		expect((await getExercise(storage, 'ex_sidoplanka'))!.data.log).toHaveLength(1);
+		expect(await getExercise(storage, 'ex_sidoplanka_2')).toBeNull();
+	});
+
+	it('saves the new exercise in the next workout version', async () => {
+		const storage = await setup();
+		const result = await saveSession(storage, input(withNew(), { saveAsNewVersion: true }));
+		expect(result.newWorkoutVersion).toBe(2);
+		const [workout] = await listLatestWorkouts(storage);
+		expect(workout.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft', 'ex_hantelrodd', 'ex_plankan']);
+		expect(workout.changeNote).toBe('Byt Hantelpress mot Hantelrodd');
+	});
+
+	it('does not create an exercise without done sets, and drops its swap', async () => {
+		const storage = await setup();
+		const session = withNew();
+		session.exercises[1].sets = [{ weight: 14, reps: 10, done: false }];
+		await saveSession(storage, input(session));
+		expect(await getExercise(storage, 'ex_hantelrodd')).toBeNull();
+		expect((await getSession(storage, 's_20261006'))!.data.deviations).toEqual([]);
+	});
+
+	it('rejects invalid written-in exercises before anything is read', () => {
+		expect(() => input(withNew({ newExercises: [{ id: 'ex_fel', ...rows }] }))).toThrow(/newExercises\[0\]\.id/);
+		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: ' ' }] }))).toThrow(/namn/);
+		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, type: 'cardio' as never }] }))).toThrow(/type/);
 	});
 });

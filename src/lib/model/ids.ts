@@ -29,6 +29,13 @@ export function sessionIdFor(date: string, taken: ReadonlySet<string>): string {
 	return uniqueId(`s_${date.replaceAll('-', '')}`, taken);
 }
 
+/** Temporary id for an exercise written in during a session (see `NewSessionExercise`). */
+export const NEW_EXERCISE_ID = /^new_[a-z0-9]{1,40}$/;
+
+export function newExerciseId(): string {
+	return `new_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** Comparison key for exercise names: ignores case and whitespace. */
 export function normalizeName(name: string): string {
 	return name.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('sv');

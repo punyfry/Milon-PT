@@ -1,6 +1,7 @@
 import {
 	assertValid,
 	exerciseIdBase,
+	normalizeName,
 	uniqueId,
 	validateExercise,
 	type Exercise,
@@ -64,6 +65,24 @@ export async function createExercise(
 		}
 	}
 	throw new Error(`Kunde inte hitta ett ledigt id för ${input.name}`);
+}
+
+/**
+ * The active exercise with the same name (ignoring case and spaces) and type,
+ * or a new one. Makes creating by name safe to retry: a second call finds
+ * what the first one created. `catalog` is every stored exercise.
+ */
+export async function findOrCreateExercise(
+	storage: UserStorage,
+	catalog: Exercise[],
+	input: Pick<Exercise, 'name' | 'type' | 'instruction'>
+): Promise<{ exercise: Exercise; created: boolean }> {
+	const key = normalizeName(input.name);
+	const existing = catalog.find((e) => !e.archived && e.type === input.type && normalizeName(e.name) === key);
+	if (existing) return { exercise: existing, created: false };
+	const { data } = await createExercise(storage, input, new Set(catalog.map((e) => e.id)));
+	catalog.push(data);
+	return { exercise: data, created: true };
 }
 
 /** Overwrites an exercise. `version` from the read guards against concurrent changes. */

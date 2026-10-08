@@ -199,6 +199,31 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 	};
 }
 
+export const MAX_EXERCISE_NAME = 80;
+export const MAX_INSTRUCTION = 1000;
+
+/** Name, type and instruction of an exercise written in by the user, trimmed. */
+export function validateExerciseInput(
+	v: unknown,
+	issues: Issues,
+	path: string
+): Pick<Exercise, 'name' | 'type' | 'instruction'> | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const name = typeof v.name === 'string' ? v.name.trim().replace(/\s+/g, ' ') : '';
+	if (!name) issues.add(join(path, 'name'), 'övningen behöver ett namn');
+	else if (name.length > MAX_EXERCISE_NAME) issues.add(join(path, 'name'), `namnet får vara högst ${MAX_EXERCISE_NAME} tecken`);
+	if (!isExerciseType(v.type)) issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
+	if (v.instruction !== undefined && typeof v.instruction !== 'string') issues.add(join(path, 'instruction'), 'måste vara en sträng');
+	const instruction = typeof v.instruction === 'string' ? v.instruction.trim() : '';
+	if (instruction.length > MAX_INSTRUCTION) issues.add(join(path, 'instruction'), `får vara högst ${MAX_INSTRUCTION} tecken`);
+	if (issues.list.length !== before) return null;
+	return { name, type: v.type as ExerciseType, instruction };
+}
+
 export function validateTarget(v: unknown, issues: Issues, path: string): Target | null {
 	if (!isObject(v)) {
 		issues.add(path, 'måste vara ett objekt');
@@ -315,6 +340,7 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 	const goals = str(v, 'goals', issues, path, { optional: true, allowEmpty: true });
 	const weeklySessionGoal = num(v, 'weeklySessionGoal', issues, path, { int: true, min: 0, optional: true });
 	const coachContext = str(v, 'coachContext', issues, path, { optional: true, allowEmpty: true });
+	if (v.coach !== undefined && typeof v.coach !== 'boolean') issues.add(join(path, 'coach'), 'måste vara true eller false');
 	let rules: string[] | undefined;
 	if (v.rules !== undefined) {
 		rules = (arr(v, 'rules', issues, path) ?? []).map((r, i) => {
@@ -344,7 +370,8 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 		...(weeklySessionGoal !== undefined ? { weeklySessionGoal } : {}),
 		...(rules ? { rules } : {}),
 		...(kcalPerWorkout ? { kcalPerWorkout } : {}),
-		...(coachContext !== undefined ? { coachContext } : {})
+		...(coachContext !== undefined ? { coachContext } : {}),
+		...(typeof v.coach === 'boolean' ? { coach: v.coach } : {})
 	};
 }
 

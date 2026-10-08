@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
-import { createExercise, prependLogEntry } from '$lib/server/data';
+import { createExercise, prependLogEntry, saveProfile } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -162,6 +162,15 @@ describe('POST /api/builder', () => {
 		expect((await call(builder as Handler, { message: 'Hej' })).status).toBe(503);
 	});
 
+	it('responds 403 when the user has turned Milon off, without counting or calling Claude', async () => {
+		await saveProfile(state.storage, { coach: false });
+		const res = await call(builder as Handler, { message: 'Hej' });
+		expect(res.status).toBe(403);
+		expect(res.body.message).toMatch(/Milon är avstängd/);
+		expect(await state.storage.list('usage/')).toEqual([]);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
 	it('stops at the daily limit without calling Claude', async () => {
 		env.AI_DAILY_LIMIT = '0';
 		const res = await call(builder as Handler, { message: 'Hej' });
@@ -172,6 +181,13 @@ describe('POST /api/builder', () => {
 });
 
 describe('POST /api/helper', () => {
+	it('responds 403 when the user has turned Milon off', async () => {
+		await saveProfile(state.storage, { coach: false });
+		const res = await call(helper as Handler, { question: 'Hur?' });
+		expect(res.status).toBe(403);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
 	it('rejects invalid questions and stops at the daily limit', async () => {
 		expect((await call(helper as Handler, { question: '' })).status).toBe(400);
 		const session = {
