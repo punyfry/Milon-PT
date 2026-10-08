@@ -245,9 +245,10 @@
 	 * Leaving the workout page (the back button, a link, closing or reloading
 	 * the tab) cancels a running timer without saving its time. A locked screen
 	 * does not leave the page, so the timer keeps running there as before.
+	 * A session already cleared (saved or discarded) is not written back.
 	 */
 	function cancelRunningTimers() {
-		if (!session || !anyTimerRunning(session)) return;
+		if (!session || !anyTimerRunning(session) || !loadActiveSession()) return;
 		change((s) => {
 			for (const e of s.exercises) for (const set of e.sets) if (isTimerRunning(set)) cancelTimer(set);
 		});
