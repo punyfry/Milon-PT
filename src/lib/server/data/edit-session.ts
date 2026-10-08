@@ -10,6 +10,7 @@
  */
 import {
 	Issues,
+	NOTE_MAX,
 	ValidationError,
 	isObject,
 	validateSet,
@@ -22,7 +23,6 @@ import {
 import { stockholmIso } from '../../time';
 import { StorageConflictError, type UserStorage } from '../storage/types';
 import { getExercise, saveExercise, sortLog } from './exercises';
-import { NOTE_MAX } from './save-session';
 import { deleteSessionRecord, getSession, saveSessionRecord } from './sessions';
 import { getWorkout } from './workouts';
 
@@ -69,7 +69,10 @@ export interface EditSessionInput {
 	/** End as YYYY-MM-DDTHH:MM, Stockholm time. */
 	end: string;
 	kcalEstimate: number | null;
-	/** The exercises to keep, with their sets and note (empty = none). Exercises left out are removed from the session. */
+	/**
+	 * The exercises to keep, with their sets and note (empty = none, left out =
+	 * unchanged). Exercises left out are removed from the session.
+	 */
 	exercises: { exerciseId: string; sets: unknown[]; note?: string }[];
 }
 
@@ -92,7 +95,8 @@ export function parseEditSessionInput(raw: unknown): EditSessionInput {
 		}
 		seen.add(e.exerciseId);
 		if (!Array.isArray(e.sets) || e.sets.length < 1 || e.sets.length > 50) issues.push(`Varje övning måste ha minst ett set (exercises[${i}]).`);
-		if (e.note !== undefined && (typeof e.note !== 'string' || e.note.length > NOTE_MAX))
+		if (e.note !== undefined && typeof e.note !== 'string') issues.push(`En anteckning måste vara text (exercises[${i}]).`);
+		else if (typeof e.note === 'string' && e.note.length > NOTE_MAX)
 			issues.push(`En anteckning får vara högst ${NOTE_MAX} tecken (exercises[${i}]).`);
 	});
 	if (issues.length) throw new ValidationError('ändring', issues);
@@ -143,7 +147,8 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	// Sets, checked against each exercise's type.
 	const inSession = new Set(record.exerciseIds);
 	const kept = new Map<string, ExerciseSet[]>();
-	const notes = new Map(input.exercises.map((e) => [e.exerciseId, e.note?.trim() ?? '']));
+	/** Only exercises whose note was sent; the others keep theirs (e.g. a client from before notes could be edited). */
+	const notes = new Map(input.exercises.filter((e) => typeof e.note === 'string').map((e) => [e.exerciseId, e.note!.trim()]));
 	for (const [i, e] of input.exercises.entries()) {
 		if (!inSession.has(e.exerciseId)) {
 			issues.add(`exercises[${i}]`, `${e.exerciseId} ingår inte i passet`);
@@ -167,10 +172,10 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	// Logs first: changed sets replace the entry, removed exercises lose it.
 	for (const exerciseId of record.exerciseIds) {
 		const sets = kept.get(exerciseId);
-		const note = notes.get(exerciseId);
 		await updateLog(storage, exerciseId, (log) => {
 			const i = log.findIndex((l) => l.sessionId === id);
 			if (!sets) return i < 0 ? null : log.filter((l) => l.sessionId !== id);
+			const note = notes.has(exerciseId) ? notes.get(exerciseId) : log[i]?.note;
 			const entry: LogEntry = { sessionId: id, date: i < 0 ? startDate : log[i].date, sets, ...(note ? { note } : {}) };
 			if (i < 0) return sortLog([entry, ...log]);
 			if (JSON.stringify(log[i]) === JSON.stringify(entry)) return null;

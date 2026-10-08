@@ -9,7 +9,7 @@
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
 	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import type { ActiveSession, ActiveSet, ExerciseType } from '$lib/model';
+	import { NOTE_MAX, type ActiveSession, type ActiveSet, type ExerciseType } from '$lib/model';
 	import {
 		addSet,
 		applySwap,
@@ -403,8 +403,6 @@
 
 	// --- notes ---------------------------------------------------------------
 
-	const NOTE_MAX = 1000;
-
 	function openNote(index: number) {
 		sheet = { kind: 'note', index, text: session?.exercises[index]?.note ?? '' };
 	}
@@ -734,14 +732,19 @@
 				{@const ei = infos.get(e.exerciseId)}
 				{@const done = e.sets.filter((s) => s.done)}
 				<li>
-					<button class="sumrow" class:skipped={!done.length} onclick={() => goTo(i)} aria-label="{ei?.name ?? e.exerciseId}: ändra">
+					<button
+						class="sumrow"
+						class:skipped={!done.length}
+						onclick={() => goTo(i)}
+						aria-label="{ei?.name ?? e.exerciseId}: ändra{e.note ? `. Anteckning: ${e.note}` : ''}{e.note && !done.length ? ' (sparas inte, inga set klara)' : ''}"
+					>
 						<span class="name">
 							{ei?.name ?? e.exerciseId}
 							{#if e.sets.some((s) => isRecord(ei, s))}<span class="tag">PR</span>{/if}
 							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
 						</span>
 						<span class="setsline num">{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : 'Inga set klara'}</span>
-						{#if e.note}<span class="sumnote">{e.note}</span>{/if}
+						{#if e.note}<span class="sumnote">{e.note}{#if !done.length}<em> · sparas inte, inga set klara</em>{/if}</span>{/if}
 						<span class="go"><Icon name="right" /></span>
 					</button>
 				</li>
@@ -991,6 +994,7 @@
 		white-space: pre-line;
 	}
 	.lastnote {
+		overflow-wrap: anywhere;
 		margin: 12px 0 0;
 		padding-left: 10px;
 		border-left: 2px solid var(--line);
@@ -1013,6 +1017,7 @@
 	}
 	.sumnote {
 		grid-column: 1;
+		overflow-wrap: anywhere;
 		font-size: 13px;
 		color: var(--muted);
 		white-space: pre-line;

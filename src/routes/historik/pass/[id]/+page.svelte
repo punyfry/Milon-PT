@@ -3,7 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import { formatDuration, formatSet } from '$lib/format';
-	import type { ExerciseType } from '$lib/model';
+	import { NOTE_MAX, type ExerciseType } from '$lib/model';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -218,7 +218,7 @@
 					<button class="btn small" onclick={() => e.sets.push({ ...e.sets[e.sets.length - 1] })}><Icon name="plus" /> Lägg till set</button>
 					<label class="notefield">
 						<span class="label">Anteckning</span>
-						<textarea bind:value={e.note} maxlength="1000" rows="2" placeholder="T.ex. prova 25 kg nästa gång"></textarea>
+						<textarea bind:value={e.note} maxlength={NOTE_MAX} rows="2" placeholder="T.ex. prova 25 kg nästa gång"></textarea>
 					</label>
 				{/if}
 			</section>
@@ -299,6 +299,7 @@
 	}
 	.note {
 		margin: 0;
+		overflow-wrap: anywhere;
 		font-size: 14px;
 		color: var(--muted);
 		white-space: pre-line;

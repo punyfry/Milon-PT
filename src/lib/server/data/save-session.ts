@@ -9,6 +9,7 @@
 import {
 	Issues,
 	ValidationError,
+	NOTE_MAX,
 	isObject,
 	sessionIdFor,
 	targetMatchesType,
@@ -41,8 +42,6 @@ export interface SaveSessionResult {
 }
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
-/** Same limit as `validateLogEntry`. */
-export const NOTE_MAX = 1000;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
@@ -67,7 +66,8 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 		s.exercises.forEach((ex, i) => {
 			if (!isObject(ex) || typeof ex.exerciseId !== 'string' || !ID.test(ex.exerciseId) || !Array.isArray(ex.sets))
 				issues.push(`session.exercises[${i}] är ogiltig`);
-			else if (ex.note !== undefined && (typeof ex.note !== 'string' || ex.note.length > NOTE_MAX))
+			else if (ex.note !== undefined && typeof ex.note !== 'string') issues.push(`session.exercises[${i}].note måste vara text`);
+			else if (typeof ex.note === 'string' && ex.note.length > NOTE_MAX)
 				issues.push(`session.exercises[${i}].note får vara högst ${NOTE_MAX} tecken`);
 		});
 	if (s.preparing !== undefined && typeof s.preparing !== 'boolean') issues.push('session.preparing är ogiltig');

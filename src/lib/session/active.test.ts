@@ -109,6 +109,21 @@ describe('active session', () => {
 		expect(empty[0]).toEqual({ seconds: 30, done: false });
 	});
 
+	it("moves today's note to the new exercise when nothing was done, and keeps it with done sets otherwise", () => {
+		const s = createActiveSession(workout, infos, new Date('2026-10-06T15:00:00Z'));
+		const sidePlank: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '' };
+		s.exercises[1].note = 'Ont i axeln';
+		applySwap(s, 'ex_plankan', sidePlank, { seconds: 45 });
+		expect(s.exercises[1]).toMatchObject({ exerciseId: 'ex_sidoplanka', note: 'Ont i axeln' });
+
+		const t = createActiveSession(workout, infos, new Date('2026-10-06T15:00:00Z'));
+		t.exercises[1].note = 'Ont i axeln';
+		t.exercises[1].sets[0].done = true;
+		applySwap(t, 'ex_plankan', sidePlank, { seconds: 45 });
+		expect(t.exercises[1]).toMatchObject({ exerciseId: 'ex_plankan', note: 'Ont i axeln' });
+		expect(t.exercises[2]).not.toHaveProperty('note');
+	});
+
 	it('keeps a swapped-in exercise on its own logged times, not the replaced target', () => {
 		const s = createActiveSession(workout, infos, new Date('2026-10-06T15:00:00Z'));
 		const sidePlank: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '', lastEntry: { date: '2026-10-01', sets: [{ seconds: 30 }] } };

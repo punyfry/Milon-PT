@@ -149,6 +149,9 @@ export interface ActiveSession {
 	preparing?: boolean;
 }
 
+/** Longest note per exercise and session (log entry, active session, editor). */
+export const NOTE_MAX = 1000;
+
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
 
 export const LOAD_STEP_KG: Record<LoadClass, number> = { light: 1.25, heavy: 5 };

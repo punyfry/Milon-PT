@@ -98,13 +98,15 @@ describe('save session', () => {
 		expect((await getExercise(storage, 'ex_plankan'))!.data.log[0]).not.toHaveProperty('note');
 	});
 
-	it('refuses a note that is too long', () => {
+	it('refuses a note that is too long or not text', () => {
 		const session = active();
 		session.exercises[0].note = 'x'.repeat(1001);
-		expect(() => input(session)).toThrow(/note/);
+		expect(() => input(session)).toThrow(/högst 1000/);
+		session.exercises[0].note = 5 as never;
+		expect(() => input(session)).toThrow(/måste vara text/);
 	});
 
-		it('can be retried without duplicates', async () => {
+	it('can be retried without duplicates', async () => {
 		const storage = await setup();
 		await saveSession(storage, input(active()));
 		const again = await saveSession(storage, input(active()));

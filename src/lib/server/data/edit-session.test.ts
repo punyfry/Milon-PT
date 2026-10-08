@@ -140,7 +140,36 @@ describe('editing a session', () => {
 		expect(() => parseEditSessionInput({ ...withNote('x'.repeat(1001)), version: 'v' })).toThrow(/högst 1000/);
 	});
 
-		it('removes an exercise from the session and its log', async () => {
+	it('keeps a note when the edit leaves it out, and adds one to a re-created log entry', async () => {
+		const { storage, detail } = await setup();
+		const withNote = input(detail.version, {
+			exercises: [
+				{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }], note: 'Prova 50 kg' },
+				{ exerciseId: 'ex_plankan', sets: [{ seconds: 45 }] }
+			]
+		});
+		await editSession(storage, 's_20261006', withNote, now);
+		// An edit without notes (e.g. from an older client) changes the sets but keeps the note.
+		const second = (await getSessionDetail(storage, 's_20261006'))!;
+		await editSession(storage, 's_20261006', input(second.version, { kcalEstimate: 280 }), now);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].note).toBe('Prova 50 kg');
+
+		const plank = (await getExercise(storage, 'ex_plankan'))!;
+		await saveExercise(storage, { ...plank.data, log: [] }, plank.version);
+		const third = (await getSessionDetail(storage, 's_20261006'))!;
+		await editSession(
+			storage,
+			's_20261006',
+			input(third.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] }, { exerciseId: 'ex_plankan', sets: [{ seconds: 50 }], note: 'Ny' }] }),
+			now
+		);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.log).toEqual([{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ seconds: 50 }], note: 'Ny' }]);
+		expect(() =>
+			parseEditSessionInput({ version: 'v', startTime: '10:00', end: '2026-10-06T11:00', kcalEstimate: null, exercises: [{ exerciseId: 'ex_a', sets: [{ reps: 1 }], note: 5 }] })
+		).toThrow(/måste vara text/);
+	});
+
+	it('removes an exercise from the session and its log', async () => {
 		const { storage, detail } = await setup();
 		const updated = await editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] }] }), now);
 		expect(updated?.exerciseIds).toEqual(['ex_marklyft']);

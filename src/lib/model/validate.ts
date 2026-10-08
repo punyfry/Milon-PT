@@ -11,6 +11,7 @@ import type {
 	WorkoutExercise,
 	WorkoutTemplate
 } from './types';
+import { NOTE_MAX } from './types';
 
 /**
  * Hand-written validators for the data model. Each validator collects issues
@@ -170,7 +171,7 @@ export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues,
 	const rawSets = arr(v, 'sets', issues, path) ?? [];
 	const sets = rawSets.map((s, i) => validateSet(s, type, issues, join(join(path, 'sets'), i)));
 	const note = str(v, 'note', issues, path, { optional: true, allowEmpty: true })?.trim();
-	if (note && note.length > 1000) issues.add(join(path, 'note'), 'får vara högst 1000 tecken');
+	if (note && note.length > NOTE_MAX) issues.add(join(path, 'note'), `får vara högst ${NOTE_MAX} tecken`);
 	if (issues.list.length !== before || d === undefined) return null;
 	return { ...(sessionId ? { sessionId } : {}), date: d, sets: sets as ExerciseSet[], ...(note ? { note } : {}) };
 }
