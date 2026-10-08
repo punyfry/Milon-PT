@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
 	import LineChart from '$lib/components/LineChart.svelte';
-	import { formatMetric, formatNumber, formatSeconds } from '$lib/format';
+	import { formatDuration, formatMetric, formatNumber, formatSeconds } from '$lib/format';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -91,6 +91,21 @@
 			</dl>
 		</div>
 	</section>
+
+	{#if data.sessions.length}
+		<div class="section-title">Pass {data.isCurrentWeek ? 'denna vecka' : `vecka ${data.week.week}`}</div>
+		<ul class="list">
+			{#each data.sessions as s (s.id)}
+				<li>
+					<a href={`/historik/pass/${s.id}`}>
+						<span class="name">{s.name}</span>
+						<span class="best num">{formatDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}</span>
+						<span class="when">{longDate(s.startedAt.slice(0, 10))} · <span class="num">{s.startedAt.slice(11, 16)}</span></span>
+					</a>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
 	<div class="section-title">Milstolpar</div>
 	<div class="milestones">

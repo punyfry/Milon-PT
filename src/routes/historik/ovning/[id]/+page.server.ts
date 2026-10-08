@@ -18,6 +18,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		metric: metricFor(ex.type),
 		points: progressSeries(ex).map((p) => ({ date: p.date, value: p.value })),
 		entries: ex.log.slice(0, 15).map((e, i) => ({
+			sessionId: e.sessionId ?? null,
 			date: e.date,
 			sets: e.sets,
 			note: e.note ?? null,

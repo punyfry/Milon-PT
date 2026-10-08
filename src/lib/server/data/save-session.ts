@@ -157,12 +157,16 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	let alreadySaved = false;
 	const existing = await getSession(storage, sessionId);
 	if (existing) {
-		if (existing.data.startedAt === session.startedAt) alreadySaved = true;
+		const savedStart = existing.data.originalStartedAt ?? existing.data.startedAt;
+		if (savedStart === session.startedAt) alreadySaved = true;
 		else sessionId = sessionIdFor(date, new Set(await listSessionIds(storage)));
 	}
 
-	// Exercise logs, without duplicates on retry.
+	// Exercise logs, without duplicates on retry. The record is written last, so
+	// once it exists every log entry was written; it may since have been edited
+	// (an exercise removed), which a retry must not undo.
 	for (const [exerciseId, sets] of doneSets) {
+		if (alreadySaved) break;
 		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId)) continue;
 		await prependLogEntry(storage, exerciseId, { sessionId, date, sets });
 	}

@@ -71,9 +71,20 @@ export async function lastSessionBySlug(storage: UserStorage, slugs: readonly st
 	return last;
 }
 
-/** A saved session is written once and never changed. */
+/** Writes a newly saved session; fails if the id is taken. Later edits go through `saveSessionRecord`. */
 export async function createSession(storage: UserStorage, session: SessionRecord): Promise<SessionRecord> {
 	const valid = assertValid('pass', session, validateSession);
 	await storage.writeJson(path(valid.id), valid, { createOnly: true });
 	return valid;
+}
+
+/** Overwrites a session record (editing afterwards). `version` from the read guards against concurrent changes. */
+export async function saveSessionRecord(storage: UserStorage, session: SessionRecord, version: string): Promise<StoredJson<SessionRecord>> {
+	const valid = assertValid('pass', session, validateSession);
+	const result = await storage.writeJson(path(valid.id), valid, { ifMatch: version });
+	return { data: valid, version: result.version };
+}
+
+export async function deleteSessionRecord(storage: UserStorage, id: string): Promise<void> {
+	await storage.delete(path(id));
 }

@@ -37,6 +37,9 @@ describe('validation', () => {
 			kcalEstimate: 300
 		};
 		expect(assertValid('pass', session, validateSession)).toEqual(session);
+		const edited = { ...session, originalStartedAt: '2026-10-06T17:00:00+02:00' };
+		expect(assertValid('pass', edited, validateSession)).toEqual(edited);
+		expect(() => assertValid('pass', { ...session, originalStartedAt: 'x' }, validateSession)).toThrow(/originalStartedAt/);
 	});
 
 	it('requires sets that match the exercise type', () => {

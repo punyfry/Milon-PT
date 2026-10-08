@@ -302,6 +302,7 @@ export function validateSession(v: unknown, issues: Issues, path: string): Sessi
 		validateDeviation(d, issues, join(join(path, 'deviations'), i))
 	);
 	const kcalEstimate = num(v, 'kcalEstimate', issues, path, { min: 0, optional: true });
+	const originalStartedAt = v.originalStartedAt === undefined ? undefined : datetime(v, 'originalStartedAt', issues, path);
 	if (issues.list.length !== before) return null;
 	return {
 		id: sId!,
@@ -311,7 +312,8 @@ export function validateSession(v: unknown, issues: Issues, path: string): Sessi
 		endedAt: endedAt!,
 		exerciseIds,
 		deviations: deviations as Deviation[],
-		...(kcalEstimate !== undefined ? { kcalEstimate } : {})
+		...(kcalEstimate !== undefined ? { kcalEstimate } : {}),
+		...(originalStartedAt !== undefined ? { originalStartedAt } : {})
 	};
 }
 
