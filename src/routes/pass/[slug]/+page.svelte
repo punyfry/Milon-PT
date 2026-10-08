@@ -359,9 +359,13 @@
 		sheet = { kind: 'help', exerciseId };
 	}
 
+	/** Bumped by "Ångra byten", so a reply that arrives afterwards does not swap again. */
+	let helpRound = 0;
+
 	async function ask(exerciseId: string, question: string) {
 		const state = help[exerciseId];
 		if (!session || !state || state.busy) return;
+		const round = helpRound;
 		state.busy = true;
 		state.error = null;
 		state.log.push({ role: 'user', text: question });
@@ -380,7 +384,7 @@
 			if (!res.ok) throw new Error(body?.message ?? `Servern svarade ${res.status}`);
 			state.turns.push({ role: 'user', text: question }, { role: 'assistant', text: body.reply });
 			state.log.push({ role: 'assistant', text: body.reply });
-			if (body.swap) {
+			if (body.swap && round === helpRound) {
 				const { from, to } = body.swap as { from: string; to: ExerciseInfo };
 				swap(from, to);
 				state.log.push({ role: 'event', text: `Bytte till ${to.name}` });
@@ -404,7 +408,11 @@
 		const target = templateTarget(from);
 		if (!infos.has(to.id)) swappedIn.push(to);
 		change((s) => applySwap(s, from, to, target));
-		if (session.preparing) return;
+		if (session.preparing) {
+			// Swapped back to the plan: nothing is prepared any more.
+			if (!session.deviations.length) clearActiveSession();
+			return;
+		}
 		const index = session.exercises.findIndex((e) => e.exerciseId === to.id);
 		if (index >= 0) change((s) => (s.current = index));
 	}
@@ -423,8 +431,11 @@
 	/** Back to the workout as planned: the preparation is dropped. */
 	function resetPreparation() {
 		clearActiveSession();
-		session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
+		helpRound++;
 		help = {};
+		// An older version (?v=) was kept for the swaps; without them the latest applies.
+		if (page.url.search) return location.replace(`/pass/${data.workout.slug}`);
+		session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
 	}
 
 	function startWorkout() {
