@@ -30,8 +30,9 @@
 	const greeting = $derived(page.data.firstName ? `Hej ${page.data.firstName}` : 'Hej');
 	const goal = $derived(data.week.goal);
 
+	/** A workout in progress continues on its version; a prepared one opens the latest (see the pass page). */
 	function continueHref(a: ActiveSession) {
-		return `/pass/${a.workoutSlug}?v=${a.workoutVersion}`;
+		return a.preparing ? `/pass/${a.workoutSlug}` : `/pass/${a.workoutSlug}?v=${a.workoutVersion}`;
 	}
 
 	/** The cards are plain links; if another workout is in progress we ask first. A prepared one simply gives way. */

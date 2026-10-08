@@ -102,7 +102,7 @@ describe('helper', () => {
 		expect(calls[1].system).not.toContain('{{');
 	});
 
-		it('includes earlier questions and answers in the panel', async () => {
+	it('includes earlier questions and answers in the panel', async () => {
 		const storage = await setup();
 		const { create, calls } = scripted(reply([text('Ok.')], 'end_turn'));
 		await askHelper(

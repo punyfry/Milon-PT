@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
-	import HelpPanel from '$lib/components/HelpPanel.svelte';
+	import HelpPanel, { swapQuestion } from '$lib/components/HelpPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
@@ -79,6 +79,8 @@
 			}
 			stored = null;
 		}
+		// A preparation without swaps is rebuilt, so it follows a newer version of the workout.
+		if (stored?.preparing && !stored.deviations.length && stored.workoutVersion !== data.workout.version) stored = null;
 		if (stored) {
 			// The right version and every swapped-in exercise must be loaded.
 			const missing = stored.exercises.map((e) => e.exerciseId).filter((id) => !infos.has(id));
@@ -96,8 +98,8 @@
 			session = stored;
 		} else {
 			// Every workout starts with the overview; the clock starts with "Starta passet".
+			// It is saved on the first change, so only looking at a workout leaves nothing behind.
 			session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
-			persist();
 		}
 		if (completeExpiredTimers(session, new Date())) persist();
 	});
@@ -414,9 +416,15 @@
 
 	/** From the swap list to Milon, with the swap question already asked. */
 	function askMilonToSwap(exerciseId: string) {
-		const name = infos.get(exerciseId)?.name ?? exerciseId;
 		openHelp(exerciseId);
-		void ask(exerciseId, `Jag vill byta ut ${name}. Vad kan jag göra i stället?`);
+		void ask(exerciseId, swapQuestion(infos.get(exerciseId)?.name ?? exerciseId));
+	}
+
+	/** Back to the workout as planned: the preparation is dropped. */
+	function resetPreparation() {
+		clearActiveSession();
+		session = createActiveSession(data.workout, infos, new Date(), { preparing: true });
+		help = {};
 	}
 
 	function startWorkout() {
@@ -534,8 +542,9 @@
 					<div class="actions">
 						<button class="btn small" onclick={() => (sheet = { kind: 'swap', exerciseId: e.exerciseId })}><Icon name="swap" /> Byt</button>
 						{#if ei?.instruction}
-							<button class="btn small" aria-expanded={!!showInstruction[e.exerciseId]} onclick={() => (showInstruction[e.exerciseId] = !showInstruction[e.exerciseId])}>
-								Instruktion <Icon name={showInstruction[e.exerciseId] ? 'up' : 'down'} />
+							{@const open = !!showInstruction[e.exerciseId]}
+							<button class="btn small" aria-expanded={open} onclick={() => (showInstruction[e.exerciseId] = !open)}>
+								Instruktion <Icon name={open ? 'up' : 'down'} />
 							</button>
 						{/if}
 						{#if data.helperAvailable && ei}
@@ -545,6 +554,9 @@
 				</li>
 			{/each}
 		</ol>
+		{#if session.deviations.length}
+			<button class="btn ghost full reset" onclick={resetPreparation}>Ångra byten</button>
+		{/if}
 	</main>
 	<div class="actionbar single">
 		<button class="btn primary" onclick={startWorkout}>Starta passet</button>
@@ -770,7 +782,6 @@
 			log={state.log}
 			busy={state.busy}
 			error={state.error}
-			canSwap={!isSwappedIn(id)}
 			onask={(q) => ask(id, q)}
 			onclose={() => (sheet = null)}
 		/>
@@ -1022,6 +1033,9 @@
 		display: grid;
 		gap: 2px;
 		font-size: 14px;
+	}
+	.reset {
+		margin-top: 12px;
 	}
 	.ovitem .instruction {
 		background: var(--surface-2);

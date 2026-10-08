@@ -166,9 +166,10 @@ describe('save session', () => {
 		expect(() => parseSaveSessionInput({ session: { ...active(), preparing: 'ja' }, endedAt: '2026-10-06T18:05:00+02:00' })).toThrow(
 			/preparing är ogiltig/
 		);
+		expect(() => parseSaveSessionInput({ session: { ...active(), preparing: false }, endedAt: '2026-10-06T18:05:00+02:00' })).not.toThrow();
 	});
 
-		it('rejects broken input before anything is read', () => {
+	it('rejects broken input before anything is read', () => {
 		expect(() => parseSaveSessionInput({ session: { ...active(), sessionId: '../x' }, endedAt: 'nu' })).toThrow(
 			/sessionId[\s\S]*endedAt/
 		);

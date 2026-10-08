@@ -75,6 +75,23 @@ describe('POST /api/sessions', () => {
 		expect((await call(sessions as Handler, { session: {} })).status).toBe(400);
 		expect(await state.storage.list()).toEqual([]);
 	});
+
+	it('refuses a workout that has not been started', async () => {
+		const session = {
+			preparing: true,
+			sessionId: 's_20261007',
+			workoutSlug: 'pass-a',
+			workoutVersion: 1,
+			startedAt: '2026-10-07T07:00:00+02:00',
+			lastActivityAt: '2026-10-07T07:00:00+02:00',
+			exercises: [{ exerciseId: 'ex_a', sets: [{ reps: 8, done: true }] }],
+			deviations: []
+		};
+		const res = await call(sessions as Handler, { session, endedAt: '2026-10-07T07:30:00+02:00' });
+		expect(res.status).toBe(400);
+		expect(res.body.message).toMatch(/inte startat/);
+		expect(await state.storage.list()).toEqual([]);
+	});
 });
 
 describe('POST /api/builder', () => {

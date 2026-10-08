@@ -1,16 +1,19 @@
+<script lang="ts" module>
+	/** The swap question, also sent from the swap list ("Fråga Milon om varianter"). */
+	export const swapQuestion = (name: string) => `Jag vill byta ut ${name}. Vad kan jag göra i stället?`;
+</script>
+
 <script lang="ts">
 	interface Props {
 		name: string;
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
 		busy: boolean;
 		error: string | null;
-		/** "Byt övning" is only shown if the exercise is not already swapped in. */
-		canSwap: boolean;
 		onask: (question: string) => void;
 		onclose: () => void;
 	}
 
-	let { name, log, busy, error, canSwap, onask, onclose }: Props = $props();
+	let { name, log, busy, error, onask, onclose }: Props = $props();
 	let input = $state('');
 
 	function submit(e: SubmitEvent) {
@@ -42,9 +45,7 @@
 
 <div class="quick">
 	<button type="button" class="btn small" disabled={busy} onclick={() => onask(`Ge mig mer instruktion för ${name}.`)}>Mer instruktion</button>
-	{#if canSwap}
-		<button type="button" class="btn small" disabled={busy} onclick={() => onask(`Jag vill byta ut ${name}. Vad kan jag göra i stället?`)}>Byt övning</button>
-	{/if}
+	<button type="button" class="btn small" disabled={busy} onclick={() => onask(swapQuestion(name))}>Byt övning</button>
 </div>
 
 <form onsubmit={submit}>

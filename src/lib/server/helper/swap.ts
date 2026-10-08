@@ -14,7 +14,7 @@ const nullableEnum = (values: string[], description?: string) => ({
 export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 	name: 'swap_exercise',
 	description:
-		'Byter en övning i det pågående passet mot en annan, när användaren har valt. Använd toExerciseId för en övning i katalogen; ' +
+		'Byter en övning i passet mot en annan, när användaren har valt. Använd toExerciseId för en övning i katalogen; ' +
 		'annars newExercise för att skapa en ny. Appen lägger bytet som avvikelse i passet; vikter och set ändras inte av dig.',
 	strict: true,
 	input_schema: {
@@ -77,7 +77,7 @@ export async function executeSwap(
 	if (!isObject(input)) return { ok: false, error: 'Indata måste vara ett objekt.' };
 	const inSession = new Set(session.exercises.map((e) => e.exerciseId));
 	const from = typeof input.fromExerciseId === 'string' ? input.fromExerciseId : '';
-	if (!inSession.has(from)) return { ok: false, error: `${from || 'fromExerciseId'} finns inte i det pågående passet.` };
+	if (!inSession.has(from)) return { ok: false, error: `${from || 'fromExerciseId'} finns inte i passet.` };
 
 	let to: Exercise | undefined;
 	let created = false;

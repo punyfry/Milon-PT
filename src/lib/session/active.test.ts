@@ -258,6 +258,10 @@ describe('swap candidates', () => {
 		expect(swapCandidates(catalog, s, 'weight').map((e) => e.id)).toEqual(['ex_bankpress', 'ex_hantelrodd', 'ex_sidoplanka']);
 	});
 
+	it('sorts by name only when the type is unknown', () => {
+		expect(swapCandidates(catalog, s, undefined).map((e) => e.id)).toEqual(['ex_bankpress', 'ex_hantelrodd', 'ex_sidoplanka']);
+	});
+
 	it('filters by name, ignoring case and extra spaces', () => {
 		expect(swapCandidates(catalog, s, 'weight', '  RODD ').map((e) => e.id)).toEqual(['ex_hantelrodd']);
 		expect(swapCandidates(catalog, s, 'weight', 'bänk').map((e) => e.id)).toEqual(['ex_bankpress']);
