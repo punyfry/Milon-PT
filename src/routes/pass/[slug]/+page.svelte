@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
 	import HelpPanel, { swapQuestion } from '$lib/components/HelpPanel.svelte';
@@ -239,6 +239,28 @@
 			stopWatching();
 			wakeLock.destroy();
 		};
+	});
+
+	/**
+	 * Leaving the workout page (the back button, a link, closing or reloading
+	 * the tab) cancels a running timer without saving its time. A locked screen
+	 * does not leave the page, so the timer keeps running there as before.
+	 * A timer that already ran out (the ticker may be throttled on a hidden
+	 * page) is filled in first. A session already cleared (saved or discarded)
+	 * is not written back.
+	 */
+	function cancelRunningTimers() {
+		if (!session || !anyTimerRunning(session) || !loadActiveSession()) return;
+		change((s) => {
+			completeExpiredTimers(s, new Date());
+			for (const e of s.exercises) for (const set of e.sets) if (isTimerRunning(set)) cancelTimer(set);
+		});
+	}
+	beforeNavigate(cancelRunningTimers);
+	onMount(() => {
+		// beforeunload is unreliable on phones; pagehide also covers closing the tab there.
+		addEventListener('pagehide', cancelRunningTimers);
+		return () => removeEventListener('pagehide', cancelRunningTimers);
 	});
 
 	function runningSet(): { set: ActiveSet; exIndex: number; setIndex: number } | null {
