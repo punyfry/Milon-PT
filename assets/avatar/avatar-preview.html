@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Milon avatar</title>
+	<style>
+		:root { --bg: #0a0a0b; --surface: #121214; --surface-2: #1b1b1e; --text: #f2f2f0; --muted: #8e8e94; --line: rgba(255, 255, 255, 0.08); --accent: #5eead4; }
+		.light { --bg: #f3f2ee; --surface: #ffffff; --surface-2: #e8e7e2; --text: #18181a; --muted: #66655f; --line: rgba(0, 0, 0, 0.08); --accent: #0d6b63; }
+		* { box-sizing: border-box; }
+		body { margin: 0; background: #0a0a0b; color: #f2f2f0; font: 14px/1.5 system-ui, sans-serif; }
+		.theme { background: var(--bg); color: var(--text); padding: 24px 20px; }
+		h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+		h2 { font-size: 15px; font-weight: 500; margin: 0 0 2px; }
+		p { color: var(--muted); margin: 0 0 16px; }
+		section { border-top: 1px solid var(--line); padding: 20px 0; }
+		.row { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; }
+		figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+		figcaption { color: var(--muted); font: 12px ui-monospace, monospace; }
+		svg { display: block; color: var(--accent); overflow: visible; }
+		.disc { border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; }
+		.chat { display: flex; gap: 10px; align-items: flex-start; max-width: 340px; }
+		.bubble { background: var(--surface); border-radius: 14px; padding: 8px 12px; color: var(--text); }
+		/* Thinking: the eyes move like an equalizer, the mouth steps back. */
+		.eye { transform-box: fill-box; transform-origin: center; }
+		.thinking .eye { animation: eq 1.2s ease-in-out infinite; }
+		.thinking .eye-r { animation-delay: -0.4s; }
+		.thinking .eye-m { animation-delay: -0.8s; }
+		.thinking .mouth { opacity: 0.35; transition: opacity 0.3s; }
+		@keyframes eq { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.45); } }
+		@media (prefers-reduced-motion: reduce) { .thinking .eye { animation: none; } }
+	</style>
+</head>
+<body>
+	<div id="out"></div>
+	<script>
+		// Copies of the symbols in milon-a/b/c.svg.
+		const AVATARS = {
+			a: { desc: 'Eyes: two short plates. Mouth: the V from the logo.', body: '<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path class="eye eye-l" d="M30 26V46" /><path class="eye eye-r" d="M66 26V46" /><path class="mouth" d="M34 62L48 74L62 62" /></g>' },
+			b: { desc: 'Eyes: two short plates. Mouth: the soft bend (bar under load).', body: '<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path class="eye eye-l" d="M30 28V44" /><path class="eye eye-r" d="M66 28V44" /><path class="mouth" d="M30 62Q48 80 66 62" /></g>' },
+			c: { desc: 'Three plates as eyes and nose, a flat line as mouth. Most abstract.', body: '<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path class="eye eye-l" d="M28 32V52" /><path class="eye eye-m" d="M48 22V60" /><path class="eye eye-r" d="M68 32V52" /><path class="mouth" d="M36 74H60" /></g>' }
+		};
+		const svg = (v, size, state = '') => `<svg class="${state}" viewBox="0 0 96 96" width="${size}" height="${size}" role="img" aria-label="Milon">${AVATARS[v].body}</svg>`;
+		const disc = (v, size, state = '') => `<div class="disc" style="width:${size}px;height:${size}px">${svg(v, size * 0.8, state)}</div>`;
+		const fig = (inner, cap) => `<figure>${inner}<figcaption>${cap}</figcaption></figure>`;
+		const theme = (cls, title) => `<div class="theme ${cls}"><h1>${title}</h1><p>Intro size, chat size (28 px) in a circle and on its own, resting and thinking.</p>` +
+			Object.keys(AVATARS).map((v) => `<section><h2>Milon ${v.toUpperCase()}</h2><p>${AVATARS[v].desc}</p>
+				<div class="row">
+					${fig(svg(v, 120), 'intro')}${fig(svg(v, 120, 'thinking'), 'intro, thinking')}
+					${fig(disc(v, 28), 'chat')}${fig(disc(v, 28, 'thinking'), 'chat, thinking')}
+					${fig(svg(v, 28), 'alone 28')}
+					<div class="chat">${disc(v, 28, 'thinking')}<div class="bubble">Jag lägger upp ett överkroppspass…</div></div>
+				</div></section>`).join('') + '</div>';
+		document.getElementById('out').innerHTML = theme('', 'Milon avatar, dark') + theme('light', 'Milon avatar, light');
+	</script>
+</body>
+</html>
