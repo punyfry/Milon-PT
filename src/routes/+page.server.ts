@@ -46,9 +46,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		cards,
 		today,
-		// Counted like the history page: sessions plus days with only imported log entries.
 		week: {
 			number: isoWeek(weekStart),
+			// Counted like the history page: sessions plus days with only imported log entries.
 			sessions: weekSummary(weekStart, exercises.map((e) => e.data), weekSessions).sessionCount,
 			goal: profile.data.weeklySessionGoal ?? null
 		}

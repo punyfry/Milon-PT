@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createExercise, createSession, prependLogEntry, saveWorkoutVersion } from '$lib/server/data';
+import { createExercise, createSession, getProfile, prependLogEntry, saveProfile, saveWorkoutVersion } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -18,11 +18,17 @@ beforeEach(async () => {
 	state.storage = new MemoryUserStorage('u1');
 	const s = state.storage;
 	await createExercise(s, { name: 'Dips', type: 'bodyweight', instruction: '' });
+	await createExercise(s, { name: 'Plankan', type: 'time', instruction: '' });
+	const profile = await getProfile(s);
+	await saveProfile(s, { ...profile.data, weeklySessionGoal: 3 }, profile.version);
 	await saveWorkoutVersion(s, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-01', exercises: [{ exerciseId: 'ex_dips', sets: 2, target: { reps: 8 } }] });
-	// A saved session on Monday, an imported entry without a session on Wednesday, and one last week.
+	// A saved session on Monday plus an imported entry the same day, imported entries from two exercises on
+	// Wednesday, and one last week: two sessions this week.
 	await prependLogEntry(s, 'ex_dips', { date: '2026-10-02', sets: [{ reps: 5 }] });
 	await prependLogEntry(s, 'ex_dips', { sessionId: 's_20261005', date: '2026-10-05', sets: [{ reps: 8 }] });
 	await prependLogEntry(s, 'ex_dips', { date: '2026-10-07', sets: [{ reps: 6 }] });
+	await prependLogEntry(s, 'ex_plankan', { date: '2026-10-05', sets: [{ seconds: 30 }] });
+	await prependLogEntry(s, 'ex_plankan', { date: '2026-10-07', sets: [{ seconds: 40 }] });
 	await createSession(s, {
 		id: 's_20261005',
 		workoutSlug: 'pass-a',
@@ -36,7 +42,7 @@ beforeEach(async () => {
 
 describe('start page load', () => {
 	it('counts the week like the history page: sessions plus days with only imported entries (#39)', async () => {
-		const data = (await load({ locals: { user: { id: 'u1' } } } as never)) as { week: { number: number; sessions: number } };
-		expect(data.week).toMatchObject({ number: 41, sessions: 2 });
+		const data = (await load({ locals: { user: { id: 'u1' } } } as never)) as { week: { number: number; sessions: number; goal: number } };
+		expect(data.week).toEqual({ number: 41, sessions: 2, goal: 3 });
 	});
 });
