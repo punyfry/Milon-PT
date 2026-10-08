@@ -39,7 +39,7 @@ The owner asks for one of the two modes below. If the context does not make it c
    - what is wrong and why it matters to the user (what they see, what they cannot do or understand),
    - a concrete proposal (specific tokens, sizes, copy), plus alternatives if there are any,
    - how to verify it is fixed,
-   - screenshots: describe precisely what you saw, and never commit screenshots to the repo.
+   - screenshots: describe precisely what you saw (issues get no images, and screenshots are never committed to the repo for an issue).
 6. **Clean up**: stop servers, `rm -rf .data`, remove temporary files (keep them in the scratchpad or `/tmp`, never in the repo) and check that `git status` is clean.
 7. **Report** briefly: the issues created (numbers and titles), the issues you are waiting on a decision for, and anything that was fine and worth keeping.
 
@@ -47,5 +47,8 @@ The owner asks for one of the two modes below. If the context does not make it c
 
 1. List the open issues labelled `ui/ux` or `accessibility`: `gh issue list --label "ui/ux" --state open` (and `accessibility`). If the owner named an issue, take that one.
 2. If the issue describes a clear solution, implement it as described. If it has open choices, or you think the described solution is wrong, work out the solution with the owner in the chat first.
-3. Follow the `deliver` skill for the rest: branch, local checks, PR (with `Closes #<number>`), review by `gregory` and `nissa` in parallel, fixes, merge. In addition, before and after the change, take screenshots in dark and light mode at 390x844 and compare them. Tell `nissa` which screens and states to check visually.
+3. Follow the `deliver` skill for the rest: branch, local checks, PR (with `Closes #<number>`), review by `gregory` and `nissa` in parallel, fixes, merge. In addition, take screenshots before and after the change (same screen, state and made-up data), in dark and light mode at 390x844, and compare them. Tell `nissa` which screens and states to check visually.
+   - **Screenshots go in the PR description** as a before/after table (one row per screen and theme). Commit the images to the PR branch under `pr-screenshots/<short-name>/`, using made-up data only, and push. Link them with URLs pinned to that commit (`https://github.com/punyfry/milon-pt/blob/<commit-sha>/pr-screenshots/<short-name>/<file>.png?raw=true`) so they keep rendering after the files are removed.
+   - Retake and re-push the screenshots if later fixes change the UI, and update the links.
+   - **Remove `pr-screenshots/` in a final commit before the squash-merge**, so the images never reach `main`.
 4. If you find something new while working, open a separate issue (see mode 1) instead of widening the PR.
