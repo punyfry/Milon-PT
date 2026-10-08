@@ -65,4 +65,14 @@ describe('restore workout version', () => {
 		expect((await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08'))!.version).toBe(3);
 		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBeUndefined();
 	});
+
+	it('refuses to bring back a deleted exercise whose name a new one has taken', async () => {
+		const storage = await setup();
+		await deleteExercise(storage, 'ex_plankan');
+		await createExercise(storage, { name: 'plankan', type: 'bodyweight', instruction: '' });
+		await expect(restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08')).rejects.toThrow(
+			'Övningen Plankan togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.'
+		);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+	});
 });

@@ -3,6 +3,7 @@ import type { ActiveSession } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
 import {
 	createExercise,
+	deleteExercise,
 	deleteSessionRecord,
 	getExercise,
 	getSession,
@@ -175,6 +176,21 @@ describe('save session', () => {
 		const again = await saveSession(storage, input(active({ startedAt: '2026-10-06T19:00:00+02:00' })));
 		expect(again).toEqual({ sessionId: 's_20261006_2', alreadySaved: true });
 		expect(await listSessionIds(storage)).toHaveLength(2);
+	});
+
+	it('brings back a deleted exercise when the deviations are saved as a new version (#46)', async () => {
+		const storage = await setup();
+		// v2 drops Plankan, which is then deleted while a session on v1 is in progress.
+		const v1 = (await listLatestWorkouts(storage))[0];
+		await saveWorkoutVersion(storage, { ...v1, createdAt: '2026-10-02', exercises: v1.exercises.filter((e) => e.exerciseId !== 'ex_plankan') });
+		await deleteExercise(storage, 'ex_plankan');
+
+		const session = active({ deviations: [{ type: 'swap', from: 'ex_hantelpress', to: 'ex_armhavning' }] });
+		session.exercises[1] = { exerciseId: 'ex_armhavning', sets: [{ reps: 12, done: true }] };
+		const saved = await saveSession(storage, input(session, { saveAsNewVersion: true }));
+		expect(saved.newWorkoutVersion).toBe(3);
+		expect((await listLatestWorkouts(storage))[0].exercises.map((e) => e.exerciseId)).toContain('ex_plankan');
+		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBeUndefined();
 	});
 
 	it('refuses to save without done sets or with sets of the wrong type', async () => {

@@ -1,6 +1,6 @@
-import { targetMatchesType, type WorkoutTemplate } from '../../model';
+import { findSameExercise, targetMatchesType, type WorkoutTemplate } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { getExercise, saveExercise } from './exercises';
+import { getExercise, listExercises, undeleteExercise } from './exercises';
 import { getWorkout, saveWorkoutVersion } from './workouts';
 
 /** The version can't be restored as it is; the message is shown to the user. */
@@ -39,12 +39,19 @@ export async function restoreWorkoutVersion(
 				: `Övningarna ${names} har bytt typ sedan den här versionen.`
 		);
 	}
-	for (const stored of exercises) {
-		if (stored?.data.deleted) {
-			const { deleted: _, ...active } = stored.data;
-			await saveExercise(storage, active, stored.version);
+	// A deleted exercise comes back, unless a new active one has taken its name since (#46).
+	const deleted = [...new Map(exercises.filter((e) => e?.data.deleted).map((e) => [e!.data.id, e!])).values()];
+	if (deleted.length) {
+		const active = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
+		const clash = deleted.filter((d) => findSameExercise(active, d.data));
+		if (clash.length) {
+			const names = clash.map((d) => d.data.name).join(', ');
+			throw new WorkoutRestoreError(
+				`${clash.length === 1 ? 'Övningen' : 'Övningarna'} ${names} togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.`
+			);
 		}
 	}
+	for (const stored of deleted) await undeleteExercise(storage, stored);
 	return saveWorkoutVersion(storage, {
 		slug: old.slug,
 		name: old.name,

@@ -28,7 +28,7 @@ import {
 	type WorkoutTemplate
 } from '../../model';
 import type { UserStorage } from '../storage/types';
-import { findOrCreateExercise, getExercise, listExercises, prependLogEntry } from './exercises';
+import { findOrCreateExercise, getExercise, listExercises, prependLogEntry, undeleteExercise } from './exercises';
 import { createSession, getSession, listSessionIds, sessionIdDate } from './sessions';
 import { getLatestWorkout, getWorkout, saveWorkoutVersion } from './workouts';
 
@@ -298,6 +298,11 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 				}
 			}
 			const name = (id: string) => names.get(id) ?? id;
+			// The base version may use an exercise deleted since; the new latest version brings it back (#46).
+			for (const id of new Set(next.map((e) => e.exerciseId))) {
+				const stored = await getExercise(storage, id);
+				if (stored?.data.deleted) await undeleteExercise(storage, stored);
+			}
 			const saved = await saveWorkoutVersion(storage, {
 				slug: base.slug,
 				name: base.name,

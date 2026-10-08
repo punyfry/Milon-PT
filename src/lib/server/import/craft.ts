@@ -290,6 +290,9 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 	const versions = new Map(existing.exercises.map((e) => [e.data.id, e.version]));
 	const takenIds = new Set(existing.exercises.map((e) => e.data.id));
 
+	// A deleted exercise that an imported workout uses comes back (as when a workout version is restored),
+	// so no workout ends up using a deleted exercise (#46).
+	const usedByWorkouts = new Set(input.workouts.flatMap((w) => w.exercises.map((x) => normalizeName(x.name))));
 	const exercisePlans: ExercisePlan[] = [];
 	for (const imp of input.exercises) {
 		const current = byName.get(normalizeName(imp.name));
@@ -318,6 +321,10 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		if (!current.instruction && imp.instruction) {
 			updated.instruction = imp.instruction;
 			changes.push('instruktion');
+		}
+		if (current.deleted && usedByWorkouts.has(normalizeName(imp.name))) {
+			delete updated.deleted;
+			changes.push('återställd');
 		}
 		// New entries are added; existing identical entries get a note and session link if missing.
 		let added = 0;
@@ -349,6 +356,14 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 				? { action: 'update', exercise: updated, version: versions.get(current.id)!, addedLogEntries: added, changes }
 				: { action: 'unchanged', exercise: current }
 		);
+	}
+
+	for (const key of usedByWorkouts) {
+		const ex = byName.get(key);
+		if (!ex?.deleted || exercisePlans.some((p) => p.exercise.id === ex.id)) continue;
+		const { deleted: _, ...active } = ex;
+		byName.set(key, active);
+		exercisePlans.push({ action: 'update', exercise: active, version: versions.get(ex.id)!, addedLogEntries: 0, changes: ['återställd'] });
 	}
 
 	// 3. Workouts.

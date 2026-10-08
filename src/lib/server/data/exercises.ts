@@ -140,6 +140,12 @@ export async function deleteExercise(storage: UserStorage, id: string): Promise<
 	await saveExercise(storage, { ...current.data, deleted: true }, current.version);
 }
 
+/** Brings back a deleted exercise, e.g. when a workout version that uses it is saved again. */
+export async function undeleteExercise(storage: UserStorage, stored: StoredJson<Exercise>): Promise<void> {
+	const { deleted: _, ...active } = stored.data;
+	await saveExercise(storage, active, stored.version);
+}
+
 /**
  * Changes an exercise's name, type and instruction (`input` as typed by the
  * user). The type is locked as `typeLockReason` says, and the name may not be taken by another active exercise of the same
