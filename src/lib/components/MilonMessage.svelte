@@ -12,7 +12,7 @@
 </script>
 
 <div class="from-milon">
-	<MilonAvatar framed {thinking} />
+	<span class="sender"><MilonAvatar framed {thinking} /></span>
 	<div class="bubble" class:thinking>{@render children()}</div>
 </div>
 
@@ -26,6 +26,11 @@
 		gap: 8px;
 		max-width: 92%;
 		min-width: 0;
+	}
+	/* Centred on the bubble's first line of text. */
+	.sender {
+		display: flex;
+		margin-top: 7px;
 	}
 	.bubble {
 		min-width: 0;

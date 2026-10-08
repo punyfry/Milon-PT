@@ -78,7 +78,7 @@
 	</form>
 {:else}
 {#if onaskmilon}
-	<button type="button" class="btn full" onclick={onaskmilon}><MilonAvatar size={20} /> Fråga Milon om varianter eller nya övningar</button>
+	<button type="button" class="btn full" onclick={onaskmilon}><MilonAvatar size={20} tight /> Fråga Milon om varianter eller nya övningar</button>
 {/if}
 
 <input type="search" bind:value={query} placeholder="Sök bland dina övningar" aria-label="Sök övning" enterkeyhint="search" />

@@ -9,12 +9,14 @@
 		/** In a circle, as the sender in a chat. */
 		framed?: boolean;
 		thinking?: boolean;
+		/** Cropped to the face, as an icon next to text (the drawing leaves wide margins for the circle). */
+		tight?: boolean;
 	}
-	let { size = 28, framed = false, thinking = false }: Props = $props();
+	let { size = 28, framed = false, thinking = false, tight = false }: Props = $props();
 </script>
 
 <span class="avatar" class:framed style:--size="{size}px" aria-hidden="true">
-	<svg viewBox="0 0 96 96" class:blink={thinking}>
+	<svg viewBox={tight ? '17 19 62 62' : '0 0 96 96'} class:blink={thinking}>
 		<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
 			<path class="eye eye-l" d="M30 26V46" />
 			<path class="eye eye-r" d="M66 26V46" />

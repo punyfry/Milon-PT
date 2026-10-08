@@ -599,7 +599,7 @@
 							</button>
 						{/if}
 						{#if data.helperAvailable && ei}
-							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><MilonAvatar size={20} /> Fråga Milon</button>
+							<button class="btn small" onclick={() => openHelp(e.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon</button>
 						{/if}
 					</div>
 				</li>
@@ -659,7 +659,7 @@
 					<button class="btn small" onclick={() => guard(() => (sheet = { kind: 'swap', exerciseId: ex.exerciseId }))}><Icon name="swap" /> Byt</button>
 					<button class="btn small" aria-haspopup="dialog" onclick={() => openNote(cur)}><Icon name="note" /> Anteckning</button>
 					{#if data.helperAvailable}
-						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><MilonAvatar size={20} /> Fråga Milon</button>
+						<button class="btn small" onclick={() => openHelp(ex.exerciseId)}><MilonAvatar size={20} tight /> Fråga Milon</button>
 					{/if}
 				</div>
 				{#if showInstruction[ex.exerciseId]}<p class="instruction">{info.instruction}</p>{/if}
