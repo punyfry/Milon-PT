@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { ActiveSet, WorkoutTemplate } from '$lib/model';
 import {
 	addSet,
-	adjust,
 	applySwap,
 	cancelTimer,
 	completeExpiredTimers,
@@ -25,7 +24,6 @@ const deadlift: ExerciseInfo = {
 	id: 'ex_marklyft',
 	name: 'Marklyft',
 	type: 'weight',
-	loadClass: 'heavy',
 	instruction: '',
 	lastEntry: { sessionId: 's_1', date: '2026-10-01', sets: [{ weight: 40, reps: 8 }, { weight: 42.5, reps: 6 }] }
 };
@@ -72,22 +70,6 @@ describe('active session', () => {
 	it('never prefills with fields of the wrong type', () => {
 		const odd: ExerciseInfo = { ...pullup, lastEntry: { date: '2026-10-01', sets: [{ weight: 10, reps: 7 }] } };
 		expect(prefillSets(odd, 1)).toEqual([{ reps: 7, done: false }]);
-	});
-
-	it('steps weight by loadClass, reps by 1 and time by 5 s, never below zero', () => {
-		const heavy = { weight: 40, reps: 8, done: false };
-		adjust(heavy, 'weight', 1, 'heavy');
-		adjust(heavy, 'reps', -1);
-		expect(heavy).toMatchObject({ weight: 45, reps: 7 });
-		const light = { weight: 10, reps: 8, done: false };
-		adjust(light, 'weight', 1, 'light');
-		adjust(light, 'weight', 1, 'light');
-		expect(light.weight).toBe(12.5);
-		const time = { seconds: 3, done: false };
-		adjust(time, 'seconds', -1);
-		expect(time.seconds).toBe(0);
-		adjust(time, 'seconds', 1);
-		expect(time.seconds).toBe(5);
 	});
 
 	it('sets typed values and ignores invalid ones', () => {
@@ -141,7 +123,7 @@ describe('active session', () => {
 		const edited: ActiveSet[] = [{ seconds: 30, done: false }];
 		startTimer(edited[0], new Date(0));
 		stopTimer(edited[0], new Date(10_000));
-		adjust(edited[0], 'seconds', 1);
+		setField(edited[0], 'seconds', 15);
 		addSet(edited, 'time');
 		expect(edited[1]).toEqual({ seconds: 15, done: false });
 
@@ -222,7 +204,7 @@ describe('timer', () => {
 		const stepped: ActiveSet = { seconds: 30, done: false };
 		startTimer(stepped, t0);
 		stopTimer(stepped, at(5));
-		adjust(stepped, 'seconds', 1);
+		setField(stepped, 'seconds', 10);
 		expect(stepped).toEqual({ seconds: 10, done: true });
 		expect(timerStartSeconds(stepped)).toBe(10);
 

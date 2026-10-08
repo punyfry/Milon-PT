@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
-import { createExercise, prependLogEntry } from '$lib/server/data';
+import { createExercise, prependLogEntry, saveProfile } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -20,6 +20,7 @@ const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
+const { POST: workouts } = await import('./workouts/+server');
 const { PUT: editSessionHandler, DELETE: deleteSessionHandler } = await import('./sessions/[id]/+server');
 
 type Handler = (event: never) => Promise<Response>;
@@ -162,6 +163,15 @@ describe('POST /api/builder', () => {
 		expect((await call(builder as Handler, { message: 'Hej' })).status).toBe(503);
 	});
 
+	it('responds 403 when the user has turned Milon off, without counting or calling Claude', async () => {
+		await saveProfile(state.storage, { coach: false });
+		const res = await call(builder as Handler, { message: 'Hej' });
+		expect(res.status).toBe(403);
+		expect(res.body.message).toMatch(/Milon är avstängd/);
+		expect(await state.storage.list('usage/')).toEqual([]);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
 	it('stops at the daily limit without calling Claude', async () => {
 		env.AI_DAILY_LIMIT = '0';
 		const res = await call(builder as Handler, { message: 'Hej' });
@@ -172,6 +182,13 @@ describe('POST /api/builder', () => {
 });
 
 describe('POST /api/helper', () => {
+	it('responds 403 when the user has turned Milon off', async () => {
+		await saveProfile(state.storage, { coach: false });
+		const res = await call(helper as Handler, { question: 'Hur?' });
+		expect(res.status).toBe(403);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
 	it('rejects invalid questions and stops at the daily limit', async () => {
 		expect((await call(helper as Handler, { question: '' })).status).toBe(400);
 		const session = {
@@ -187,5 +204,17 @@ describe('POST /api/helper', () => {
 		const res = await call(helper as Handler, { session, exerciseId: 'ex_planka', question: 'Hur?' });
 		expect(res.status).toBe(429);
 		expect(createMessage).not.toHaveBeenCalled();
+	});
+});
+
+describe('POST /api/workouts', () => {
+	it('saves a workout built by hand and answers 400 with messages for the user', async () => {
+		await createExercise(state.storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		const ok = await call(workouts as Handler, { name: 'Pass C', items: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }] });
+		expect(ok).toEqual({ status: 200, body: { slug: 'pass-c', version: 1, saved: true } });
+		const bad = await call(workouts as Handler, { name: '', items: [] });
+		expect(bad.status).toBe(400);
+		expect(bad.body.message).toBe('Passet behöver ett namn. Passet behöver minst en övning.');
+		expect((await call(workouts as Handler, 'inte json')).status).toBe(400);
 	});
 });

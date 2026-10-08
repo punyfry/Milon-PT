@@ -10,9 +10,6 @@
 
 export type ExerciseType = 'weight' | 'bodyweight' | 'time';
 
-/** `light` = 1.25 kg steps, `heavy` = 5 kg steps. Only for `weight`. */
-export type LoadClass = 'light' | 'heavy';
-
 export interface WeightSet {
 	weight: number;
 	reps: number;
@@ -39,8 +36,6 @@ export interface Exercise {
 	id: string;
 	name: string;
 	type: ExerciseType;
-	/** Only present when `type` is `weight`. */
-	loadClass?: LoadClass;
 	instruction: string;
 	archived: boolean;
 	/** Newest entry first. "Last time" is `log[0]`. */
@@ -97,6 +92,8 @@ export interface KcalRange {
 }
 
 export interface Profile {
+	/** Whether Milon, the AI coach, is on. Missing means on. */
+	coach?: boolean;
 	/** Free-text goals. */
 	goals?: string;
 	/** Sessions per week, for the week view. */
@@ -130,6 +127,20 @@ export type ActiveSet = ExerciseSet & {
 	plannedSeconds?: number;
 };
 
+/**
+ * An exercise written in by hand during the session. It has a temporary id
+ * (`new_…`) and is created when the session is saved, so it works offline.
+ */
+export interface NewSessionExercise {
+	id: string;
+	name: string;
+	type: ExerciseType;
+	instruction: string;
+}
+
+/** Most exercises written in per session. */
+export const MAX_NEW_EXERCISES = 20;
+
 /** Active session in localStorage under the key `milonpt.activeSession`. */
 export interface ActiveSession {
 	sessionId: string;
@@ -140,6 +151,8 @@ export interface ActiveSession {
 	/** `note` is the user's note for the exercise today, saved with its log entry. */
 	exercises: { exerciseId: string; sets: ActiveSet[]; note?: string }[];
 	deviations: Deviation[];
+	/** Exercises written in during the session; see `NewSessionExercise`. */
+	newExercises?: NewSessionExercise[];
 	/** Index of the exercise shown, so a paused workout resumes where it was. */
 	current?: number;
 	/**
@@ -153,7 +166,3 @@ export interface ActiveSession {
 export const NOTE_MAX = 1000;
 
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';
-
-export const LOAD_STEP_KG: Record<LoadClass, number> = { light: 1.25, heavy: 5 };
-/** Step for timed exercises (±5 s). */
-export const TIME_STEP_SECONDS = 5;

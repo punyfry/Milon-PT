@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { assertValid, validateExercise, validateSession, validateWorkout, ValidationError } from './validate';
+import { coachEnabled } from './profile';
+import { assertValid, issueText, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
 	name: 'Marklyft',
 	type: 'weight',
-	loadClass: 'heavy',
 	instruction: 'Stång över mellanfoten.',
 	archived: false,
 	log: [{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 40, reps: 8 }] }]
@@ -47,9 +47,9 @@ describe('validation', () => {
 		expect(() => assertValid('övning', bad, validateExercise)).toThrow(/log\[0\]\.sets\[0\]\.weight/);
 	});
 
-	it('requires loadClass for weight and collects all issues', () => {
+	it('collects all issues', () => {
 		try {
-			assertValid('övning', { ...deadlift, loadClass: undefined, archived: 'nej', id: 'ex marklyft' }, validateExercise);
+			assertValid('övning', { ...deadlift, name: '', archived: 'nej', id: 'ex marklyft' }, validateExercise);
 			expect.unreachable();
 		} catch (e) {
 			expect(e).toBeInstanceOf(ValidationError);
@@ -57,8 +57,35 @@ describe('validation', () => {
 		}
 	});
 
+	it('drops the old loadClass field', () => {
+		const result = assertValid('övning', { ...deadlift, loadClass: 'heavy' }, validateExercise);
+		expect(result).not.toHaveProperty('loadClass');
+	});
+
 	it('strips unknown fields', () => {
 		const result = assertValid('övning', { ...deadlift, extra: 1 }, validateExercise);
 		expect(result).not.toHaveProperty('extra');
+	});
+});
+
+describe('profile', () => {
+	it('keeps the coach setting and rejects anything but a boolean', () => {
+		expect(assertValid('profil', { coach: false }, validateProfile)).toEqual({ coach: false });
+		expect(assertValid('profil', {}, validateProfile)).toEqual({});
+		expect(() => assertValid('profil', { coach: 'nej' }, validateProfile)).toThrow(/coach/);
+	});
+
+	it('treats a missing setting as on', () => {
+		expect(coachEnabled({})).toBe(true);
+		expect(coachEnabled({ coach: true })).toBe(true);
+		expect(coachEnabled({ coach: false })).toBe(false);
+	});
+});
+
+describe('issue text for the user', () => {
+	it('drops the path, starts with a capital letter and ends with a period', () => {
+		expect(issueText('name: övningen behöver ett namn')).toBe('Övningen behöver ett namn.');
+		expect(issueText('exercises[2].log[0].sets[1].reps: måste vara ett heltal')).toBe('Måste vara ett heltal.');
+		expect(issueText('Passet finns inte längre.')).toBe('Passet finns inte längre.');
 	});
 });

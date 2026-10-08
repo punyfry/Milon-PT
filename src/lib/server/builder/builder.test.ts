@@ -10,7 +10,7 @@ const TODAY = '2026-10-06';
 
 async function setup() {
 	const storage = new MemoryUserStorage('u1');
-	await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: 'Rak rygg.' });
+	await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: 'Rak rygg.' });
 	await createExercise(storage, { name: 'Plankan', type: 'time', instruction: '' });
 	return storage;
 }
@@ -39,7 +39,6 @@ const newExercise = {
 	existingId: null,
 	name: 'Hantelrodd',
 	type: 'weight',
-	loadClass: 'light',
 	instruction: 'Stöd mot bänk.\nDra armbågen bakåt.',
 	sets: 3,
 	target: { reps: 10, seconds: null }
@@ -55,7 +54,7 @@ describe('system prompt', () => {
 			{ slug: 'pass-a', name: 'Pass A', version: 2, createdAt: TODAY, exercises: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }] }
 		);
 		expect(prompt).toContain('Mål: Bli starkare $& snabbt\n- Max 45 min');
-		expect(prompt).toContain('ex_marklyft | Marklyft | weight | heavy');
+		expect(prompt).toContain('ex_marklyft | Marklyft | weight');
 		expect(prompt).toContain('Pass A (version 2)\n1. Marklyft (ex_marklyft): 3 set × 8 reps');
 		expect(buildSystemPrompt({}, [], null)).toContain('(inga angivna)');
 	});
@@ -68,7 +67,7 @@ describe('tools', () => {
 
 		const created = await executeTool(storage, state, 'propose_exercise', newExercise, TODAY);
 		expect(created).toMatchObject({ isError: false, event: 'Lade till Hantelrodd: 3 set × 10 reps (ny övning)' });
-		expect((await getExercise(storage, 'ex_hantelrodd'))!.data).toMatchObject({ type: 'weight', loadClass: 'light' });
+		expect((await getExercise(storage, 'ex_hantelrodd'))!.data).toMatchObject({ type: 'weight' });
 
 		// The same name again updates the set instead of creating a duplicate.
 		const again = await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'hantelrodd', sets: 4 }, TODAY);
@@ -87,7 +86,6 @@ describe('tools', () => {
 		const state: BuilderState = { editingSlug: null, draft: [] };
 		const bad = async (input: unknown) => (await executeTool(storage, state, 'propose_exercise', input, TODAY)).content;
 		expect(await bad({ ...newExercise, existingId: 'ex_finns_inte' })).toMatch(/ingen övning med id/);
-		expect(await bad({ ...newExercise, loadClass: null })).toMatch(/loadClass/);
 		expect(await bad({ ...newExercise, existingId: 'ex_plankan' })).toMatch(/seconds/);
 		expect(await bad({ ...newExercise, target: { reps: 8, seconds: 30 } })).toMatch(/antingen reps eller seconds/);
 		expect(state.draft).toEqual([]);

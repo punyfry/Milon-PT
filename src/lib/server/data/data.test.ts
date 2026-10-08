@@ -10,6 +10,7 @@ import {
 	getProfile,
 	listLatestWorkouts,
 	prependLogEntry,
+	updateExerciseDetails,
 	saveExercise,
 	saveProfile,
 	saveWorkoutVersion
@@ -18,8 +19,8 @@ import {
 describe('data layer', () => {
 	it('creates exercises with unique ids', async () => {
 		const storage = new MemoryUserStorage('u1');
-		const a = await createExercise(storage, { name: 'Marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
-		const b = await createExercise(storage, { name: 'marklyft', type: 'weight', loadClass: 'heavy', instruction: '' });
+		const a = await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		const b = await createExercise(storage, { name: 'marklyft', type: 'weight', instruction: '' });
 		expect(a.data.id).toBe('ex_marklyft');
 		expect(b.data.id).toBe('ex_marklyft_2');
 		expect((await getExercise(storage, 'ex_marklyft'))?.data.name).toBe('Marklyft');
@@ -99,5 +100,33 @@ describe('sessions', () => {
 			'pass-a': '2026-10-06T18:00:00+02:00',
 			'pass-b': '2026-09-29T08:00:00+02:00'
 		});
+	});
+});
+
+describe('editing exercise details', () => {
+	it('changes name, type and instruction, and keeps the log', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		const { data } = await updateExerciseDetails(storage, 'ex_rodd', { name: ' Hantelrodd ', type: 'bodyweight', instruction: ' Rak rygg. ' });
+		expect(data).toMatchObject({ id: 'ex_rodd', name: 'Hantelrodd', type: 'bodyweight', instruction: 'Rak rygg.', log: [] });
+	});
+
+	it('locks the type once sets are logged and refuses a name already taken', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		await createExercise(storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		await prependLogEntry(storage, 'ex_rodd', { date: '2026-10-06', sets: [{ weight: 20, reps: 8 }] });
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'time', instruction: '' })).rejects.toThrow(/Typen går inte/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'marklyft', type: 'weight', instruction: '' })).rejects.toThrow(/redan en övning/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: '', type: 'weight' })).rejects.toThrow(/Övningen behöver ett namn\./);
+		await expect(updateExerciseDetails(storage, 'ex_saknas', { name: 'X', type: 'weight' })).rejects.toThrow(/finns inte/);
+	});
+
+	it('locks the type while a workout uses the exercise', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-01', exercises: [{ exerciseId: 'ex_rodd', sets: 3, target: { reps: 8 } }] });
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'time' })).rejects.toThrow(/finns i ett pass \(Pass A\)/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd 2', type: 'weight' })).resolves.toBeTruthy();
 	});
 });

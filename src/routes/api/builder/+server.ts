@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { error, json } from '@sveltejs/kit';
-import { isObject } from '$lib/model';
-import { assertAiCallsLeft, builderModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
+import { coachEnabled, isObject } from '$lib/model';
+import { COACH_OFF_MESSAGE, assertAiCallsLeft, builderModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
 import { AiLimitError } from '$lib/server/ai/usage';
 import {
 	conversationView,
@@ -11,6 +11,7 @@ import {
 	startConversation,
 	type BuilderConversation
 } from '$lib/server/builder/conversation';
+import { getProfile } from '$lib/server/data';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { RequestHandler } from './$types';
@@ -24,6 +25,7 @@ const MAX_MESSAGE = 2000;
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
 	if (!isAiConfigured()) error(503, 'ANTHROPIC_API_KEY saknas på servern');
+	if (!coachEnabled((await getProfile(storage)).data)) error(403, COACH_OFF_MESSAGE);
 
 	const body: unknown = await request.json().catch(() => null);
 	if (!isObject(body)) error(400, 'Ogiltig JSON');

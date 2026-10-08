@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
+import { coachEnabled, type Profile } from '../../model';
 import type { CreateMessage } from './models';
 import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls } from './usage';
 import type { UserStorage } from '../storage/types';
@@ -22,6 +23,13 @@ export function helperModel(): string {
 export function isAiConfigured(): boolean {
 	return Boolean(env.ANTHROPIC_API_KEY);
 }
+
+/** Milon can be used: the API key is set and the user has not turned him off. */
+export function aiAvailable(profile: Profile): boolean {
+	return isAiConfigured() && coachEnabled(profile);
+}
+
+export const COACH_OFF_MESSAGE = 'Milon är avstängd. Du kan slå på honom under Konto.';
 
 /** Calls the Claude API. The key is read only on the server and never reaches the client. */
 export const createMessage: CreateMessage = (params) => {

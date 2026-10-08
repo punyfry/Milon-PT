@@ -21,7 +21,6 @@ import {
 	exerciseIdBase,
 	isCalendarDate,
 	isExerciseType,
-	isLoadClass,
 	isObject,
 	normalizeName,
 	sessionIdFor,
@@ -34,7 +33,6 @@ import {
 	workoutFileName,
 	type Exercise,
 	type ExerciseType,
-	type LoadClass,
 	type LogEntry,
 	type Profile,
 	type SessionRecord,
@@ -54,7 +52,6 @@ import type { StoredJson, UserStorage } from '../storage/types';
 export interface ImportExercise {
 	name: string;
 	type: ExerciseType;
-	loadClass?: LoadClass;
 	instruction: string;
 	archived: boolean;
 	log: LogEntry[];
@@ -104,8 +101,6 @@ export function parseImportFile(raw: unknown): ImportFile {
 			if (name && seen.has(key)) issues.add(`${p}.name`, `"${name}" finns redan som ${seen.get(key)}`);
 			seen.set(key, p);
 			if (!isExerciseType(e.type)) return issues.add(`${p}.type`, 'måste vara weight, bodyweight eller time');
-			if (e.loadClass !== undefined && !isLoadClass(e.loadClass))
-				issues.add(`${p}.loadClass`, 'måste vara light eller heavy');
 			if (e.instruction !== undefined && typeof e.instruction !== 'string')
 				issues.add(`${p}.instruction`, 'måste vara en sträng');
 			const rawLog = e.log ?? [];
@@ -114,7 +109,6 @@ export function parseImportFile(raw: unknown): ImportFile {
 			exercises.push({
 				name,
 				type: e.type,
-				...(e.type === 'weight' && isLoadClass(e.loadClass) ? { loadClass: e.loadClass } : {}),
 				instruction: typeof e.instruction === 'string' ? e.instruction.trim() : '',
 				archived: e.archived === true,
 				log: log.filter((l) => l !== null)
@@ -300,18 +294,12 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		const current = byName.get(normalizeName(imp.name));
 		const entries = dedupeLog(imp.log.map(withSession));
 		if (!current) {
-			let loadClass = imp.loadClass;
-			if (imp.type === 'weight' && !loadClass) {
-				loadClass = 'light';
-				warnings.push(`"${imp.name}" saknar loadClass, sätter light (steg 1,25 kg)`);
-			}
 			const id = uniqueId(exerciseIdBase(imp.name), takenIds);
 			takenIds.add(id);
 			const exercise: Exercise = {
 				id,
 				name: imp.name,
 				type: imp.type,
-				...(loadClass ? { loadClass } : {}),
 				instruction: imp.instruction,
 				archived: imp.archived,
 				log: sortLog(entries)
@@ -330,10 +318,6 @@ export function planImport(input: ImportFile, existing: ExistingData, today: str
 		if (!current.instruction && imp.instruction) {
 			updated.instruction = imp.instruction;
 			changes.push('instruktion');
-		}
-		if (current.type === 'weight' && !current.loadClass && imp.loadClass) {
-			updated.loadClass = imp.loadClass;
-			changes.push('loadClass');
 		}
 		if (imp.archived && !current.archived) {
 			updated.archived = true;

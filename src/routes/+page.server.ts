@@ -1,5 +1,6 @@
 import { addDays, isoWeek, weekStartOf, weekSummary } from '$lib/history/stats';
 import { getProfile, lastSessionBySlug, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
+import { aiAvailable } from '$lib/server/ai/client';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { PageServerLoad } from './$types';
@@ -45,6 +46,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	return {
 		cards,
+		coach: aiAvailable(profile.data),
 		today,
 		week: {
 			number: isoWeek(weekStart),

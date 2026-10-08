@@ -2,7 +2,6 @@ import type Anthropic from '@anthropic-ai/sdk';
 import {
 	ValidationError,
 	isExerciseType,
-	isLoadClass,
 	isObject,
 	normalizeName,
 	slugify,
@@ -33,7 +32,7 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 		name: 'propose_exercise',
 		description:
 			'Lägger till en övning som användaren har godkänt i passet som byggs. Använd existingId om övningen finns i katalogen; ' +
-			'annars anges name, type, loadClass (bara för weight) och instruction, och övningen skapas. ' +
+			'annars anges name, type och instruction, och övningen skapas. ' +
 			'Anropa igen med samma övning för att ändra set eller mål.',
 		strict: true,
 		input_schema: {
@@ -43,12 +42,11 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 				name: { type: ['string', 'null'], description: 'Namn på ny övning, annars null' },
 				// Strict tools don't accept enum with the type array ['string', 'null'], so null is expressed with anyOf.
 				type: { anyOf: [{ type: 'string', enum: ['weight', 'bodyweight', 'time'] }, { type: 'null' }] },
-				loadClass: { anyOf: [{ type: 'string', enum: ['light', 'heavy'] }, { type: 'null' }], description: 'Bara för weight' },
 				instruction: { type: ['string', 'null'], description: '2-4 korta punkter, en per rad' },
 				sets: { type: 'integer', description: 'Föreslaget antal set' },
 				target
 			},
-			required: ['existingId', 'name', 'type', 'loadClass', 'instruction', 'sets', 'target'],
+			required: ['existingId', 'name', 'type', 'instruction', 'sets', 'target'],
 			additionalProperties: false
 		}
 	},
@@ -132,8 +130,6 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 		exercise = catalog.find((e) => normalizeName(e.name) === normalizeName(name));
 		if (!exercise) {
 			if (!isExerciseType(input.type)) return fail('type måste vara weight, bodyweight eller time för en ny övning.');
-			if (input.type === 'weight' && !isLoadClass(input.loadClass))
-				return fail('loadClass (light eller heavy) krävs för en weight-övning.');
 			const instruction = typeof input.instruction === 'string' ? input.instruction.trim() : '';
 			try {
 				exercise = (
@@ -142,7 +138,6 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 						{
 							name,
 							type: input.type,
-							...(input.type === 'weight' && isLoadClass(input.loadClass) ? { loadClass: input.loadClass } : {}),
 							instruction
 						},
 						new Set(catalog.map((e) => e.id))

@@ -4,3 +4,4 @@ export * from './sessions';
 export * from './profile';
 export * from './save-session';
 export * from './edit-session';
+export * from './manual-workout';

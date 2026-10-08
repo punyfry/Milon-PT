@@ -1,10 +1,25 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import ExerciseFields from '$lib/components/ExerciseFields.svelte';
 	import LineChart from '$lib/components/LineChart.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import Sheet from '$lib/components/Sheet.svelte';
+	import type { ExerciseType } from '$lib/model';
 	import { formatMetric, formatNumber, formatSeconds } from '$lib/format';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	// --- editing name, type and instruction -----------------------------------
+	let editing = $state(false);
+	let fields = $state({ name: '', type: 'weight' as ExerciseType, instruction: '' });
+	let editError = $state<string | null>(null);
+
+	function openEdit() {
+		fields = { name: ex.name, type: ex.type, instruction: ex.instruction };
+		editError = null;
+		editing = true;
+	}
 
 	const ex = $derived(data.exercise);
 	const fmt = (n: number) => formatMetric(ex.type, n);
@@ -30,8 +45,8 @@
 		return `rekord i ${kinds.map((k) => (k === 'heaviest' ? 'tyngsta vikt' : '1RM')).join(' och ')}`;
 	}
 	const best = $derived(data.points.reduce((b, p) => Math.max(b, p.value), 0));
-	/** Equipment or exercise type, shown above the name. */
-	const kind = $derived(ex.type === 'weight' ? (ex.loadClass === 'heavy' ? 'Skivstång' : 'Hantlar') : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
+	/** Exercise type, shown above the name. */
+	const kind = $derived(ex.type === 'weight' ? 'Vikt' : ex.type === 'time' ? 'Tid' : 'Kroppsvikt');
 </script>
 
 <svelte:head><title>{ex.name} · Historik · Milon-PT</title></svelte:head>
@@ -39,7 +54,7 @@
 <header class="topbar">
 	<a class="icon-btn" href="/historik" aria-label="Tillbaka till historik"><Icon name="left" /></a>
 	<span class="label">Historik</span>
-	<span></span>
+	<button class="btn small edit" onclick={openEdit}>Ändra</button>
 </header>
 
 <main>
@@ -100,7 +115,43 @@
 	{/if}
 </main>
 
+{#if editing}
+	<Sheet title="Ändra övning" onclose={() => (editing = false)}>
+		<form
+			method="POST"
+			action="?/edit"
+			class="editform"
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') editing = false;
+					else if (result.type === 'failure') editError = String(result.data?.editError ?? 'Kunde inte spara.');
+					await update({ reset: false });
+				}}
+		>
+			<h2>Ändra övning</h2>
+			<ExerciseFields bind:name={fields.name} bind:type={fields.type} bind:instruction={fields.instruction} typeLock={ex.typeLock} idPrefix="edit" />
+			<input type="hidden" name="name" value={fields.name} />
+			<input type="hidden" name="type" value={fields.type} />
+			<input type="hidden" name="instruction" value={fields.instruction} />
+			{#if editError}<p class="error" role="alert">{editError}</p>{/if}
+			<button type="submit" class="btn primary full">Spara</button>
+			<button type="button" class="btn ghost full" onclick={() => (editing = false)}>Avbryt</button>
+		</form>
+	</Sheet>
+{/if}
+
 <style>
+	.edit {
+		justify-self: end;
+	}
+	.editform {
+		display: grid;
+		gap: 12px;
+	}
+	.editform h2 {
+		font-size: 20px;
+		font-weight: 600;
+	}
 	.topbar {
 		position: sticky;
 		top: 0;
@@ -110,7 +161,7 @@
 		height: calc(56px + env(safe-area-inset-top, 0px));
 		padding: env(safe-area-inset-top, 0px) 8px 0 6px;
 		display: grid;
-		grid-template-columns: 56px 1fr 56px;
+		grid-template-columns: 72px 1fr 72px;
 		align-items: center;
 		text-align: center;
 		background: var(--bg);

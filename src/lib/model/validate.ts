@@ -3,7 +3,6 @@ import type {
 	Exercise,
 	ExerciseSet,
 	ExerciseType,
-	LoadClass,
 	LogEntry,
 	Profile,
 	SessionRecord,
@@ -95,7 +94,8 @@ function arr(o: Obj, key: string, issues: Issues, path: string): unknown[] | und
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-const ID = /^[A-Za-z0-9_-]{1,100}$/;
+/** Ids of exercises and sessions: also safe in a storage path. */
+export const SAFE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** A YYYY-MM-DD date that exists in the calendar (not e.g. 2024-02-30). */
@@ -121,21 +121,16 @@ function datetime(o: Obj, key: string, issues: Issues, path: string): string | u
 
 function id(o: Obj, key: string, issues: Issues, path: string): string | undefined {
 	const v = str(o, key, issues, path);
-	if (v !== undefined && !ID.test(v)) issues.add(join(path, key), 'får bara innehålla a-z, 0-9, _ och -');
+	if (v !== undefined && !SAFE_ID.test(v)) issues.add(join(path, key), 'får bara innehålla a-z, 0-9, _ och -');
 	return v;
 }
 
 // --- the model -----------------------------------------------------------
 
 export const EXERCISE_TYPES: readonly ExerciseType[] = ['weight', 'bodyweight', 'time'];
-export const LOAD_CLASSES: readonly LoadClass[] = ['light', 'heavy'];
 
 export function isExerciseType(v: unknown): v is ExerciseType {
 	return EXERCISE_TYPES.includes(v as ExerciseType);
-}
-
-export function isLoadClass(v: unknown): v is LoadClass {
-	return LOAD_CLASSES.includes(v as LoadClass);
 }
 
 /** Validates a set against the exercise type and returns it without extra fields. */
@@ -189,11 +184,7 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
 		return null;
 	}
-	let loadClass: LoadClass | undefined;
-	if (type === 'weight') {
-		if (isLoadClass(v.loadClass)) loadClass = v.loadClass;
-		else issues.add(join(path, 'loadClass'), `måste vara ${LOAD_CLASSES.join(' eller ')} för weight`);
-	}
+	// `loadClass` (weight steps) is no longer used; it is dropped from older files when they are read.
 	const instruction = str(v, 'instruction', issues, path, { allowEmpty: true });
 	if (typeof v.archived !== 'boolean') issues.add(join(path, 'archived'), 'måste vara true eller false');
 	const log = (arr(v, 'log', issues, path) ?? []).map((e, i) =>
@@ -204,11 +195,43 @@ export function validateExercise(v: unknown, issues: Issues, path: string): Exer
 		id: exId!,
 		name: name!,
 		type,
-		...(loadClass ? { loadClass } : {}),
 		instruction: instruction!,
 		archived: v.archived as boolean,
 		log: log as LogEntry[]
 	};
+}
+
+/** An issue as a sentence for the user: "name: övningen behöver ett namn" → "Övningen behöver ett namn." */
+export function issueText(issue: string): string {
+	const text = issue.replace(/^[\w.[\]]+: /, '');
+	return text[0].toUpperCase() + text.slice(1) + (/[.!?]$/.test(text) ? '' : '.');
+}
+
+export const MAX_EXERCISE_NAME = 80;
+export const MAX_INSTRUCTION = 1000;
+
+/** Name, type and instruction of an exercise written in by the user, trimmed. */
+export function validateExerciseInput(
+	v: unknown,
+	issues: Issues,
+	path: string
+): Pick<Exercise, 'name' | 'type' | 'instruction'> | null {
+	if (!isObject(v)) {
+		issues.add(path, 'måste vara ett objekt');
+		return null;
+	}
+	const before = issues.list.length;
+	const raw = typeof v.name === 'string' ? v.name.trim() : '';
+	const name = raw.replace(/\s+/g, ' ');
+	if (!name) issues.add(join(path, 'name'), 'övningen behöver ett namn');
+	// The length is checked before spaces are collapsed, so the input itself stays small.
+	else if (raw.length > MAX_EXERCISE_NAME) issues.add(join(path, 'name'), `namnet får vara högst ${MAX_EXERCISE_NAME} tecken`);
+	if (!isExerciseType(v.type)) issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
+	if (v.instruction !== undefined && typeof v.instruction !== 'string') issues.add(join(path, 'instruction'), 'måste vara en sträng');
+	const instruction = typeof v.instruction === 'string' ? v.instruction.trim() : '';
+	if (instruction.length > MAX_INSTRUCTION) issues.add(join(path, 'instruction'), `får vara högst ${MAX_INSTRUCTION} tecken`);
+	if (issues.list.length !== before) return null;
+	return { name, type: v.type as ExerciseType, instruction };
 }
 
 export function validateTarget(v: unknown, issues: Issues, path: string): Target | null {
@@ -296,7 +319,7 @@ export function validateSession(v: unknown, issues: Issues, path: string): Sessi
 	const startedAt = datetime(v, 'startedAt', issues, path);
 	const endedAt = datetime(v, 'endedAt', issues, path);
 	const exerciseIds = (arr(v, 'exerciseIds', issues, path) ?? []).map((e, i) => {
-		if (typeof e !== 'string' || !ID.test(e)) issues.add(join(join(path, 'exerciseIds'), i), 'ogiltigt övnings-ID');
+		if (typeof e !== 'string' || !SAFE_ID.test(e)) issues.add(join(join(path, 'exerciseIds'), i), 'ogiltigt övnings-ID');
 		return e as string;
 	});
 	const deviations = (arr(v, 'deviations', issues, path) ?? []).map((d, i) =>
@@ -327,6 +350,7 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 	const goals = str(v, 'goals', issues, path, { optional: true, allowEmpty: true });
 	const weeklySessionGoal = num(v, 'weeklySessionGoal', issues, path, { int: true, min: 0, optional: true });
 	const coachContext = str(v, 'coachContext', issues, path, { optional: true, allowEmpty: true });
+	if (v.coach !== undefined && typeof v.coach !== 'boolean') issues.add(join(path, 'coach'), 'måste vara true eller false');
 	let rules: string[] | undefined;
 	if (v.rules !== undefined) {
 		rules = (arr(v, 'rules', issues, path) ?? []).map((r, i) => {
@@ -356,7 +380,8 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 		...(weeklySessionGoal !== undefined ? { weeklySessionGoal } : {}),
 		...(rules ? { rules } : {}),
 		...(kcalPerWorkout ? { kcalPerWorkout } : {}),
-		...(coachContext !== undefined ? { coachContext } : {})
+		...(coachContext !== undefined ? { coachContext } : {}),
+		...(typeof v.coach === 'boolean' ? { coach: v.coach } : {})
 	};
 }
 

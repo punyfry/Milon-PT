@@ -1,11 +1,18 @@
 import {
+	Issues,
+	ValidationError,
 	assertValid,
+	issueText,
 	exerciseIdBase,
+	findSameExercise,
+	normalizeName,
 	uniqueId,
 	validateExercise,
+	validateExerciseInput,
 	type Exercise,
 	type LogEntry
 } from '../../model';
+import { listLatestWorkouts } from './workouts';
 import { StorageConflictError, type StoredJson, type UserStorage } from '../storage/types';
 
 const DIR = 'exercises/';
@@ -66,6 +73,23 @@ export async function createExercise(
 	throw new Error(`Kunde inte hitta ett ledigt id för ${input.name}`);
 }
 
+/**
+ * The active exercise with the same name (ignoring case and spaces) and type,
+ * or a new one. Makes creating by name safe to retry: a second call finds
+ * what the first one created. `catalog` is every stored exercise.
+ */
+export async function findOrCreateExercise(
+	storage: UserStorage,
+	catalog: Exercise[],
+	input: Pick<Exercise, 'name' | 'type' | 'instruction'>
+): Promise<{ exercise: Exercise; created: boolean }> {
+	const existing = findSameExercise(catalog.filter((e) => !e.archived), input);
+	if (existing) return { exercise: existing, created: false };
+	const { data } = await createExercise(storage, input, new Set(catalog.map((e) => e.id)));
+	catalog.push(data);
+	return { exercise: data, created: true };
+}
+
 /** Overwrites an exercise. `version` from the read guards against concurrent changes. */
 export async function saveExercise(
 	storage: UserStorage,
@@ -75,6 +99,40 @@ export async function saveExercise(
 	const valid = assertValid(`övning ${exercise.id}`, exercise, validateExercise);
 	const result = await storage.writeJson(path(valid.id), valid, { ifMatch: version });
 	return { data: valid, version: result.version };
+}
+
+/**
+ * Why the type of an exercise can't change, or null if it can: logged sets
+ * are stored per type, and a workout's target is in reps or seconds.
+ */
+export async function typeLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
+	if (exercise.log.length) return 'Typen går inte att ändra när det finns loggade set.';
+	const using = (await listLatestWorkouts(storage)).filter((w) => w.exercises.some((e) => e.exerciseId === exercise.id));
+	if (using.length) return `Typen går inte att ändra när övningen finns i ett pass (${using.map((w) => w.name).join(', ')}).`;
+	return null;
+}
+
+/**
+ * Changes an exercise's name, type and instruction (`input` as typed by the
+ * user). The type is locked as `typeLockReason` says, and the name may not be taken by another active exercise of the same
+ * type. Throws ValidationError with messages for the user.
+ */
+export async function updateExerciseDetails(storage: UserStorage, id: string, input: unknown): Promise<StoredJson<Exercise>> {
+	const issues = new Issues();
+	const fields = validateExerciseInput(input, issues, '');
+	if (!fields) throw new ValidationError('övning', issues.list.map(issueText));
+	const current = await getExercise(storage, id);
+	if (!current) throw new ValidationError('övning', ['Övningen finns inte.']);
+	if (fields.type !== current.data.type) {
+		const reason = await typeLockReason(storage, current.data);
+		if (reason) throw new ValidationError('övning', [reason]);
+	}
+	const key = normalizeName(fields.name);
+	const taken = (await listExercises(storage)).some(
+		({ data: e }) => e.id !== id && !e.archived && e.type === fields.type && normalizeName(e.name) === key
+	);
+	if (taken) throw new ValidationError('övning', [`Det finns redan en övning som heter ${fields.name}.`]);
+	return saveExercise(storage, { ...current.data, ...fields }, current.version);
 }
 
 /** Sorts the log newest first. Stable, so entries on the same day keep their order. */

@@ -43,7 +43,6 @@ describe('import from Craft', () => {
 		await createExercise(storage, {
 			name: 'marklyft',
 			type: 'weight',
-			loadClass: 'heavy',
 			instruction: 'Befintlig instruktion',
 			log: [{ sessionId: 's_20261001', date: '2026-10-01', sets: [{ weight: 42.5, reps: 8 }] }]
 		});
@@ -78,7 +77,7 @@ describe('import from Craft', () => {
 
 	it('can reference exercises that only exist in the app', async () => {
 		const storage = new MemoryUserStorage('u1');
-		await createExercise(storage, { name: 'Axelpress', type: 'weight', loadClass: 'light', instruction: '' });
+		await createExercise(storage, { name: 'Axelpress', type: 'weight', instruction: '' });
 		await saveWorkoutVersion(storage, { slug: 'pass-c', name: 'Pass C', createdAt: TODAY, exercises: [] });
 		const plan = await runImport(storage, {
 			workouts: [{ name: 'Pass C', exercises: [{ name: 'axelpress', sets: 3, target: { reps: 10 } }] }]
@@ -86,13 +85,13 @@ describe('import from Craft', () => {
 		expect(plan.workouts[0]).toMatchObject({ action: 'new-version', workout: { version: 2 } });
 	});
 
-	it('sets loadClass light with a warning when missing', async () => {
+	it('accepts and ignores the old loadClass field', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const plan = await runImport(storage, {
-			exercises: [{ name: 'Bicepscurl', type: 'weight', log: [] }]
+			exercises: [{ name: 'Bicepscurl', type: 'weight', loadClass: 'light', log: [] }]
 		});
-		expect(plan.exercises[0].exercise.loadClass).toBe('light');
-		expect(plan.warnings).toHaveLength(1);
+		expect(plan.exercises[0].exercise).not.toHaveProperty('loadClass');
+		expect(plan.warnings).toHaveLength(0);
 	});
 
 	it('collects all errors in the file and writes nothing', async () => {
@@ -154,7 +153,6 @@ describe('import with profile, notes and sessions', () => {
 			{
 				name: 'Marklyft',
 				type: 'weight',
-				loadClass: 'heavy',
 				instruction: '',
 				log: [
 					{ date: '2026-09-29', sets: [{ weight: 30, reps: 10 }], note: 'Marginal kvar' },

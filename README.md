@@ -10,6 +10,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 
 - The landing page assumes you are there to log a workout: one tap on a workout card starts it.
 - The coach is silent during a workout and only answers when you tap "Hjälp".
+- Milon is optional. With him turned off (Konto) you build workouts and write in exercises yourself, and no Claude calls are made.
 - Exercises are objects of their own with their own ID and log. Workouts only reference exercise IDs.
 - An ongoing workout lives in the browser (localStorage) until the server has confirmed the save.
 - Data is per user under `users/<userId>/`. Only the signed-in user can reach their files, and no blob URLs leave the server.
@@ -24,7 +25,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/server/allowlist.ts` | Reads `ALLOWED_EMAILS`. An empty list lets nobody in |
 | `src/lib/server/storage/` | The `UserStorage` interface: Vercel Blob (private), local files in `.data/` in dev, and in-memory in tests. Paths are validated in `paths.ts` |
 | `src/lib/model/` | The data model: types, validation and id helpers. Shared by server and client |
-| `src/lib/server/data/` | Read/write exercises, workout templates (versioned), saved sessions and the profile. `save-session.ts` saves a finished workout and is safe to retry without duplicates |
+| `src/lib/server/data/` | Read/write exercises, workout templates (versioned), saved sessions and the profile. `save-session.ts` saves a finished workout and is safe to retry without duplicates; `manual-workout.ts` saves a workout built by hand |
 | `src/lib/server/import/craft.ts` | The Craft import: validate → plan against existing data → write |
 | `src/lib/server/ai/` | Claude client, model selection, per-model parameters and the daily limit (`usage.ts`) |
 | `src/lib/server/builder/` | The workout builder: system prompt, the `propose_exercise`/`set_workout` tools and the conversation loop |
@@ -33,8 +34,8 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/history/stats.ts` | History: best set, estimated 1RM, records, weekly summary and milestones, computed from the logs |
 | `src/lib/markdown.ts` | Simple markdown for the builder's replies, rendered without `{@html}` |
 | `src/service-worker.ts` | Offline support: caches the app's files and visited pages |
-| `src/routes/` | `/` workout cards, `/pass/[slug]` active workout (one exercise at a time) and finish, `/skapa` the builder, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
-| `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown` |
+| `src/routes/` | `/` workout cards, `/pass/[slug]` active workout (one exercise at a time) and finish, `/skapa` the builder, `/skapa/manuell` building by hand, `/historik` and `/historik/ovning/[id]`, `/konto`, `/api/*` |
+| `src/lib/components/` | Shared components: `SetRow` (a set in the active workout), `Sheet` (bottom sheet for choices and confirmations), `ExerciseFields` (name, type and instruction of an exercise written in), `VersionsSheet` (a workout's versions), `TabBar` (main menu), `Icon`, `HelpPanel`, `LineChart`, `Markdown` |
 | `src/lib/theme.ts` | Theme choice (system, dark, light), stored in localStorage and applied before first paint by `static/theme-init.js` |
 | `static/fonts/` | Self-hosted Bricolage Grotesque and DM Mono (latin subset, SIL Open Font License) so they work offline |
 | `assets/logo/` | The logo (`logo.svg`, an M that is also a dumbbell, drawn in `currentColor`) and `logo-preview.html`, a standalone preview at different sizes |
@@ -96,7 +97,7 @@ Four file types per user, plus conversations and counters. Sets live on the exer
 
 | File | Contents |
 | --- | --- |
-| `profile.json` | Goals, rules, weekly goal and kcal estimates per workout type |
+| `profile.json` | Milon on or off (`coach`), goals, rules, weekly goal and kcal estimates per workout type |
 | `exercises/<exerciseId>.json` | Exercise with name, type, instruction, `archived` and the full log (newest first) |
 | `workouts/<slug>.v<N>.json` | Workout template. Every change creates the next version; older ones are kept and can be restored |
 | `sessions/<sessionId>.json` | A completed workout: template and version, start and end, deviations, kcal |
@@ -108,7 +109,6 @@ Four file types per user, plus conversations and counters. Sets live on the exer
   "id": "ex_marklyft",
   "name": "Marklyft",
   "type": "weight",
-  "loadClass": "heavy",
   "instruction": "Stång över mellanfoten, rak rygg, tryck golvet ifrån dig.",
   "archived": false,
   "log": [{ "sessionId": "s_20261006", "date": "2026-10-06", "sets": [{ "weight": 40, "reps": 8 }], "note": "Marginal kvar" }]
@@ -116,7 +116,7 @@ Four file types per user, plus conversations and counters. Sets live on the exer
 ```
 
 - `type`: `weight` (weight × reps), `bodyweight` (reps) or `time` (seconds). Sets per type: `{ weight, reps }`, `{ reps }` or `{ seconds }`.
-- `loadClass` (`weight` only): `light` = 1.25 kg steps, `heavy` = 5 kg steps. Timed exercises step by 5 s.
+- Older files may have a `loadClass` (weight steps). It is no longer used and is dropped when the exercise is read.
 - Session ids are `s_YYYYMMDD` (Swedish time), with `_2`, `_3` … for several workouts the same day.
 - The ongoing workout is in localStorage under `milonpt.activeSession`; workouts waiting for the network under `milonpt.pendingSaves`.
 
@@ -127,13 +127,14 @@ Volume: `weight` = sum of weight × reps, `bodyweight` = sum of reps, `time` = s
 The look (tokens, type, layout) is described in [DESIGN.md](DESIGN.md). A fixed main menu (Start, Historik, Skapa, Konto) sits at the bottom of every screen except the active workout and sign-in.
 
 1. **Start:** a greeting with the first name, this week's sessions against the weekly goal (counted like History: saved sessions plus days with only imported log entries), a card for a workout in progress, and the latest version of each workout as a card showing its first exercises, most recently trained first. One tap starts the workout; if another workout is in progress you choose between continuing it and discarding it.
-2. **Overview:** tapping a workout opens an overview before it starts: each exercise with its target, last time's sets and note, and the instruction. **Byt** swaps an exercise for this workout only, from a searchable list of your own exercises (same type first) or by asking Milon for variants or new exercises. The overview is an active session with `preparing: true`, saved to localStorage on the first swap, so only looking at a workout leaves nothing behind and a preparation survives closing the app. "Ångra byten" drops the preparation. A preparation without swaps follows the latest version of the workout. "Starta passet" (sticky at the bottom) starts the clock and sets the session id from that day. Opening another workout does not touch a preparation; the first swap or start there replaces it. Swapping back to the plan drops the preparation. A workout in progress is protected as before. The server refuses to save a session that has not started.
+2. **Overview:** tapping a workout opens an overview before it starts: each exercise with its target, last time's sets and note, and the instruction. **Byt** swaps an exercise for this workout only, from a searchable list of your own exercises (same type first), by writing in a new exercise (name, type, instruction) or by asking Milon for variants or new exercises. A written-in exercise gets a temporary id (`new_…`) and lives in the session's `newExercises` until the workout is saved; then it is created (or an active exercise with the same name and type is reused), so this works offline and a retried save creates no duplicates. It is created only if it has a done set or is saved into the workout. The overview is an active session with `preparing: true`, saved to localStorage on the first swap, so only looking at a workout leaves nothing behind and a preparation survives closing the app. "Ångra byten" drops the preparation. A preparation without swaps follows the latest version of the workout. "Starta passet" (sticky at the bottom) starts the clock and sets the session id from that day. Opening another workout does not touch a preparation; the first swap or start there replaces it. Swapping back to the plan drops the preparation. A workout in progress is protected as before. The server refuses to save a session that has not started.
 3. **Active workout:** one exercise at a time. Move with the Next button (highlighted when every set is done), by swiping sideways or by tapping the progress segments. Sets are prefilled from the latest log entry, otherwise from the template's target, and last time's value is shown per set. Weight is typed, reps and seconds use −/+. Every set stays editable until the workout is finished; a removed set can be undone. Every change is written to localStorage, including the exercise shown, so a paused workout resumes where it was. Timed exercises have a timer in the set row that counts down, beeps at zero and fills in the time; it stores the end time (`timerEndsAt`) so it stays correct if the screen locks, and the screen is kept awake (Wake Lock). Stopping early saves the elapsed time; starting the timer again counts down from the planned time (`plannedSeconds`), unless the time was changed by hand. A new set copies the planned time, and the next workout prefills a timed set below the target with the target (a swapped-in exercise keeps its own logged times); discarding a restarted timer leaves a done set done. While a timer runs, changing set or exercise, leaving or finishing first asks whether to keep the time, discard it or keep the timer going. **Byt** opens the same swap list as the overview; **Anteckning** adds a note for the exercise today (kept in the active session, saved with its log entry if it has done sets, shown as "Förra gången" next time; a swap before any set is done moves it to the new exercise); "Fråga Milon" opens the helper in a sheet; swapping an exercise becomes a deviation in the session, not a change to the template. The close button asks whether to pause (keep it on the phone) or discard.
 4. **Finish:** summary with time, done sets, new records and each exercise's sets; tap an exercise to go back and change it. If there are deviations you are asked whether to save them as a new version of the workout. kcal is suggested (the profile's value for the workout, otherwise the workout type's range) and can be adjusted. "Avsluta pass" writes the exercise logs and the session record; localStorage is cleared only after the server confirms. "Släng passet" is last, with confirmation.
 5. **Create workout:** chat with the builder and a collapsible list of the exercises being discussed at the top. Approved exercises are saved (existing ones are reused), and "Spara pass" creates `v1` or the next version. Older versions are listed in a sheet and can be restored as a new version. On a phone, Enter adds a new line and the send button sends.
-6. **History:** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercises grouped by workout with search and archived ones last, and per exercise a chart and the latest sessions as rows.
+   **By hand** (`/skapa/manuell`, where `/skapa` leads when Milon is off or not configured, and linked from the builder otherwise): name the workout, add exercises from your own or write in new ones, set sets and target (reps or seconds), reorder and remove. "Spara pass" goes through `POST /api/workouts` and creates `v1` or the next version with a generated change note; nothing is saved if nothing changed. New exercises are created on save, reusing an active one with the same name and type.
+6. **History:** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), exercises grouped by workout with search and archived ones last, and per exercise a chart and the latest sessions as rows. **Ändra** on an exercise changes its name, type (only while no sets are logged and no workout uses it, since sets and targets depend on the type) and instruction.
    **Session view** (`/historik/pass/[id]`, from the week's session list or a date in an exercise's history): start, end, length, kcal and each exercise's sets. **Redigera** corrects the start time (the start date is fixed, it is part of the session id), the end date and time, kcal, the sets (change, add, remove) and each exercise's note, and can remove an exercise from the session. **Ta bort pass** deletes the session and its sets; workout versions it created stay. Edits go through `PUT`/`DELETE /api/sessions/[id]` with the record's version, write the log entries first and the record last, and answer 409 if the session changed since the page was loaded. A changed start keeps the saved value in `originalStartedAt`, so a queued retry of the original save is still recognised as already saved (and then writes no log entries).
-7. **Account:** weekly goal, theme (system, dark, light), the Craft import and sign-out.
+7. **Account:** weekly goal, Milon on or off (shown when the API key is set), theme (system, dark, light), the Craft import and sign-out.
 
 ## The AI coach
 
@@ -141,6 +142,7 @@ Two separate calls with their own system prompts, both using tools so the app ne
 
 - **The builder** (`/skapa`, Sonnet): discusses exercises with the catalog, goals and the workout being edited as context. Replies are rendered with simple markdown.
 - **The helper** ("Hjälp" button during a workout, Haiku): more instruction or swapping an exercise, with the workout, today's sets and the exercise's five latest log entries as context. Replies in plain text.
+- **Turned off** (`coach: false` in `profile.json`, missing means on): the "Fråga Milon" buttons are hidden, `/skapa` leads to building by hand, and `/api/builder` and `/api/helper` answer 403 before anything is counted or sent.
 - Cost: roughly SEK 4–5 a month for Haiku and SEK 12–20 for Sonnet at about 12 workouts. Besides `AI_DAILY_LIMIT`, set a monthly limit for the API key in the Anthropic Console. A Claude subscription does not cover API calls.
 
 ## Craft import

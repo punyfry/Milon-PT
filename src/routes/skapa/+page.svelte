@@ -4,7 +4,7 @@
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
-	import Sheet from '$lib/components/Sheet.svelte';
+	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
 
@@ -128,9 +128,6 @@
 	</header>
 
 	<section class="chat" aria-live="polite">
-		{#if !data.configured}
-			<p class="bubble error">Pass-byggaren behöver <code>ANTHROPIC_API_KEY</code> på servern.</p>
-		{/if}
 		{#if !view && !data.editing && data.workouts.length}
 			<div class="existing">
 				<span class="label">Eller redigera ett befintligt pass</span>
@@ -143,6 +140,9 @@
 			<p class="bubble assistant">
 				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
 			</p>
+			<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
+				{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
+			</a>
 		{/if}
 		{#each view?.log ?? [] as item, i (i)}
 			{#if item.role === 'assistant'}
@@ -165,37 +165,16 @@
 			placeholder="Skriv till Milon…"
 			aria-label="Meddelande till Milon"
 			enterkeyhint="enter"
-			disabled={!data.configured}
 		></textarea>
 		<div class="buttons">
-			<button type="submit" class="btn primary" disabled={sending || !input.trim() || !data.configured}>Skicka</button>
-			<button type="button" class="btn" disabled={sending || !draft.length || !data.configured} onclick={() => send('Spara passet.')}>Spara pass</button>
+			<button type="submit" class="btn primary" disabled={sending || !input.trim()}>Skicka</button>
+			<button type="button" class="btn" disabled={sending || !draft.length} onclick={() => send('Spara passet.')}>Spara pass</button>
 		</div>
 	</form>
 </div>
 
-{#if versionsOpen && data.versions.length}
-	<Sheet title="Versioner" onclose={() => (versionsOpen = false)}>
-		<h2>Versioner av {data.editing?.name}</h2>
-		<p class="muted">Att återställa en äldre version sparar den som en ny version.</p>
-		<ul class="versions">
-			{#each data.versions as v, i (v.version)}
-				<li>
-					<div>
-						<strong class="num">v{v.version}</strong>
-						<span class="muted">{v.createdAt} · {v.exerciseCount} övningar</span>
-						{#if v.changeNote}<div class="muted note">{v.changeNote}</div>{/if}
-					</div>
-					{#if i > 0}
-						<button class="btn small" onclick={() => restore(v.version)}>Återställ</button>
-					{:else}
-						<span class="tag quiet">Aktuell</span>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-		<button class="btn ghost full" onclick={() => (versionsOpen = false)}>Stäng</button>
-	</Sheet>
+{#if versionsOpen && data.versions.length && data.editing}
+	<VersionsSheet name={data.editing.name} versions={data.versions} onrestore={restore} onclose={() => (versionsOpen = false)} />
 {/if}
 
 <style>
@@ -316,6 +295,10 @@
 		font-size: 14px;
 		color: var(--danger);
 	}
+	.manual {
+		align-self: flex-start;
+		font-size: 14px;
+	}
 	.typing {
 		color: var(--muted);
 		font-style: italic;
@@ -349,26 +332,5 @@
 		display: grid;
 		grid-template-columns: 1fr auto;
 		gap: 8px;
-	}
-	.versions {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.versions li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 12px;
-		padding: 12px 0;
-		border-bottom: 1px solid var(--line);
-	}
-	.versions li > div {
-		display: grid;
-		gap: 2px;
-		font-size: 14px;
-	}
-	.note {
-		font-size: 13px;
 	}
 </style>

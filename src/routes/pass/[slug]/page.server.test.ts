@@ -25,7 +25,7 @@ beforeEach(async () => {
 		{ date: '2026-10-01', sets: [{ reps: 6 }] }
 	];
 	await createExercise(s, { name: 'Dips', type: 'bodyweight', instruction: '', log });
-	await createExercise(s, { name: 'Bänkpress', type: 'weight', loadClass: 'heavy', instruction: '' });
+	await createExercise(s, { name: 'Bänkpress', type: 'weight', instruction: '' });
 	await createExercise(s, { name: 'Gammal', type: 'bodyweight', instruction: '', archived: true });
 	await createExercise(s, { name: 'Arkiverad extra', type: 'bodyweight', instruction: '', archived: true });
 	await saveWorkoutVersion(s, {
@@ -51,5 +51,20 @@ describe('/pass/[slug] load', () => {
 		expect((await run()).exercises.map((e) => e.id)).toEqual(['ex_gammal']);
 		const { exercises } = await run('?ex=ex_arkiverad_extra,ex_finns_inte,../x');
 		expect(exercises.map((e) => e.id)).toEqual(['ex_gammal', 'ex_arkiverad_extra']);
+	});
+});
+
+describe('helper availability', () => {
+	it('follows the API key and the coach setting', async () => {
+		const { env } = await import('../../../test/env-private');
+		const { saveProfile } = await import('$lib/server/data');
+		env.ANTHROPIC_API_KEY = 'test';
+		const available = async () => ((await run()) as unknown as { helperAvailable: boolean }).helperAvailable;
+		expect(await available()).toBe(true);
+		await saveProfile(state.storage, { coach: false });
+		expect(await available()).toBe(false);
+		delete env.ANTHROPIC_API_KEY;
+		await saveProfile(state.storage, { coach: true }, (await state.storage.readJson('profile.json'))!.version);
+		expect(await available()).toBe(false);
 	});
 });

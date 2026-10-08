@@ -73,6 +73,8 @@ export async function askHelper(
 		listExercises(storage)
 	]);
 	const byId = new Map<string, Exercise>(all.map((e) => [e.data.id, e.data]));
+	// Exercises written in during the session are created when it is saved; until then only the session knows them.
+	for (const n of session.newExercises ?? []) byId.set(n.id, { ...n, archived: false, log: [] });
 	const catalog = all.map((e) => e.data).filter((e) => !e.archived);
 	const system = buildHelperPrompt(
 		workout?.data.name ?? session.workoutSlug,

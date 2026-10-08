@@ -21,7 +21,6 @@ const deadlift: Exercise = {
 	id: 'ex_marklyft',
 	name: 'Marklyft',
 	type: 'weight',
-	loadClass: 'heavy',
 	instruction: '',
 	archived: false,
 	log: [
