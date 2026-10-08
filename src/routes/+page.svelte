@@ -34,9 +34,9 @@
 		return `/pass/${a.workoutSlug}?v=${a.workoutVersion}`;
 	}
 
-	/** The cards are plain links; if another workout is in progress we ask first. */
+	/** The cards are plain links; if another workout is in progress we ask first. A prepared one simply gives way. */
 	function start(e: MouseEvent, slug: string) {
-		if (!active) return;
+		if (!active || active.preparing) return;
 		e.preventDefault();
 		if (active.workoutSlug === slug) return void goto(continueHref(active));
 		pendingStart = slug;
@@ -76,11 +76,15 @@
 
 	{#if active}
 		<a class="continue" href={continueHref(active)}>
-			<span class="eyebrow">Pågående pass</span>
+			<span class="eyebrow">{active.preparing ? 'Förberett pass' : 'Pågående pass'}</span>
 			<strong>{activeName}</strong>
 			<span class="meta">
-				Övning {(active.current ?? 0) + 1} av {active.exercises.length} ·
-				<span class="num">{formatSeconds((now.getTime() - Date.parse(active.startedAt)) / 1000)}</span>
+				{#if active.preparing}
+					{active.exercises.length} övningar · inte startat
+				{:else}
+					Övning {(active.current ?? 0) + 1} av {active.exercises.length} ·
+					<span class="num">{formatSeconds((now.getTime() - Date.parse(active.startedAt)) / 1000)}</span>
+				{/if}
 			</span>
 		</a>
 	{/if}
@@ -103,7 +107,7 @@
 							<strong>{card.name}</strong>
 							{#if !running && card.lastTrainedAt}<span class="when">{daysAgo(card.lastTrainedAt, now)}</span>{/if}
 						</span>
-						{#if running}<span class="running">Pågår · tryck för att fortsätta</span>{/if}
+						{#if running}<span class="running">{active?.preparing ? 'Förberett' : 'Pågår'} · tryck för att fortsätta</span>{/if}
 						<span class="exs">{preview(card.exerciseNames)}</span>
 					</a>
 				</li>

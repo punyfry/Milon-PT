@@ -161,7 +161,14 @@ describe('save session', () => {
 		expect(v2.exercises[1]).toEqual({ exerciseId: 'ex_sidoplanka', sets: 3, target: { seconds: 40 } });
 	});
 
-	it('rejects broken input before anything is read', () => {
+	it('refuses to save a workout that has not been started', () => {
+		expect(() => parseSaveSessionInput({ session: { ...active(), preparing: true }, endedAt: '2026-10-06T18:05:00+02:00' })).toThrow(/inte startat/);
+		expect(() => parseSaveSessionInput({ session: { ...active(), preparing: 'ja' }, endedAt: '2026-10-06T18:05:00+02:00' })).toThrow(
+			/preparing är ogiltig/
+		);
+	});
+
+		it('rejects broken input before anything is read', () => {
 		expect(() => parseSaveSessionInput({ session: { ...active(), sessionId: '../x' }, endedAt: 'nu' })).toThrow(
 			/sessionId[\s\S]*endedAt/
 		);

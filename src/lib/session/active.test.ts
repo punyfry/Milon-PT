@@ -3,6 +3,7 @@ import type { ActiveSet, WorkoutTemplate } from '$lib/model';
 import {
 	addSet,
 	adjust,
+	applySwap,
 	cancelTimer,
 	completeExpiredTimers,
 	createActiveSession,
@@ -11,9 +12,11 @@ import {
 	remainingMs,
 	removeSet,
 	setField,
+	startPreparedSession,
 	startTimer,
 	stopTimer,
 	summarize,
+	swapCandidates,
 	timerStartSeconds,
 	type ExerciseInfo
 } from './active';
@@ -209,6 +212,56 @@ describe('timer', () => {
 		startTimer(set, at(10));
 		expect(completeExpiredTimers(s, at(600))).toBe(1);
 		expect(set).toEqual({ seconds: 45, done: true });
+	});
+});
+
+describe('prepared session', () => {
+	// Prepared one day, started the next (midday, so the date is the same in any time zone).
+	const t0 = new Date('2026-10-06T12:00:00Z');
+	const t1 = new Date('2026-10-07T12:00:00Z');
+
+	it('starts as an overview and gets the start time and id when started', () => {
+		const s = createActiveSession(workout, infos, t0, { preparing: true });
+		expect(s).toMatchObject({ preparing: true, sessionId: 's_20261006' });
+		s.current = 2;
+		startPreparedSession(s, t1);
+		expect(s.preparing).toBeUndefined();
+		expect(s).toMatchObject({ sessionId: 's_20261007', startedAt: localIsoString(t1), lastActivityAt: localIsoString(t1), current: 0 });
+	});
+
+	it('keeps swaps made while preparing', () => {
+		const s = createActiveSession(workout, infos, t0, { preparing: true });
+		const sidePlank: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '' };
+		applySwap(s, 'ex_plankan', sidePlank, { seconds: 45 });
+		startPreparedSession(s, t1);
+		expect(s.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft', 'ex_sidoplanka', 'ex_pull_up']);
+		expect(s.deviations).toEqual([{ type: 'swap', from: 'ex_plankan', to: 'ex_sidoplanka' }]);
+	});
+
+	it('does not restart a session that is already running', () => {
+		const s = createActiveSession(workout, infos, t0);
+		const before = structuredClone(s);
+		startPreparedSession(s, t1);
+		expect(s).toEqual(before);
+	});
+});
+
+describe('swap candidates', () => {
+	const row: ExerciseInfo = { id: 'ex_hantelrodd', name: 'Hantelrodd', type: 'weight', instruction: '' };
+	const bench: ExerciseInfo = { id: 'ex_bankpress', name: 'Bänkpress', type: 'weight', instruction: '' };
+	const sidePlank: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '' };
+	const catalog = [deadlift, plank, pullup, row, bench, sidePlank];
+	const s = createActiveSession(workout, infos, new Date('2026-10-06T15:00:00Z'));
+
+	it('leaves out exercises already in the session and puts the same type first, then by name', () => {
+		expect(swapCandidates(catalog, s, 'time').map((e) => e.id)).toEqual(['ex_sidoplanka', 'ex_bankpress', 'ex_hantelrodd']);
+		expect(swapCandidates(catalog, s, 'weight').map((e) => e.id)).toEqual(['ex_bankpress', 'ex_hantelrodd', 'ex_sidoplanka']);
+	});
+
+	it('filters by name, ignoring case and extra spaces', () => {
+		expect(swapCandidates(catalog, s, 'weight', '  RODD ').map((e) => e.id)).toEqual(['ex_hantelrodd']);
+		expect(swapCandidates(catalog, s, 'weight', 'bänk').map((e) => e.id)).toEqual(['ex_bankpress']);
+		expect(swapCandidates(catalog, s, 'weight', 'marklyft')).toEqual([]);
 	});
 });
 

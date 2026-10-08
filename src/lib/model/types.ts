@@ -135,6 +135,11 @@ export interface ActiveSession {
 	deviations: Deviation[];
 	/** Index of the exercise shown, so a paused workout resumes where it was. */
 	current?: number;
+	/**
+	 * Not started yet: the overview before the workout, where exercises can be
+	 * swapped. `startedAt` and `sessionId` are set again when it starts.
+	 */
+	preparing?: boolean;
 }
 
 export const ACTIVE_SESSION_KEY = 'milonpt.activeSession';

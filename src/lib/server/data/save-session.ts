@@ -66,6 +66,7 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 			if (!isObject(ex) || typeof ex.exerciseId !== 'string' || !ID.test(ex.exerciseId) || !Array.isArray(ex.sets))
 				issues.push(`session.exercises[${i}] är ogiltig`);
 		});
+	if (s.preparing !== undefined && typeof s.preparing !== 'boolean') issues.push('session.preparing är ogiltig');
 	if (!Array.isArray(s.deviations)) issues.push('session.deviations måste vara en lista');
 	else
 		s.deviations.forEach((d, i) => {
@@ -80,6 +81,7 @@ export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 	const issues: string[] = [];
 	if (!isObject(raw) || !isObject(raw.session)) throw new ValidationError('sparning', ['session saknas']);
 	const session = checkActiveSession(raw.session, issues);
+	if (raw.session.preparing === true) issues.push('passet har inte startat');
 	if (typeof raw.endedAt !== 'string' || !DATETIME.test(raw.endedAt)) issues.push('endedAt är ogiltig');
 	const kcal = raw.kcalEstimate;
 	if (kcal !== undefined && kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000))

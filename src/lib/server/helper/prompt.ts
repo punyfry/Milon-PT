@@ -3,7 +3,7 @@ import type { ActiveSession, Exercise, LogEntry } from '../../model';
 import { formatCatalog } from '../builder/prompt';
 
 /** System prompt for the helper, with the context filled in. The prompt lives here, not in the docs. */
-const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. Användaren tränar just nu och har bett om hjälp. Svara på svenska i högst fyra meningar, utan inledning.
+const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. {{situation}} Svara på svenska i högst fyra meningar, utan inledning.
 
 Pass: {{workout_name}}
 Övningar och dagens set hittills: {{session_state}}
@@ -55,7 +55,11 @@ export function buildHelperPrompt(
 	catalog: readonly Exercise[]
 ): string {
 	// Replacer function, so that "$" in names or instructions is not interpreted.
-	return TEMPLATE.replace('{{workout_name}}', () => workoutName)
+	const situation = session.preparing
+		? 'Användaren förbereder passet och har inte börjat än, och har bett om hjälp.'
+		: 'Användaren tränar just nu och har bett om hjälp.';
+	return TEMPLATE.replace('{{situation}}', () => situation)
+		.replace('{{workout_name}}', () => workoutName)
 		.replace('{{session_state}}', () => formatSessionState(session, exercises))
 		.replace('{{exercise_history}}', () => '\n' + formatHistory(current))
 		.replace('{{exercise_catalog}}', () => '\n' + formatCatalog(catalog));

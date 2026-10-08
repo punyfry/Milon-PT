@@ -5,6 +5,7 @@
 import {
 	LOAD_STEP_KG,
 	TIME_STEP_SECONDS,
+	normalizeName,
 	type ActiveSession,
 	type ActiveSet,
 	type ExerciseSet,
@@ -81,14 +82,20 @@ export function prefillSets(info: ExerciseInfo, count: number, target?: Target):
 	});
 }
 
+/**
+ * New session from the template. With `preparing` it starts as the overview
+ * before the workout (see `startPreparedSession`).
+ */
 export function createActiveSession(
 	workout: WorkoutTemplate,
 	exercises: ReadonlyMap<string, ExerciseInfo>,
-	now: Date
+	now: Date,
+	options: { preparing?: boolean } = {}
 ): ActiveSession {
 	const startedAt = localIsoString(now);
 	return {
-		sessionId: `s_${localDateOf(startedAt).replaceAll('-', '')}`,
+		...(options.preparing ? { preparing: true } : {}),
+		sessionId: sessionIdAt(startedAt),
 		workoutSlug: workout.slug,
 		workoutVersion: workout.version,
 		startedAt,
@@ -102,6 +109,38 @@ export function createActiveSession(
 		}),
 		deviations: []
 	};
+}
+
+function sessionIdAt(startedAt: string): string {
+	return `s_${localDateOf(startedAt).replaceAll('-', '')}`;
+}
+
+/** Starts a prepared session now: the clock starts and the id follows today's date. */
+export function startPreparedSession(session: ActiveSession, now: Date): void {
+	if (!session.preparing) return;
+	delete session.preparing;
+	session.startedAt = localIsoString(now);
+	session.lastActivityAt = session.startedAt;
+	session.sessionId = sessionIdAt(session.startedAt);
+	session.current = 0;
+}
+
+/**
+ * Exercises to offer in a swap: the catalog minus those already in the
+ * session, matching `query` (case-insensitive, anywhere in the name), the
+ * same type as the exercise swapped out first, then by name.
+ */
+export function swapCandidates(
+	catalog: readonly ExerciseInfo[],
+	session: ActiveSession,
+	type: ExerciseType | undefined,
+	query = ''
+): ExerciseInfo[] {
+	const inSession = new Set(session.exercises.map((e) => e.exerciseId));
+	const q = normalizeName(query);
+	return catalog
+		.filter((e) => !inSession.has(e.id) && (!q || normalizeName(e.name).includes(q)))
+		.sort((a, b) => Number(b.type === type) - Number(a.type === type) || a.name.localeCompare(b.name, 'sv'));
 }
 
 // --- changes ------------------------------------------------------------
