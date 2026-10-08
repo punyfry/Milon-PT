@@ -7,13 +7,16 @@
 		versions: { version: number; createdAt: string; changeNote: string | null; exerciseCount: number }[];
 		onrestore: (version: number) => void;
 		onclose: () => void;
+		/** Why the latest restore failed, shown in the sheet. */
+		failure?: string | null;
 	}
-	let { name, versions, onrestore, onclose }: Props = $props();
+	let { name, versions, onrestore, onclose, failure = null }: Props = $props();
 </script>
 
 <Sheet title="Versioner" {onclose}>
 	<h2>Versioner av {name}</h2>
 	<p class="muted">Att återställa en äldre version sparar den som en ny version.</p>
+	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 	<ul class="versions">
 		{#each versions as v, i (v.version)}
 			<li>

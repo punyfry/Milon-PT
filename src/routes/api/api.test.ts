@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
-import { createExercise, prependLogEntry, saveProfile } from '$lib/server/data';
+import { createExercise, prependLogEntry, saveProfile, saveWorkoutVersion, updateExerciseDetails } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -23,6 +23,7 @@ const { POST: helper } = await import('./helper/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
 const { POST: workouts } = await import('./workouts/+server');
+const { POST: restore } = await import('./workouts/[slug]/restore/+server');
 const { PUT: editSessionHandler, DELETE: deleteSessionHandler } = await import('./sessions/[id]/+server');
 
 type Handler = (event: never) => Promise<Response>;
@@ -221,5 +222,26 @@ describe('POST /api/workouts', () => {
 		expect(bad.status).toBe(400);
 		expect(bad.body.message).toBe('Passet behöver ett namn. Passet behöver minst en övning.');
 		expect((await call(workouts as Handler, 'inte json')).status).toBe(400);
+	});
+});
+
+describe('POST /api/workouts/[slug]/restore', () => {
+	it('restores a version, and answers 400, 404 or 409 with a message for the user', async () => {
+		await createExercise(state.storage, { name: 'Plankan', type: 'bodyweight', instruction: '' });
+		const v = (exercises: { exerciseId: string; sets: number; target: { reps: number } }[]) =>
+			saveWorkoutVersion(state.storage, { slug: 'pass-b', name: 'Pass B', createdAt: '2026-10-01', exercises });
+		await v([{ exerciseId: 'ex_plankan', sets: 2, target: { reps: 10 } }]);
+		await createExercise(state.storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		await v([{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }]);
+		const params = { slug: 'pass-b' };
+
+		expect((await call(restore as Handler, { version: 0 }, {}, params)).status).toBe(400);
+		expect((await call(restore as Handler, { version: 9 }, {}, params)).status).toBe(404);
+		expect(await call(restore as Handler, { version: 1 }, {}, params)).toEqual({ status: 200, body: { version: 3 } });
+
+		await v([{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }]);
+		await updateExerciseDetails(state.storage, 'ex_plankan', { name: 'Plankan', type: 'time', instruction: '' });
+		const refused = await call(restore as Handler, { version: 1 }, {}, params);
+		expect(refused).toEqual({ status: 409, body: { message: 'Övningen Plankan har bytt typ sedan den här versionen.' } });
 	});
 });
