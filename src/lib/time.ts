@@ -21,11 +21,21 @@ export function stockholmIso(date: string, time: string): string {
 	const candidates = [...new Set([stockholmOffset(addDay(date, -1)), stockholmOffset(date), stockholmOffset(addDay(date, 1))])];
 	for (const offset of candidates) {
 		const iso = `${date}T${time}:00${offset}`;
-		const wall = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso));
-		if (wall === `${date} ${time}`) return iso;
+		const p = Object.fromEntries(wallClock.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+		if (`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}` === `${date}T${time}`) return iso;
 	}
 	return `${date}T${time}:00${candidates[0]}`;
 }
+
+const wallClock = new Intl.DateTimeFormat('en-US', {
+	timeZone: 'Europe/Stockholm',
+	year: 'numeric',
+	month: '2-digit',
+	day: '2-digit',
+	hour: '2-digit',
+	minute: '2-digit',
+	hourCycle: 'h23'
+});
 
 function addDay(date: string, days: number): string {
 	const d = new Date(`${date}T12:00:00Z`);

@@ -64,7 +64,7 @@
 		const out = sets.map((d) => {
 			if (type === 'weight') {
 				const raw = d.weight.replace(',', '.').trim();
-				return { weight: /^\d{1,4}(\.\d{1,3})?$/.test(raw) ? Number(raw) : NaN, reps: int(d.reps) };
+				return { weight: /^\d{1,4}(\.\d+)?$/.test(raw) ? Number(raw) : NaN, reps: int(d.reps) };
 			}
 			return type === 'time' ? { seconds: int(d.seconds) } : { reps: int(d.reps) };
 		});

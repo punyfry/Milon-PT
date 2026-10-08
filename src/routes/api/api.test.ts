@@ -133,7 +133,7 @@ describe('PUT and DELETE /api/sessions/[id]', () => {
 		expect(await state.storage.readJson('sessions/s_20261007.json')).toBeNull();
 	});
 
-		it('answers 409 when the session changed since it was loaded', async () => {
+	it('answers 409 when the session changed since it was loaded', async () => {
 		await state.storage.writeJson('sessions/s_20261007.json', {
 			id: 's_20261007',
 			workoutSlug: 'pass-a',
