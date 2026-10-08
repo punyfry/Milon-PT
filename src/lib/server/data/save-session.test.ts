@@ -239,9 +239,27 @@ describe('exercises written in during the session', () => {
 		expect((await getSession(storage, 's_20261006'))!.data.deviations).toEqual([]);
 	});
 
+	it('creates nothing when the save is going to fail', async () => {
+		const storage = await setup();
+		const none = withNew();
+		for (const ex of none.exercises) ex.sets = ex.sets.map((set) => ({ ...set, done: false }));
+		await expect(saveSession(storage, input(none, { saveAsNewVersion: true }))).rejects.toThrow(/Inga set/);
+		const wrongType = withNew();
+		wrongType.exercises[1].sets = [{ seconds: 30, done: true }];
+		await expect(saveSession(storage, input(wrongType))).rejects.toThrow(/sets\[0\]\.weight/);
+		await expect(saveSession(storage, input(withNew({ workoutVersion: 9 })))).rejects.toThrow(/finns inte/);
+		expect(await getExercise(storage, 'ex_hantelrodd')).toBeNull();
+	});
+
+	it('keeps only the validated fields of a written-in exercise', () => {
+		const parsed = input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: '  Hantel   rodd ', extra: 'x' } as never] }));
+		expect(parsed.session.newExercises).toEqual([{ id: 'new_abc', name: 'Hantel rodd', type: 'weight', instruction: 'Rak rygg.' }]);
+	});
+
 	it('rejects invalid written-in exercises before anything is read', () => {
 		expect(() => input(withNew({ newExercises: [{ id: 'ex_fel', ...rows }] }))).toThrow(/newExercises\[0\]\.id/);
 		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: ' ' }] }))).toThrow(/namn/);
 		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, type: 'cardio' as never }] }))).toThrow(/type/);
+		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: `A${' '.repeat(500)}B` }] }))).toThrow(/högst 80/);
 	});
 });

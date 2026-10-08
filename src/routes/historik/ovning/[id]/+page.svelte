@@ -129,7 +129,7 @@
 				}}
 		>
 			<h2>Ändra övning</h2>
-			<ExerciseFields bind:name={fields.name} bind:type={fields.type} bind:instruction={fields.instruction} typeLocked={ex.logged} idPrefix="edit" />
+			<ExerciseFields bind:name={fields.name} bind:type={fields.type} bind:instruction={fields.instruction} typeLock={ex.typeLock} idPrefix="edit" />
 			<input type="hidden" name="name" value={fields.name} />
 			<input type="hidden" name="type" value={fields.type} />
 			<input type="hidden" name="instruction" value={fields.instruction} />

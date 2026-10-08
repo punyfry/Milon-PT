@@ -7,12 +7,15 @@
 import {
 	Issues,
 	ValidationError,
+	SAFE_ID,
+	findSameExercise,
 	isObject,
 	issueText,
 	normalizeName,
 	slugify,
 	targetMatchesType,
 	validateExerciseInput,
+	validateTarget,
 	type Exercise,
 	type Target,
 	type WorkoutExercise,
@@ -33,20 +36,25 @@ export type ManualItem = { sets: number; target: Target } & (
 export interface ManualWorkoutInput {
 	/** The workout being edited, or null for a new one. */
 	editSlug: string | null;
+	/** The version an edit started from (null for a new workout); saving fails with WorkoutChangedError if it is no longer the latest. */
+	baseVersion: number | null;
 	name: string;
 	items: ManualItem[];
 }
 
-const ID = /^[A-Za-z0-9_-]{1,100}$/;
+/** The workout was saved elsewhere after the edit started (another tab or device). */
+export class WorkoutChangedError extends Error {
+	constructor() {
+		super('Passet har ändrats sedan du öppnade det. Ladda om sidan och gör ändringen igen.');
+		this.name = 'WorkoutChangedError';
+	}
+}
 
+/** A target in reps (1–999) or seconds (1–3600). */
 function parseTarget(v: unknown): Target | null {
-	if (!isObject(v)) return null;
-	const keys = Object.keys(v);
-	if (keys.length !== 1) return null;
-	const n = keys[0] === 'reps' ? v.reps : keys[0] === 'seconds' ? v.seconds : undefined;
-	const max = keys[0] === 'reps' ? 999 : 3600;
-	if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > max) return null;
-	return keys[0] === 'reps' ? { reps: n } : { seconds: n };
+	const target = validateTarget(v, new Issues(), '');
+	if (!target) return null;
+	return ('reps' in target ? target.reps <= 999 : target.seconds <= 3600) ? target : null;
 }
 
 /** Checks the input before anything is read from storage. Messages are shown to the user. */
@@ -55,6 +63,9 @@ export function parseManualWorkoutInput(raw: unknown): ManualWorkoutInput {
 	if (!isObject(raw)) throw new ValidationError('pass', ['Ogiltig JSON']);
 	const editSlug = raw.editSlug === undefined || raw.editSlug === null ? null : raw.editSlug;
 	if (editSlug !== null && (typeof editSlug !== 'string' || !/^[a-z0-9-]{1,80}$/.test(editSlug))) issues.add('', 'Ogiltigt pass att redigera.');
+	const baseVersion = editSlug === null ? null : raw.baseVersion;
+	if (editSlug !== null && (typeof baseVersion !== 'number' || !Number.isInteger(baseVersion) || baseVersion < 1))
+		issues.add('', 'Ogiltig version att redigera.');
 	const name = typeof raw.name === 'string' ? raw.name.trim().replace(/\s+/g, ' ') : '';
 	if (!name || !slugify(name)) issues.add('', 'Passet behöver ett namn.');
 	else if (name.length > MAX_WORKOUT_NAME) issues.add('', `Namnet får vara högst ${MAX_WORKOUT_NAME} tecken.`);
@@ -72,7 +83,7 @@ export function parseManualWorkoutInput(raw: unknown): ManualWorkoutInput {
 			if (!target) issues.add('', `${label}: ange mål i reps (1–999) eller sekunder (1–3600).`);
 			let item: ManualItem | null = null;
 			if (typeof x.exerciseId === 'string' && x.newExercise === undefined) {
-				if (!ID.test(x.exerciseId)) issues.add('', `${label}: ogiltigt övnings-ID.`);
+				if (!SAFE_ID.test(x.exerciseId)) issues.add('', `${label}: ogiltigt övnings-ID.`);
 				else item = { exerciseId: x.exerciseId, sets: sets as number, target: target! };
 			} else if (x.exerciseId === undefined && x.newExercise !== undefined) {
 				const found = new Issues();
@@ -83,7 +94,7 @@ export function parseManualWorkoutInput(raw: unknown): ManualWorkoutInput {
 			if (item && target) items.push(item);
 		});
 	if (!issues.ok) throw new ValidationError('pass', issues.list);
-	return { editSlug: editSlug as string | null, name, items };
+	return { editSlug: editSlug as string | null, baseVersion: baseVersion as number | null, name, items };
 }
 
 /** A short change note for the version list, e.g. "Lade till Hantelrodd, ändrade set eller mål". */
@@ -114,19 +125,12 @@ export interface ManualWorkoutResult {
 }
 
 export async function saveManualWorkout(storage: UserStorage, input: ManualWorkoutInput, today: string): Promise<ManualWorkoutResult> {
-	let base: WorkoutTemplate | null = null;
-	let slug: string;
-	if (input.editSlug) {
-		base = await getLatestWorkout(storage, input.editSlug);
-		if (!base) throw new ValidationError('pass', ['Passet finns inte längre.']);
-		slug = base.slug;
-	} else {
-		slug = slugify(input.name);
-		const existing = await getLatestWorkout(storage, slug);
-		if (existing) throw new ValidationError('pass', [`Det finns redan ett pass som heter ${existing.name}. Välj ett annat namn eller redigera det passet.`]);
-	}
+	const slug = input.editSlug ?? slugify(input.name);
+	const [latest, catalog] = await Promise.all([getLatestWorkout(storage, slug), listExercises(storage).then((all) => all.map((e) => e.data))]);
+	if (input.editSlug && !latest) throw new ValidationError('pass', ['Passet finns inte längre.']);
+	if (input.editSlug && latest!.version !== input.baseVersion) throw new WorkoutChangedError();
+	const base = input.editSlug ? latest : null;
 
-	const catalog = (await listExercises(storage)).map((e) => e.data);
 	const byId = new Map(catalog.map((e) => [e.id, e]));
 	const problems: string[] = [];
 	for (const [i, item] of input.items.entries()) {
@@ -141,22 +145,31 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	}
 	// The same exercise twice is caught before anything is created. A new one
 	// with the name and type of an existing one is that exercise (see findOrCreateExercise).
+	const active = catalog.filter((e) => !e.archived);
 	const keyOf = (item: ManualItem) => {
 		if ('exerciseId' in item) return item.exerciseId;
 		const { name, type } = item.newExercise;
-		const match = catalog.find((e) => !e.archived && e.type === type && normalizeName(e.name) === normalizeName(name));
-		return match?.id ?? `new:${type}:${normalizeName(name)}`;
+		return findSameExercise(active, item.newExercise)?.id ?? `new:${type}:${normalizeName(name)}`;
 	};
 	const seen = new Set<string>();
 	for (const item of input.items) {
 		const key = keyOf(item);
 		if (seen.has(key)) {
-			const name = 'exerciseId' in item ? byId.get(item.exerciseId)!.name : item.newExercise.name;
+			const name = 'exerciseId' in item ? (byId.get(item.exerciseId)?.name ?? item.exerciseId) : item.newExercise.name;
 			problems.push(`${byId.get(key)?.name ?? name} finns två gånger i passet.`);
 		}
 		seen.add(key);
 	}
 	if (problems.length) throw new ValidationError('pass', problems);
+
+	if (!input.editSlug && latest) {
+		// A repeated save of a new workout (e.g. when the first response was lost) changes nothing.
+		const same =
+			latest.name === input.name &&
+			JSON.stringify(latest.exercises) === JSON.stringify(input.items.map((item) => ({ exerciseId: keyOf(item), sets: item.sets, target: item.target })));
+		if (same) return { slug, version: latest.version, saved: false };
+		throw new ValidationError('pass', [`Det finns redan ett pass som heter ${latest.name}. Välj ett annat namn eller redigera det passet.`]);
+	}
 
 	const exercises: WorkoutExercise[] = [];
 	for (const item of input.items) {

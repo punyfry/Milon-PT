@@ -17,13 +17,13 @@
 		name: string;
 		type: ExerciseType;
 		instruction: string;
-		/** The type can't change once sets are logged, since sets are stored per type. */
-		typeLocked?: boolean;
+		/** Why the type can't change (see `typeLockReason`), or null if it can. */
+		typeLock?: string | null;
 		/** Prefix for the field ids, so several forms can be on one page. */
 		idPrefix?: string;
 	}
 
-	let { name = $bindable(), type = $bindable(), instruction = $bindable(), typeLocked = false, idPrefix = 'ex' }: Props = $props();
+	let { name = $bindable(), type = $bindable(), instruction = $bindable(), typeLock = null, idPrefix = 'ex' }: Props = $props();
 </script>
 
 <div class="fields">
@@ -36,10 +36,10 @@
 		<span class="label" id="{idPrefix}-type">Typ</span>
 		<div class="seg" role="group" aria-labelledby="{idPrefix}-type">
 			{#each Object.entries(TYPE_LABEL) as [key, label] (key)}
-				<button type="button" aria-pressed={type === key} disabled={typeLocked && type !== key} onclick={() => (type = key as ExerciseType)}>{label}</button>
+				<button type="button" aria-pressed={type === key} disabled={!!typeLock && type !== key} onclick={() => (type = key as ExerciseType)}>{label}</button>
 			{/each}
 		</div>
-		<span class="hint">{typeLocked ? 'Typen går inte att ändra när det finns loggade set.' : TYPE_HINT[type]}</span>
+		<span class="hint">{typeLock ?? TYPE_HINT[type]}</span>
 	</div>
 
 	<label class="field">

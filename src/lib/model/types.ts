@@ -138,6 +138,9 @@ export interface NewSessionExercise {
 	instruction: string;
 }
 
+/** Most exercises written in per session. */
+export const MAX_NEW_EXERCISES = 20;
+
 /** Active session in localStorage under the key `milonpt.activeSession`. */
 export interface ActiveSession {
 	sessionId: string;

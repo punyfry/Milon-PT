@@ -4,7 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
-	import { Issues, issueText, normalizeName, validateExerciseInput, type ExerciseType, type Target } from '$lib/model';
+	import { Issues, findSameExercise, issueText, normalizeName, validateExerciseInput, type ExerciseType, type Target } from '$lib/model';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -120,11 +120,9 @@
 		const issues = new Issues();
 		const input = validateExerciseInput(fresh, issues, '');
 		if (!input) return void (addError = issueText(issues.list[0] ?? 'Kontrollera övningen'));
-		const key = normalizeName(input.name);
-		const same = (n: string, t: ExerciseType) => t === input.type && normalizeName(n) === key;
-		if (items.some((i) => same(i.name, i.type))) return void (addError = `${input.name} finns redan i passet.`);
+		if (findSameExercise(items, input)) return void (addError = `${input.name} finns redan i passet.`);
 		// The same exercise already exists: use it rather than creating a copy.
-		const existing = data.catalog.find((c) => !c.archived && same(c.name, c.type));
+		const existing = findSameExercise(data.catalog.filter((c) => !c.archived), input);
 		if (existing) return add({ exerciseId: existing.id, name: existing.name, type: existing.type });
 		add({ newExercise: input, name: input.name, type: input.type });
 	}
@@ -144,6 +142,7 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					editSlug: data.editing?.slug ?? null,
+					baseVersion: data.editing?.version ?? null,
 					name,
 					items: items.map((i) => ({
 						...(i.exerciseId ? { exerciseId: i.exerciseId } : { newExercise: i.newExercise }),

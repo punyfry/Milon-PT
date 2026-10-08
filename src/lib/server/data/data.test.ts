@@ -121,4 +121,12 @@ describe('editing exercise details', () => {
 		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: '', type: 'weight' })).rejects.toThrow(/Övningen behöver ett namn\./);
 		await expect(updateExerciseDetails(storage, 'ex_saknas', { name: 'X', type: 'weight' })).rejects.toThrow(/finns inte/);
 	});
+
+	it('locks the type while a workout uses the exercise', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await createExercise(storage, { name: 'Rodd', type: 'weight', instruction: '' });
+		await saveWorkoutVersion(storage, { slug: 'pass-a', name: 'Pass A', createdAt: '2026-10-01', exercises: [{ exerciseId: 'ex_rodd', sets: 3, target: { reps: 8 } }] });
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd', type: 'time' })).rejects.toThrow(/finns i ett pass \(Pass A\)/);
+		await expect(updateExerciseDetails(storage, 'ex_rodd', { name: 'Rodd 2', type: 'weight' })).resolves.toBeTruthy();
+	});
 });

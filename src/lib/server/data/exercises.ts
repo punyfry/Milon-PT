@@ -4,6 +4,7 @@ import {
 	assertValid,
 	issueText,
 	exerciseIdBase,
+	findSameExercise,
 	normalizeName,
 	uniqueId,
 	validateExercise,
@@ -11,6 +12,7 @@ import {
 	type Exercise,
 	type LogEntry
 } from '../../model';
+import { listLatestWorkouts } from './workouts';
 import { StorageConflictError, type StoredJson, type UserStorage } from '../storage/types';
 
 const DIR = 'exercises/';
@@ -81,8 +83,7 @@ export async function findOrCreateExercise(
 	catalog: Exercise[],
 	input: Pick<Exercise, 'name' | 'type' | 'instruction'>
 ): Promise<{ exercise: Exercise; created: boolean }> {
-	const key = normalizeName(input.name);
-	const existing = catalog.find((e) => !e.archived && e.type === input.type && normalizeName(e.name) === key);
+	const existing = findSameExercise(catalog.filter((e) => !e.archived), input);
 	if (existing) return { exercise: existing, created: false };
 	const { data } = await createExercise(storage, input, new Set(catalog.map((e) => e.id)));
 	catalog.push(data);
@@ -101,9 +102,19 @@ export async function saveExercise(
 }
 
 /**
+ * Why the type of an exercise can't change, or null if it can: logged sets
+ * are stored per type, and a workout's target is in reps or seconds.
+ */
+export async function typeLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
+	if (exercise.log.length) return 'Typen går inte att ändra när det finns loggade set.';
+	const using = (await listLatestWorkouts(storage)).filter((w) => w.exercises.some((e) => e.exerciseId === exercise.id));
+	if (using.length) return `Typen går inte att ändra när övningen finns i ett pass (${using.map((w) => w.name).join(', ')}).`;
+	return null;
+}
+
+/**
  * Changes an exercise's name, type and instruction (`input` as typed by the
- * user). The type is locked once sets are logged, since sets are stored per
- * type, and the name may not be taken by another active exercise of the same
+ * user). The type is locked as `typeLockReason` says, and the name may not be taken by another active exercise of the same
  * type. Throws ValidationError with messages for the user.
  */
 export async function updateExerciseDetails(storage: UserStorage, id: string, input: unknown): Promise<StoredJson<Exercise>> {
@@ -112,8 +123,10 @@ export async function updateExerciseDetails(storage: UserStorage, id: string, in
 	if (!fields) throw new ValidationError('övning', issues.list.map(issueText));
 	const current = await getExercise(storage, id);
 	if (!current) throw new ValidationError('övning', ['Övningen finns inte.']);
-	if (fields.type !== current.data.type && current.data.log.length)
-		throw new ValidationError('övning', ['Typen går inte att ändra när det finns loggade set.']);
+	if (fields.type !== current.data.type) {
+		const reason = await typeLockReason(storage, current.data);
+		if (reason) throw new ValidationError('övning', [reason]);
+	}
 	const key = normalizeName(fields.name);
 	const taken = (await listExercises(storage)).some(
 		({ data: e }) => e.id !== id && !e.archived && e.type === fields.type && normalizeName(e.name) === key

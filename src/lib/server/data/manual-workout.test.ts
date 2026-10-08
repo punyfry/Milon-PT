@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
-import { createExercise, getExercise, getLatestWorkout, listExercises, listWorkoutVersions, parseManualWorkoutInput, saveManualWorkout } from '.';
+import { WorkoutChangedError, createExercise, getExercise, getLatestWorkout, listExercises, listWorkoutVersions, parseManualWorkoutInput, saveManualWorkout } from '.';
 
 const TODAY = '2026-10-08';
 
@@ -41,10 +41,10 @@ describe('manual workout', () => {
 	it('saves an edit as the next version with a change note, and nothing when unchanged', async () => {
 		const storage = await setup();
 		await save(storage, { name: 'Pass C', items: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }, { exerciseId: 'ex_plankan', sets: 2, target: { seconds: 45 } }] });
-		const edit = { editSlug: 'pass-c', name: 'Pass C', items: [{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 45 } }, rows] };
+		const edit = { editSlug: 'pass-c', baseVersion: 1, name: 'Pass C', items: [{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 45 } }, rows] };
 		expect(await save(storage, edit)).toEqual({ slug: 'pass-c', version: 2, saved: true });
 		expect((await getLatestWorkout(storage, 'pass-c'))!.changeNote).toBe('Lade till Hantelrodd, tog bort Marklyft, ändrade set eller mål');
-		expect(await save(storage, edit)).toEqual({ slug: 'pass-c', version: 2, saved: false });
+		expect(await save(storage, { ...edit, baseVersion: 2 })).toEqual({ slug: 'pass-c', version: 2, saved: false });
 		expect((await listWorkoutVersions(storage)).get('pass-c')).toEqual([1, 2]);
 		// The written-in exercise now exists and is reused, not created again.
 		expect((await listExercises(storage)).filter((e) => e.data.name === 'Hantelrodd')).toHaveLength(1);
@@ -80,6 +80,25 @@ describe('manual workout', () => {
 
 	it('refuses to edit a workout that does not exist', async () => {
 		const storage = await setup();
-		await expect(save(storage, { editSlug: 'finns-inte', name: 'A', items: [rows] })).rejects.toThrow(/finns inte längre/);
+		await expect(save(storage, { editSlug: 'finns-inte', baseVersion: 1, name: 'A', items: [rows] })).rejects.toThrow(/finns inte längre/);
+	});
+
+	it('refuses an edit that started from an older version', async () => {
+		const storage = await setup();
+		const items = [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }];
+		await save(storage, { name: 'Pass C', items });
+		await save(storage, { editSlug: 'pass-c', baseVersion: 1, name: 'Pass C', items: [{ ...items[0], sets: 4 }] });
+		await expect(save(storage, { editSlug: 'pass-c', baseVersion: 1, name: 'Pass C', items: [{ ...items[0], sets: 5 }] })).rejects.toBeInstanceOf(
+			WorkoutChangedError
+		);
+		expect(issues(() => parseManualWorkoutInput({ editSlug: 'pass-c', name: 'A', items: [rows] }))).toMatch(/Ogiltig version/);
+	});
+
+	it('treats a repeated save of a new workout as already saved', async () => {
+		const storage = await setup();
+		const input = { name: 'Pass C', items: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }, rows] };
+		await save(storage, input);
+		expect(await save(storage, input)).toEqual({ slug: 'pass-c', version: 1, saved: false });
+		await expect(save(storage, { ...input, items: [rows] })).rejects.toThrow(/redan ett pass/);
 	});
 });

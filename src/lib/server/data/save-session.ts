@@ -8,7 +8,9 @@
  */
 import {
 	Issues,
+	MAX_NEW_EXERCISES,
 	NEW_EXERCISE_ID,
+	SAFE_ID,
 	ValidationError,
 	isObject,
 	sessionIdFor,
@@ -43,7 +45,6 @@ export interface SaveSessionResult {
 	alreadySaved: boolean;
 }
 
-const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
@@ -56,7 +57,7 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 		return null;
 	}
 	const s = raw;
-	if (typeof s.sessionId !== 'string' || !ID.test(s.sessionId)) issues.push('session.sessionId är ogiltigt');
+	if (typeof s.sessionId !== 'string' || !SAFE_ID.test(s.sessionId)) issues.push('session.sessionId är ogiltigt');
 	if (typeof s.workoutSlug !== 'string' || !/^[a-z0-9-]+$/.test(s.workoutSlug)) issues.push('session.workoutSlug är ogiltig');
 	if (typeof s.workoutVersion !== 'number' || !Number.isInteger(s.workoutVersion) || s.workoutVersion < 1)
 		issues.push('session.workoutVersion är ogiltig');
@@ -66,32 +67,35 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 	if (!Array.isArray(s.exercises)) issues.push('session.exercises måste vara en lista');
 	else
 		s.exercises.forEach((ex, i) => {
-			if (!isObject(ex) || typeof ex.exerciseId !== 'string' || !ID.test(ex.exerciseId) || !Array.isArray(ex.sets))
+			if (!isObject(ex) || typeof ex.exerciseId !== 'string' || !SAFE_ID.test(ex.exerciseId) || !Array.isArray(ex.sets))
 				issues.push(`session.exercises[${i}] är ogiltig`);
 		});
 	if (s.preparing !== undefined && typeof s.preparing !== 'boolean') issues.push('session.preparing är ogiltig');
 	if (!Array.isArray(s.deviations)) issues.push('session.deviations måste vara en lista');
 	else
 		s.deviations.forEach((d, i) => {
-			if (!isObject(d) || d.type !== 'swap' || typeof d.from !== 'string' || !ID.test(d.from) || typeof d.to !== 'string' || !ID.test(d.to))
+			if (!isObject(d) || d.type !== 'swap' || typeof d.from !== 'string' || !SAFE_ID.test(d.from) || typeof d.to !== 'string' || !SAFE_ID.test(d.to))
 				issues.push(`session.deviations[${i}] är ogiltig`);
 		});
 	if (s.newExercises !== undefined) {
 		if (!Array.isArray(s.newExercises) || s.newExercises.length > MAX_NEW_EXERCISES)
 			issues.push(`session.newExercises måste vara en lista med högst ${MAX_NEW_EXERCISES} övningar`);
 		else
-			s.newExercises.forEach((n, i) => {
+			// Only the validated (trimmed) fields are kept, so nothing else from the client reaches storage or a prompt.
+			s.newExercises = s.newExercises.map((n, i): NewSessionExercise | null => {
 				const p = `session.newExercises[${i}]`;
-				if (!isObject(n) || typeof n.id !== 'string' || !NEW_EXERCISE_ID.test(n.id)) return issues.push(`${p}.id är ogiltigt`);
+				if (!isObject(n) || typeof n.id !== 'string' || !NEW_EXERCISE_ID.test(n.id)) {
+					issues.push(`${p}.id är ogiltigt`);
+					return null;
+				}
 				const found = new Issues();
-				validateExerciseInput(n, found, p);
+				const fields = validateExerciseInput(n, found, p);
 				issues.push(...found.list);
+				return fields && { id: n.id, ...fields };
 			});
 	}
 	return s as unknown as ActiveSession;
 }
-
-const MAX_NEW_EXERCISES = 20;
 
 /** Basic check of the save input before anything is read from storage. */
 export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
@@ -161,10 +165,7 @@ export async function resolveNewExercises(storage: UserStorage, input: SaveSessi
 	const realId = new Map<string, string>();
 	if (used.length) {
 		const catalog = (await listExercises(storage)).map((e) => e.data);
-		for (const n of used) {
-			const fields = validateExerciseInput(n, new Issues(), '') as Pick<NewSessionExercise, 'name' | 'type' | 'instruction'>;
-			realId.set(n.id, (await findOrCreateExercise(storage, catalog, fields)).exercise.id);
-		}
+		for (const { id, ...fields } of used) realId.set(id, (await findOrCreateExercise(storage, catalog, fields)).exercise.id);
 	}
 	const map = (id: string) => realId.get(id) ?? id;
 	return {
@@ -176,12 +177,33 @@ export async function resolveNewExercises(storage: UserStorage, input: SaveSessi
 	};
 }
 
+/**
+ * What can be checked before anything is written, so a save that will fail
+ * creates no exercises: written-in exercises' done sets against their type,
+ * and that at least one set is done. Stored exercises are checked in saveSession.
+ */
+function precheck(session: ActiveSession): void {
+	const issues = new Issues();
+	const written = new Map((session.newExercises ?? []).map((n) => [n.id, n]));
+	let anyDone = false;
+	for (const [i, ex] of session.exercises.entries()) {
+		ex.sets.forEach((set, j) => {
+			if (!isObject(set) || set.done !== true) return;
+			anyDone = true;
+			const n = written.get(ex.exerciseId);
+			if (n) validateSet(set, n.type, issues, `session.exercises[${i}].sets[${j}]`);
+		});
+	}
+	if (!issues.ok) throw new ValidationError('sparning', issues.list);
+	if (!anyDone) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
+}
+
 export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
+	const base = (await getWorkout(storage, input.session.workoutSlug, input.session.workoutVersion))?.data;
+	if (!base) throw new ValidationError('sparning', [`Passet ${input.session.workoutSlug} v${input.session.workoutVersion} finns inte`]);
+	precheck(input.session);
 	const session = await resolveNewExercises(storage, input);
 	const date = session.startedAt.slice(0, 10);
-
-	const base = (await getWorkout(storage, session.workoutSlug, session.workoutVersion))?.data;
-	if (!base) throw new ValidationError('sparning', [`Passet ${session.workoutSlug} v${session.workoutVersion} finns inte`]);
 
 	// Read the exercises and validate the done sets against their type.
 	const exercises = new Map<string, Exercise>();

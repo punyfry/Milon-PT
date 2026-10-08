@@ -5,7 +5,7 @@
 	 * in (`onnew`), and Milon can suggest variants or new exercises (`onaskmilon`).
 	 */
 	import { formatSet } from '$lib/format';
-	import { Issues, issueText, normalizeName, validateExerciseInput, type ActiveSession, type ExerciseType, type NewSessionExercise } from '$lib/model';
+	import { Issues, MAX_NEW_EXERCISES, findSameExercise, issueText, validateExerciseInput, type ActiveSession, type ExerciseType, type NewSessionExercise } from '$lib/model';
 	import { swapCandidates, type ExerciseInfo } from '$lib/session/active';
 	import ExerciseFields, { TYPE_LABEL } from './ExerciseFields.svelte';
 	import Icon from './Icon.svelte';
@@ -44,13 +44,14 @@
 		const issues = new Issues();
 		const input = validateExerciseInput(fresh, issues, '');
 		if (!input) return void (newError = issueText(issues.list[0] ?? 'Kontrollera övningen'));
-		const key = normalizeName(input.name);
 		const inSession = new Set(session.exercises.map((x) => x.exerciseId));
-		const known = [...catalog, ...(session.newExercises ?? [])].find((c) => c.type === input.type && normalizeName(c.name) === key);
+		const known = findSameExercise([...catalog, ...(session.newExercises ?? [])], input);
 		if (known && inSession.has(known.id)) return void (newError = `${known.name} finns redan i passet.`);
 		// The same exercise already exists: swap to it rather than creating a copy.
 		const existing = catalog.find((c) => c.id === known?.id);
 		if (existing) return onpick(existing);
+		const live = (session.newExercises ?? []).filter((n) => inSession.has(n.id));
+		if (live.length >= MAX_NEW_EXERCISES) return void (newError = `Högst ${MAX_NEW_EXERCISES} nya övningar per pass.`);
 		onnew(input);
 	}
 

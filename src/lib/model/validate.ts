@@ -93,7 +93,8 @@ function arr(o: Obj, key: string, issues: Issues, path: string): unknown[] | und
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-const ID = /^[A-Za-z0-9_-]{1,100}$/;
+/** Ids of exercises and sessions: also safe in a storage path. */
+export const SAFE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** A YYYY-MM-DD date that exists in the calendar (not e.g. 2024-02-30). */
@@ -119,7 +120,7 @@ function datetime(o: Obj, key: string, issues: Issues, path: string): string | u
 
 function id(o: Obj, key: string, issues: Issues, path: string): string | undefined {
 	const v = str(o, key, issues, path);
-	if (v !== undefined && !ID.test(v)) issues.add(join(path, key), 'får bara innehålla a-z, 0-9, _ och -');
+	if (v !== undefined && !SAFE_ID.test(v)) issues.add(join(path, key), 'får bara innehålla a-z, 0-9, _ och -');
 	return v;
 }
 
@@ -219,9 +220,11 @@ export function validateExerciseInput(
 		return null;
 	}
 	const before = issues.list.length;
-	const name = typeof v.name === 'string' ? v.name.trim().replace(/\s+/g, ' ') : '';
+	const raw = typeof v.name === 'string' ? v.name.trim() : '';
+	const name = raw.replace(/\s+/g, ' ');
 	if (!name) issues.add(join(path, 'name'), 'övningen behöver ett namn');
-	else if (name.length > MAX_EXERCISE_NAME) issues.add(join(path, 'name'), `namnet får vara högst ${MAX_EXERCISE_NAME} tecken`);
+	// The length is checked before spaces are collapsed, so the input itself stays small.
+	else if (raw.length > MAX_EXERCISE_NAME) issues.add(join(path, 'name'), `namnet får vara högst ${MAX_EXERCISE_NAME} tecken`);
 	if (!isExerciseType(v.type)) issues.add(join(path, 'type'), `måste vara ${EXERCISE_TYPES.join(', ')}`);
 	if (v.instruction !== undefined && typeof v.instruction !== 'string') issues.add(join(path, 'instruction'), 'måste vara en sträng');
 	const instruction = typeof v.instruction === 'string' ? v.instruction.trim() : '';
@@ -315,7 +318,7 @@ export function validateSession(v: unknown, issues: Issues, path: string): Sessi
 	const startedAt = datetime(v, 'startedAt', issues, path);
 	const endedAt = datetime(v, 'endedAt', issues, path);
 	const exerciseIds = (arr(v, 'exerciseIds', issues, path) ?? []).map((e, i) => {
-		if (typeof e !== 'string' || !ID.test(e)) issues.add(join(join(path, 'exerciseIds'), i), 'ogiltigt övnings-ID');
+		if (typeof e !== 'string' || !SAFE_ID.test(e)) issues.add(join(join(path, 'exerciseIds'), i), 'ogiltigt övnings-ID');
 		return e as string;
 	});
 	const deviations = (arr(v, 'deviations', issues, path) ?? []).map((d, i) =>

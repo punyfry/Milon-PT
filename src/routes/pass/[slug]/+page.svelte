@@ -9,7 +9,7 @@
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
 	import { daysAgo, formatNumber, formatSeconds, formatSet } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import { newExerciseId, normalizeName, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
+	import { findSameExercise, newExerciseId, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
 	import {
 		addSet,
 		applySwap,
@@ -431,11 +431,11 @@
 	/** Swaps to an exercise written in; one written in earlier with the same name and type is reused. */
 	function pickNew(from: string, fields: Omit<NewSessionExercise, 'id'>) {
 		if (!session) return;
-		const key = normalizeName(fields.name);
-		let entry = session.newExercises?.find((n) => n.type === fields.type && normalizeName(n.name) === key);
+		let entry = findSameExercise(session.newExercises ?? [], fields);
 		if (!entry) {
 			entry = { id: newExerciseId(), ...fields };
-			change((s) => (s.newExercises = [...(s.newExercises ?? []), entry!]));
+			// Ones swapped away again without a done set are dropped, so they don't count toward the limit.
+			change((s) => (s.newExercises = [...(s.newExercises ?? []).filter((n) => s.exercises.some((e) => e.exerciseId === n.id)), entry!]));
 		}
 		pick(from, { id: entry.id, name: entry.name, type: entry.type, instruction: entry.instruction });
 	}
