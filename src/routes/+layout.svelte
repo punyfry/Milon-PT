@@ -9,7 +9,9 @@
 	let { children }: LayoutProps = $props();
 
 	/** The main menu shows everywhere except during a workout and on sign-in. */
-	const showTabs = $derived(!page.url.pathname.startsWith('/pass/') && page.url.pathname !== '/login' && !page.error);
+	const showTabs = $derived(
+		!page.url.pathname.startsWith('/pass/') && page.url.pathname !== '/login' && page.url.pathname !== '/valkommen' && !page.error
+	);
 </script>
 
 <svelte:head>

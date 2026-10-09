@@ -75,10 +75,17 @@ describe('validation', () => {
 });
 
 describe('profile', () => {
+	const profileOf = (v: unknown) => assertValid('profil', v, validateProfile);
+
 	it('keeps the coach setting and rejects anything but a boolean', () => {
 		expect(assertValid('profil', { coach: false }, validateProfile)).toEqual({ coach: false });
 		expect(assertValid('profil', {}, validateProfile)).toEqual({});
 		expect(() => assertValid('profil', { coach: 'nej' }, validateProfile)).toThrow(/coach/);
+	});
+
+	it('keeps the date the intro was done', () => {
+		expect(profileOf({ onboardedAt: '2026-10-09' })).toEqual({ onboardedAt: '2026-10-09' });
+		expect(() => profileOf({ onboardedAt: 'igår' })).toThrow(/onboardedAt/);
 	});
 
 	it('treats a missing setting as on', () => {

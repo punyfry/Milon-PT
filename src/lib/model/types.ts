@@ -101,6 +101,8 @@ export interface KcalRange {
 export interface Profile {
 	/** Whether Milon, the AI coach, is on. Missing means on. */
 	coach?: boolean;
+	/** YYYY-MM-DD when the intro was finished or skipped. Missing for a new user. */
+	onboardedAt?: string;
 	/** Free-text goals. */
 	goals?: string;
 	/** Sessions per week, for the week view. */
