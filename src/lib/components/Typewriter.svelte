@@ -66,7 +66,8 @@
 		display: inline-block;
 		width: 2px;
 		height: 1em;
-		margin: 0 1px -0.15em;
+		/* No net width, so the line doesn't wrap differently while the caret is in it. */
+		margin: 0 -2px -0.15em 0;
 		background: currentColor;
 		animation: caret 1s steps(1) infinite;
 	}

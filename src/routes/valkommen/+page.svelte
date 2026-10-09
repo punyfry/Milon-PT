@@ -174,7 +174,7 @@
 				{#each SCENES as scene, i (scene.image)}
 					<img src={scene.image} alt="" class:shown={i === sceneIndex} class:still={reducedMotion} />
 				{/each}
-				<span class="face" class:shown={sceneIndex === SCENES.length - 1 && typed}><MilonAvatar size={44} /></span>
+				<span class="face" class:shown={sceneIndex === SCENES.length - 1 && typed}><MilonAvatar /></span>
 			</div>
 			<p class="text" tabindex="-1" data-step-focus>
 				<Typewriter text={SCENES[sceneIndex].text} instant={skipTyping} ondone={() => (typed = true)} />
@@ -337,6 +337,12 @@
 		transition:
 			opacity 0.6s ease,
 			transform 0.6s ease;
+	}
+	/* The face scales with the stage. */
+	.stage .face :global(.avatar) {
+		width: 100%;
+		height: auto;
+		aspect-ratio: 1;
 	}
 	.face.shown {
 		opacity: 1;

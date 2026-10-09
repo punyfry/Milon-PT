@@ -3,6 +3,8 @@ import { isRedirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createExercise, getProfile, saveProfile } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
+import { StorageConflictError } from '$lib/server/storage/types';
+import { env } from '../test/env-private';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
 vi.mock('$lib/server/storage', async (original) => ({
@@ -53,6 +55,24 @@ describe('the intro', () => {
 		await done();
 		// Watching it again keeps the first date and the setting.
 		expect((await getProfile(state.storage)).data).toEqual({ coach: true, onboardedAt: '2026-01-01' });
+	});
+
+	it('turns Milon on, and a new choice when watching again keeps the date', async () => {
+		await saveProfile(state.storage, { coach: false, onboardedAt: '2026-01-01' });
+		await done({ coach: 'on' });
+		expect((await getProfile(state.storage)).data).toEqual({ coach: true, onboardedAt: '2026-01-01' });
+	});
+
+	it('answers 409 when the profile changed at the same time', async () => {
+		vi.spyOn(state.storage, 'writeJson').mockImplementationOnce(() => Promise.reject(new StorageConflictError('profile.json')));
+		expect(((await done({ coach: 'on' })) as { status: number }).status).toBe(409);
+	});
+
+	it('tells the page whether Milon can be chosen', async () => {
+		env.ANTHROPIC_API_KEY = 'test';
+		expect(await intro.load({} as never)).toEqual({ aiConfigured: true });
+		delete env.ANTHROPIC_API_KEY;
+		expect(await intro.load({} as never)).toEqual({ aiConfigured: false });
 	});
 
 	it('refuses anything but on or off', async () => {
