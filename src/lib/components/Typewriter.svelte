@@ -5,7 +5,7 @@
 	 * reduced motion). Screen readers get the whole text at once; the typing
 	 * itself is hidden from them.
 	 */
-	import { onDestroy, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 
 	interface Props {
 		text: string;
@@ -47,7 +47,6 @@
 		return () => clearTimeout(timer);
 	});
 
-	onDestroy(() => clearTimeout(timer));
 </script>
 
 <span class="sr-only">{text}</span>

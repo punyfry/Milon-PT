@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import LogoToMilon from '$lib/components/LogoToMilon.svelte';
 	import MilonAvatar from '$lib/components/MilonAvatar.svelte';
@@ -81,10 +82,14 @@
 		step = next;
 		typed = false;
 		skipTyping = reducedMotion;
+		failure = null;
+		// The button that was tapped is gone: focus moves to the new step's text, so a screen reader reads it.
+		void tick().then(() => document.querySelector<HTMLElement>('[data-step-focus]')?.focus());
 	}
 
 	/** A tap on the text or image while it is typed shows all of it; otherwise it moves on. */
 	function tapStory() {
+		if (busy) return;
 		if (!typed) skipTyping = true;
 		else next();
 	}
@@ -111,11 +116,12 @@
 			const body = new FormData();
 			if (coachChoice) body.set('coach', coachChoice);
 			const res = await fetch('?/done', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
-			const result = await res.json().catch(() => null);
-			if (!res.ok || result?.type !== 'success') throw new Error();
-			return true;
+			const result = deserialize(await res.text());
+			if (result.type === 'success') return true;
+			failure = (result.type === 'failure' && (result.data?.error as string | undefined)) || 'Kunde inte spara. Försök igen.';
+			return false;
 		} catch {
-			failure = 'Kunde inte spara. Kontrollera nätet och försök igen.';
+			failure = 'Kunde inte nå servern. Kontrollera nätet och försök igen.';
 			return false;
 		} finally {
 			busy = false;
@@ -155,7 +161,7 @@
 	{#if step.kind === 'opening'}
 		<section class="opening">
 			<span class="logo"><LogoToMilon size={132} {reducedMotion} /></span>
-			<h1>Milon-PT</h1>
+			<h1 tabindex="-1" data-step-focus>Milon-PT</h1>
 			<p class="muted">En liten historia om hur styrka byggs.</p>
 		</section>
 		<footer class="bar">
@@ -170,7 +176,7 @@
 				{/each}
 				<span class="face" class:shown={sceneIndex === SCENES.length - 1 && typed}><MilonAvatar size={44} /></span>
 			</div>
-			<p class="text">
+			<p class="text" tabindex="-1" data-step-focus>
 				<Typewriter text={SCENES[sceneIndex].text} instant={skipTyping} ondone={() => (typed = true)} />
 			</p>
 		</section>
@@ -183,7 +189,7 @@
 	{:else if step.kind === 'choice' || step.kind === 'reply'}
 		<section class="milon">
 			<MilonAvatar size={88} framed thinking={!typed} />
-			<p class="said" aria-live="polite">
+			<p class="said" tabindex="-1" data-step-focus>
 				<Typewriter text={step.kind === 'choice' ? QUESTION : REPLY[choice ?? 'on']} instant={skipTyping} ondone={() => (typed = true)} />
 			</p>
 		</section>
@@ -200,7 +206,7 @@
 		{@const card = tour[step.i]}
 		<section class="tour">
 			<span class="icon"><Icon name={card.icon} size={32} /></span>
-			<h2>{card.title}</h2>
+			<h2 tabindex="-1" data-step-focus>{card.title}</h2>
 			<p>{card.text}</p>
 		</section>
 		<footer class="bar">
@@ -219,7 +225,8 @@
 		min-height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		padding: env(safe-area-inset-top, 0px) 20px env(safe-area-inset-bottom, 0px);
+		padding: env(safe-area-inset-top, 0px) max(20px, env(safe-area-inset-right)) env(safe-area-inset-bottom, 0px)
+			max(20px, env(safe-area-inset-left));
 	}
 	.top {
 		height: 56px;
@@ -334,6 +341,9 @@
 	.face.shown {
 		opacity: 1;
 		transform: translate(-50%, -50%);
+	}
+	[data-step-focus]:focus {
+		outline: none;
 	}
 	.text {
 		margin: 0;
