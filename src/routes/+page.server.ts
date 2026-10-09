@@ -3,6 +3,7 @@ import { getProfile, lastSessionBySlug, listExercises, listLatestWorkouts, listS
 import { aiAvailable } from '$lib/server/ai/client';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export interface WorkoutCard {
@@ -28,6 +29,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		listSessionsBetween(storage, weekStart, addDays(weekStart, 7)),
 		getProfile(storage)
 	]);
+	// A new user (no intro done, nothing saved yet) starts with the intro. Those who already
+	// had workouts or exercises before the intro existed never see it unasked.
+	if (!profile.data.onboardedAt && !workouts.length && !exercises.length) redirect(303, '/valkommen');
 	const names = new Map(exercises.map((e) => [e.data.id, e.data.name]));
 
 	const cards: WorkoutCard[] = workouts.map((w) => ({

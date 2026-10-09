@@ -366,6 +366,7 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 	const weeklySessionGoal = num(v, 'weeklySessionGoal', issues, path, { int: true, min: 0, optional: true });
 	const coachContext = str(v, 'coachContext', issues, path, { optional: true, allowEmpty: true });
 	if (v.coach !== undefined && typeof v.coach !== 'boolean') issues.add(join(path, 'coach'), 'måste vara true eller false');
+	const onboardedAt = v.onboardedAt === undefined ? undefined : date(v, 'onboardedAt', issues, path);
 	let rules: string[] | undefined;
 	if (v.rules !== undefined) {
 		rules = (arr(v, 'rules', issues, path) ?? []).map((r, i) => {
@@ -396,7 +397,8 @@ export function validateProfile(v: unknown, issues: Issues, path: string): Profi
 		...(rules ? { rules } : {}),
 		...(kcalPerWorkout ? { kcalPerWorkout } : {}),
 		...(coachContext !== undefined ? { coachContext } : {}),
-		...(typeof v.coach === 'boolean' ? { coach: v.coach } : {})
+		...(typeof v.coach === 'boolean' ? { coach: v.coach } : {}),
+		...(onboardedAt !== undefined ? { onboardedAt } : {})
 	};
 }
 

@@ -148,6 +148,11 @@
 				{/if}
 			{/if}
 		</section>
+
+		<div class="row">
+			<div class="t">Introt<span>Milons historia och hur appen fungerar</span></div>
+			<a class="btn small" href="/valkommen">Visa igen</a>
+		</div>
 	</div>
 
 	<form method="POST" action="/signout" class="logout">
