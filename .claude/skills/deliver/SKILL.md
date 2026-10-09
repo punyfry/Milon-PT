@@ -37,7 +37,12 @@ Read your own diff critically before committing: what would make CI or the revie
 
 ## 5. Review and test in parallel
 
-Start both subagents in the same message so they run at the same time:
+Start both subagents in the same message so they run at the same time. Keep the cost in proportion to the change:
+
+- **Gregory runs at low effort** (set in his agent file). Start him with `effort: "medium"` when the change touches storage, security (guard, allowlist, paths, headers), the AI limit, the data model or saving a session or workout.
+- **Gregory is skipped** for a change that is only docs, comments, UI text or styling. Read the diff yourself instead.
+- **Nissa skips the browser tests** when no page, component or client code changed (a server-only or test-only change). Tell her so; check, tests, coverage and build are enough then.
+
 
 - `gregory`: give it the branch/PR number and what the change is meant to do, and point it at the risky parts of this particular change.
 - `nissa`: give it the branch, the affected functionality and what test data is available.
@@ -50,7 +55,7 @@ While they run, wait for CI (the GitHub Actions check **Check, test and build**,
 - **nit**: fix if it is simple and clearly right; otherwise leave it.
 - Findings that need the owner's decision: open an issue and mention it in the PR.
 - Findings you believe are wrong: verify yourself, and note briefly why you are not changing anything.
-- If the fixes changed something significant (logic, security, a UI flow), or a subagent tested an older commit: rerun the affected subagent against the new code.
+- Rerun a subagent only when a fix changed something significant that its own tests don't cover (a new code path, security, a UI flow), and then only that subagent, on the fix commits. A small fix with a test that catches the problem needs no new round: verify it yourself and say so in the PR.
 - If a subagent cannot run (e.g. rate limit): do the equivalent check yourself and say so in the report.
 
 ## 7. Merge
