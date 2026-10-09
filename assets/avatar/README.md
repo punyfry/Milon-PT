@@ -7,6 +7,7 @@ Milon is the AI coach. His avatar is an abstract face built from the logo's part
 | `milon.svg` | The avatar. Each path has a class: `eye eye-l`, `eye eye-r`, `mouth`. |
 | `logo-to-milon.svg` | The logo turning into Milon, a blink, and back. SMIL, 5 s loop, no CSS or JS needed. For the intro. |
 | `logo-to-milon.gif` | The same animation as a GIF (256 px, mint on `#0A0A0B`), for use outside the app. |
+| `milon-blink.gif` | Milon alone, blinking once every 3 s (256 px, mint on `#0A0A0B`), for use outside the app. |
 | `avatar-preview.html` | Standalone preview: intro size, chat size (28 px) in a circle and on its own, light and dark. |
 
 ## In the app
