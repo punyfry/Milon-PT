@@ -41,12 +41,12 @@
 	type Option = { label: string; quiet?: boolean; action: () => void };
 
 	/**
-	 * The step lives in the URL (`?steg=` counted from 1, plus `val` on the last
-	 * view), so the browser's back button and a reload stay where the user is.
+	 * Each step is a history entry with the step in the URL (`?steg=` counted from 1,
+	 * plus `val` on the last view), so browser back and a reload keep the place.
+	 * Shallow routing doesn't update page.url, so steps added here are read from
+	 * page.state; the URL covers a reload or a link straight to a step.
 	 */
 	const last = $derived(data.aiConfigured ? END : HELLO);
-	// Shallow routing doesn't update page.url, so steps added here are read from page.state;
-	// the URL covers a reload or a link straight to a step.
 	const choice = $derived.by((): Choice | null => {
 		if (page.state.introStep !== undefined) return page.state.introChoice ?? null;
 		const value = page.url.searchParams.get('val');
@@ -94,8 +94,6 @@
 	let typeDelay = $state(250);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
-	/** This page has added history entries, so the back arrow can be the browser's back. */
-	let pushed = false;
 	let previous = -1;
 
 	onMount(() => {
@@ -128,13 +126,13 @@
 	}
 
 	function show(n: number, value: Choice | null = null) {
-		pushState(urlFor(n, value), { introStep: n, introChoice: value });
-		pushed = true;
+		pushState(urlFor(n, value), { introStep: n, introChoice: value, introDepth: (page.state.introDepth ?? 0) + 1 });
 	}
 
 	function back() {
 		if (busy || step === 0) return;
-		if (pushed) history.back();
+		// Back over an entry this page added; at the first one (or after a reload) step back in place instead.
+		if ((page.state.introDepth ?? 0) > 0) history.back();
 		else replaceState(urlFor(step - 1), { introStep: step - 1, introChoice: null });
 	}
 
@@ -184,9 +182,12 @@
 		if (!busy && (await finish(value))) show(END, value);
 	}
 
-	/** Saves again on the way out, so a reloaded or shared last view still marks the intro as done. */
+	/**
+	 * Saves again on the way out, so a reloaded last view still marks the intro as done.
+	 * The choice itself was saved when it was made; a link with `val` doesn't change it.
+	 */
 	async function leave(href: string) {
-		if (!busy && (await finish(solo ? null : choice))) await goto(href);
+		if (!busy && (await finish(null))) await goto(href);
 	}
 </script>
 
@@ -247,7 +248,8 @@
 		font-display: swap;
 	}
 
-	/* The intro is always dark, whatever the app theme: the drawings are white lines on black. */
+	/* The intro is always dark, whatever the app theme: the drawings are white lines on black.
+	   The values are the dark theme's tokens in src/routes/+layout.svelte; keep them in step. */
 	.intro {
 		--bg: #000;
 		--text: #f2f2f0;
