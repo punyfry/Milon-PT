@@ -1,120 +1,172 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
-	import { goto } from '$app/navigation';
-	import { onMount, tick } from 'svelte';
+	import { goto, pushState, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
+	import { onMount, tick, untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import LogoToMilon from '$lib/components/LogoToMilon.svelte';
 	import MilonAvatar from '$lib/components/MilonAvatar.svelte';
 	import Typewriter from '$lib/components/Typewriter.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	/** Milon's story, always the same. The images are stacked so one turns into the next. */
-	const SCENES = [
-		{
-			image: '/intro/scen-1.png',
-			alt: 'En ung man bär en kalv på axlarna.',
-			text:
-				'En gång i det antika Grekland…\n\n' +
-				'Det sägs att Milon från Kroton, en av sin tids största brottare, fann ett enkelt sätt att bli starkare. ' +
-				'Han lyfte en kalv. Varje dag lyfte han den igen.'
-		},
-		{
-			image: '/intro/scen-2.png',
-			alt: 'Samma man, nu med skägg, bär en fullvuxen tjur på axlarna.',
-			text:
-				'Åren gick.\n\n' +
-				'Kalven växte. Och Milon fortsatte lyfta. Till slut, berättas det, bar han en fullvuxen tjur på sina axlar.\n\n' +
-				'Om det verkligen hände? Tja, historien har sina... kreativa friheter.'
-		},
-		{
-			image: '/intro/scen-3.png',
-			alt: 'Milon står stark och vinkar, med Milons ansikte från appen.',
-			text:
-				'Men själva idén håller än.\n\n' +
-				'Börja där du är. Lägg på lite mer när du är redo. Upprepa. Det är så styrka byggs – steg för steg.\n\n' +
-				'Jag är Milon, din personliga tränare.'
-		}
+	/**
+	 * Milon's story, one line per tap. `scene` is the drawing behind it: 0 the calf,
+	 * 1 the bull, 2 Milon himself. The narrator and Milon differ only in typography.
+	 */
+	type Line = { scene: 0 | 1 | 2; milon?: boolean; text: string };
+	const STORY: Line[] = [
+		{ scene: 0, text: 'I det antika Grekland levde Milon från Kroton, en av sin tids största brottare.' },
+		{ scene: 0, text: 'Det sägs att han fann ett enkelt sätt att bli starkare.\nHan lyfte en kalv. Varje dag lyfte han den igen.' },
+		{ scene: 1, text: 'Åren gick. Kalven växte.\nOch Milon fortsatte lyfta.' },
+		{ scene: 1, text: 'Till slut, berättas det, bar han en fullvuxen tjur på sina axlar.' },
+		{ scene: 1, text: 'Om det verkligen hände? Tja, historien har nog sina kreativa friheter.' },
+		{ scene: 1, text: 'Men själva idén håller än.' },
+		{ scene: 1, text: 'Börja där du är. Lägg på lite mer när du är redo. Upprepa. Det är så styrka byggs – steg för steg.' },
+		{ scene: 2, milon: true, text: 'Hej! Det är jag som är Milon, din personliga tränare.' }
 	];
-
-	const QUESTION =
-		'Vill du ha mig med som stöd?\n\n' +
-		'Jag hjälper dig att bygga pass och svarar när du frågar under passet. Annars håller jag tyst. ' +
-		'Du kan ändra dig när du vill under Konto.';
+	/** Without an API key there is no trainer to offer, so the intro ends on his hello. */
+	const HELLO_SOLO = 'Hej! Jag är Milon. Nu är det din tur.';
+	const HELLO = STORY.length - 1;
+	const QUESTION = HELLO + 1;
+	const END = QUESTION + 1;
+	const QUESTION_TEXT =
+		'Vill du ha mig med som stöd?\nJag hjälper dig bygga pass och finns med under passet. Du kan ändra ditt val när du vill under Konto.';
 	const REPLY = {
-		on: 'Låt oss se vad du kan bli stark nog att lyfta.',
-		off: 'Helt okej, appen fungerar lika bra utan mig. Ändrar du dig hittar du mig under Konto.'
+		on: 'Toppen! Då kör vi. Låt oss se vad du kan bli stark nog att lyfta.',
+		off: 'Helt okej! Appen funkar lika bra utan mig.'
 	};
 
-	const TOUR = {
-		on: [
-			{ icon: 'plus', title: 'Bygg pass med mig', text: 'Berätta vad du vill träna och hur mycket tid du har, så tar vi fram passet tillsammans. Du kan alltid ändra det själv.' },
-			{ icon: 'check', title: 'En övning i taget', text: 'Under passet bockar du av set. Vill du ha tips eller byta övning trycker du på mig, annars håller jag tyst.' },
-			{ icon: 'chart', title: 'Lite mer, steg för steg', text: 'Appen visar vad du lyfte förra gången. När det går lätt lägger du på lite mer, precis som med kalven.' }
-		],
-		off: [
-			{ icon: 'plus', title: 'Bygg ditt pass', text: 'Välj bland dina övningar eller skriv in nya, och sätt antal set och mål.' },
-			{ icon: 'check', title: 'En övning i taget', text: 'Under passet bockar du av set. Du kan byta övning, eller skriva in en ny om maskinen är upptagen.' },
-			{ icon: 'chart', title: 'Lite mer, steg för steg', text: 'Appen visar vad du lyfte förra gången. När det går lätt lägger du på lite mer, precis som med kalven.' }
-		]
-	} as const;
+	type Choice = 'on' | 'off';
+	type Option = { label: string; quiet?: boolean; action: () => void };
 
-	type Step = { kind: 'opening' } | { kind: 'scene'; i: number } | { kind: 'choice' } | { kind: 'reply' } | { kind: 'tour'; i: number };
-	let step = $state<Step>({ kind: 'opening' });
+	/**
+	 * The step lives in the URL (`?steg=` counted from 1, plus `val` on the last
+	 * view), so the browser's back button and a reload stay where the user is.
+	 */
+	const last = $derived(data.aiConfigured ? END : HELLO);
+	// Shallow routing doesn't update page.url, so steps added here are read from page.state;
+	// the URL covers a reload or a link straight to a step.
+	const choice = $derived.by((): Choice | null => {
+		if (page.state.introStep !== undefined) return page.state.introChoice ?? null;
+		const value = page.url.searchParams.get('val');
+		return value === 'on' || value === 'off' ? value : null;
+	});
+	const step = $derived.by(() => {
+		const n = page.state.introStep ?? Number(page.url.searchParams.get('steg')) - 1;
+		const at = Number.isInteger(n) && n > 0 ? Math.min(n, last) : 0;
+		// The last view needs a choice to answer.
+		return at === END && !choice ? QUESTION : at;
+	});
+
+	const scene = $derived(step <= HELLO ? STORY[step].scene : 2);
+	const zoomed = $derived(step >= QUESTION);
+	const solo = $derived(step === HELLO && !data.aiConfigured);
+	const text = $derived(
+		step === END ? REPLY[choice ?? 'on'] : step === QUESTION ? QUESTION_TEXT : solo ? HELLO_SOLO : STORY[step].text
+	);
+	const milonVoice = $derived(step >= HELLO);
+	const options = $derived.by((): Option[] | null => {
+		if (step === QUESTION)
+			return [
+				{ label: 'Ja, häng med', action: () => choose('on') },
+				{ label: 'Nej tack, jag kör själv', action: () => choose('off') }
+			];
+		if (step === END || solo) {
+			const coach = choice === 'on' && !solo;
+			return [
+				{ label: coach ? 'Bygg mitt första pass med Milon' : 'Bygg mitt första pass', action: () => leave(coach ? '/skapa' : '/skapa/manuell') },
+				{ label: 'Jag vill kolla mer på appen först', quiet: true, action: () => leave('/') }
+			];
+		}
+		return null;
+	});
+
 	let reducedMotion = $state(false);
-	/** The current text is fully shown (typed out or skipped). */
-	let typed = $state(false);
-	let skipTyping = $state(false);
-	let choice = $state<'on' | 'off' | null>(null);
+	/** The step whose line is fully shown (typed out or skipped), and the step whose typing was skipped with a tap. */
+	let typedStep = $state(-1);
+	let skippedStep = $state(-1);
+	const typed = $derived(typedStep === step);
+	const skipTyping = $derived(reducedMotion || skippedStep === step);
+	/** Milon waves when he first steps forward, not when coming back to him. */
+	let wave = $state(false);
+	/** Wait for the picture before typing when it changes a lot, so the text doesn't race it. */
+	let typeDelay = $state(250);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
+	/** This page has added history entries, so the back arrow can be the browser's back. */
+	let pushed = false;
+	let previous = -1;
 
 	onMount(() => {
 		reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 	});
 
-	const sceneIndex = $derived(step.kind === 'scene' ? step.i : -1);
-	const coach = $derived(data.aiConfigured && choice !== 'off');
-	const tour = $derived(TOUR[coach ? 'on' : 'off']);
+	$effect(() => {
+		const at = step;
+		untrack(() => enter(at));
+	});
 
-	function go(next: Step) {
-		step = next;
-		typed = false;
-		skipTyping = reducedMotion;
+	/** Sets up the picture's moves for a new step. */
+	function enter(at: number) {
+		const before = previous;
+		previous = at;
 		failure = null;
-		// The button that was tapped is gone: focus moves to the new step's text, so a screen reader reads it.
-		void tick().then(() => document.querySelector<HTMLElement>('[data-step-focus]')?.focus());
+		wave = at === HELLO ? before < HELLO : at > HELLO && wave;
+		const sceneOf = (n: number) => (n <= HELLO ? STORY[n].scene : 2);
+		const bigChange = before >= 0 && (sceneOf(before) !== sceneOf(at) || (before >= QUESTION) !== (at >= QUESTION));
+		typeDelay = bigChange ? (at >= QUESTION ? 1500 : 1300) : 250;
+		// The new line takes focus, so a screen reader reads it and the keyboard can carry on.
+		if (before >= 0) void tick().then(() => document.querySelector<HTMLElement>('[data-step-focus]')?.focus());
 	}
 
-	/** A tap on the text or image while it is typed shows all of it; otherwise it moves on. */
-	function tapStory() {
+	function urlFor(n: number, value: Choice | null = null): string {
+		const params = new URLSearchParams();
+		if (n > 0) params.set('steg', String(n + 1));
+		if (value) params.set('val', value);
+		return `${page.url.pathname}${params.size ? `?${params}` : ''}`;
+	}
+
+	function show(n: number, value: Choice | null = null) {
+		pushState(urlFor(n, value), { introStep: n, introChoice: value });
+		pushed = true;
+	}
+
+	function back() {
+		if (busy || step === 0) return;
+		if (pushed) history.back();
+		else replaceState(urlFor(step - 1), { introStep: step - 1, introChoice: null });
+	}
+
+	/** A tap shows the whole line while it is typed, and otherwise moves on. Choices wait for a button. */
+	function advance() {
 		if (busy) return;
-		if (!typed) skipTyping = true;
-		else next();
+		if (!typed) skippedStep = step;
+		else if (!options && step < last) show(step + 1);
 	}
 
-	function next() {
-		if (step.kind === 'opening') go({ kind: 'scene', i: 0 });
-		else if (step.kind === 'scene') {
-			if (step.i < SCENES.length - 1) go({ kind: 'scene', i: step.i + 1 });
-			// Without an API key there is no Milon to choose.
-			else if (data.aiConfigured) go({ kind: 'choice' });
-			else void finish(null).then((ok) => ok && go({ kind: 'tour', i: 0 }));
-		} else if (step.kind === 'reply') go({ kind: 'tour', i: 0 });
-		else if (step.kind === 'tour') {
-			if (step.i < tour.length - 1) go({ kind: 'tour', i: step.i + 1 });
-			else void goto(coach ? '/skapa' : '/skapa/manuell');
-		}
+	function tapFilm(e: MouseEvent) {
+		if (!(e.target as Element).closest('button, a')) advance();
 	}
 
-	/** Saves that the intro is done, with the choice if one was made. */
-	async function finish(coachChoice: 'on' | 'off' | null): Promise<boolean> {
+	function onkeydown(e: KeyboardEvent) {
+		if (!['Enter', ' ', 'ArrowRight'].includes(e.key) || (e.target as Element).closest('button, a, input, textarea')) return;
+		e.preventDefault();
+		advance();
+	}
+
+	/** "Hoppa över" lands on the question, so the only real decision is never skipped. */
+	function skip() {
+		if (!busy) show(data.aiConfigured ? QUESTION : HELLO);
+	}
+
+	/** Saves that the intro is done, with the choice of Milon if one was made. */
+	async function finish(coach: Choice | null): Promise<boolean> {
 		busy = true;
 		failure = null;
 		try {
 			const body = new FormData();
-			if (coachChoice) body.set('coach', coachChoice);
+			if (coach) body.set('coach', coach);
 			const res = await fetch('?/done', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 			const result = deserialize(await res.text());
 			if (result.type === 'success') return true;
@@ -128,271 +180,375 @@
 		}
 	}
 
-	async function choose(value: 'on' | 'off') {
-		if (busy || !(await finish(value))) return;
-		choice = value;
-		go({ kind: 'reply' });
+	async function choose(value: Choice) {
+		if (!busy && (await finish(value))) show(END, value);
 	}
 
-	async function skip() {
-		if (busy) return;
-		// After the choice the intro is already saved as done.
-		if (choice === null && !(await finish(null))) return;
-		await goto('/');
+	/** Saves again on the way out, so a reloaded or shared last view still marks the intro as done. */
+	async function leave(href: string) {
+		if (!busy && (await finish(solo ? null : choice))) await goto(href);
 	}
-
-	const dots = $derived(
-		step.kind === 'scene' ? { count: SCENES.length, at: step.i } : step.kind === 'tour' ? { count: tour.length, at: step.i } : null
-	);
 </script>
 
 <svelte:head><title>Välkommen · Milon-PT</title></svelte:head>
+<svelte:window {onkeydown} />
 
 <div class="intro">
-	<header class="top">
-		<span class="dots" aria-hidden="true">
-			{#if dots}{#each Array.from({ length: dots.count }, (_, i) => i) as i (i)}<i class:on={i <= dots.at}></i>{/each}{/if}
-		</span>
-		{#if step.kind !== 'tour' || step.i < tour.length - 1}
-			<button type="button" class="link skip" onclick={skip} disabled={busy}>Hoppa över</button>
-		{/if}
-	</header>
-
-	{#if step.kind === 'opening'}
-		<section class="opening">
-			<span class="logo"><LogoToMilon size={132} {reducedMotion} /></span>
-			<h1 tabindex="-1" data-step-focus>Milon-PT</h1>
-			<p class="muted">En liten historia om hur styrka byggs.</p>
-		</section>
-		<footer class="bar">
-			<button type="button" class="btn primary full" onclick={next}>Börja</button>
-		</footer>
-	{:else if step.kind === 'scene'}
+	<div class="frame">
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<section class="story" onclick={tapStory}>
-			<div class="stage" role="img" aria-label={SCENES[sceneIndex].alt}>
-				{#each SCENES as scene, i (scene.image)}
-					<img src={scene.image} alt="" class:shown={i === sceneIndex} class:still={reducedMotion} />
-				{/each}
-				<span class="face" class:shown={sceneIndex === SCENES.length - 1 && typed}><MilonAvatar /></span>
+		<div class="film" class:asking={zoomed} onclick={tapFilm}>
+			<div class="cam" class:zoom={zoomed}>
+				<img src="/intro/scen-1.png" alt="" class="scene" class:shown={scene === 0} />
+				<img src="/intro/scen-2.png" alt="" class="scene" class:shown={scene === 1} />
+				<div class="hero" class:shown={scene === 2} class:wave>
+					<div class="fig">
+						<img src="/intro/scen-3.png" alt="" class="body" />
+						<img src="/intro/scen-3.png" alt="" class="hand" />
+					</div>
+					<span class="face"><MilonAvatar /></span>
+				</div>
 			</div>
-			<p class="text" tabindex="-1" data-step-focus>
-				<Typewriter text={SCENES[sceneIndex].text} instant={skipTyping} ondone={() => (typed = true)} />
-			</p>
-		</section>
-		<footer class="bar">
-			<button type="button" class="btn primary full" onclick={() => (typed ? next() : (skipTyping = true))} disabled={busy}>
-				{typed ? 'Nästa' : 'Visa hela texten'}
+			<div class="shade"></div>
+			<div class="subs">
+				<p class="sub" class:milon={milonVoice} class:end={step === END || solo} tabindex="-1" data-step-focus>
+					<Typewriter {text} instant={skipTyping} delay={typeDelay} ondone={() => (typedStep = step)} />
+				</p>
+				{#if options}
+					{#if typed}
+						<div class="opts">
+							{#each options as option (option.label)}
+								<button type="button" class="opt" class:quiet={option.quiet} onclick={option.action} disabled={busy}>{option.label}</button>
+							{/each}
+						</div>
+					{/if}
+				{:else}
+					<span class="more" class:on={typed} aria-hidden="true">▼</span>
+				{/if}
+				{#if failure}<p class="error" role="alert">{failure}</p>{/if}
+			</div>
+		</div>
+
+		<header class="top">
+			<button type="button" class="back" class:hidden={step === 0} onclick={back} disabled={busy} aria-label="Tillbaka">
+				<Icon name="left" size={22} />
 			</button>
-			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
-		</footer>
-	{:else if step.kind === 'choice' || step.kind === 'reply'}
-		<section class="milon">
-			<MilonAvatar size={88} framed thinking={!typed} />
-			<p class="said" tabindex="-1" data-step-focus>
-				<Typewriter text={step.kind === 'choice' ? QUESTION : REPLY[choice ?? 'on']} instant={skipTyping} ondone={() => (typed = true)} />
-			</p>
-		</section>
-		<footer class="bar">
-			{#if step.kind === 'choice'}
-				<button type="button" class="btn primary full" onclick={() => choose('on')} disabled={busy}>Ja, häng med</button>
-				<button type="button" class="btn full" onclick={() => choose('off')} disabled={busy}>Nej tack, jag kör själv</button>
-			{:else}
-				<button type="button" class="btn primary full" onclick={next}>Visa hur appen fungerar</button>
+			{#if step < (data.aiConfigured ? QUESTION : HELLO)}
+				<button type="button" class="link skip" onclick={skip}>Hoppa över</button>
 			{/if}
-			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
-		</footer>
-	{:else}
-		{@const card = tour[step.i]}
-		<section class="tour">
-			<span class="icon"><Icon name={card.icon} size={32} /></span>
-			<h2 tabindex="-1" data-step-focus>{card.title}</h2>
-			<p>{card.text}</p>
-		</section>
-		<footer class="bar">
-			<button type="button" class="btn primary full" onclick={next}>
-				{step.i < tour.length - 1 ? 'Nästa' : 'Bygg ditt första pass'}
-			</button>
-			{#if step.i === tour.length - 1}<a class="btn ghost full" href="/konto#import">Jag har mina pass i Craft</a>{/if}
-		</footer>
-	{/if}
+		</header>
+	</div>
 </div>
 
 <style>
+	@font-face {
+		font-family: 'Newsreader';
+		src: url('/fonts/newsreader-latin.woff2') format('woff2');
+		font-weight: 400;
+		font-display: swap;
+	}
+
+	/* The intro is always dark, whatever the app theme: the drawings are white lines on black. */
 	.intro {
+		--bg: #000;
+		--text: #f2f2f0;
+		--soft: #bdbdc2;
+		--muted: #8e8e94;
+		--line: rgba(255, 255, 255, 0.12);
+		--accent: #5eead4;
+		--on-accent: #0a0f0c;
+		--danger: #f2a49b;
+		color-scheme: dark;
+		position: fixed;
+		inset: 0;
+		background: var(--bg);
+		color: var(--text);
+		overflow: hidden;
+		user-select: none;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.frame {
+		position: relative;
+		height: 100%;
 		max-width: 30rem;
 		margin: 0 auto;
-		min-height: 100dvh;
-		display: flex;
-		flex-direction: column;
-		padding: env(safe-area-inset-top, 0px) max(20px, env(safe-area-inset-right)) env(safe-area-inset-bottom, 0px)
-			max(20px, env(safe-area-inset-left));
 	}
+
 	.top {
-		height: 56px;
+		position: absolute;
+		inset: 0 0 auto 0;
+		z-index: 2;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		height: 56px;
+		margin-top: env(safe-area-inset-top, 0px);
+		padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
 	}
-	.dots {
-		display: flex;
-		gap: 6px;
+	.back {
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		border: 0;
+		border-radius: 14px;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
 	}
-	.dots i {
-		width: 18px;
-		height: 4px;
-		border-radius: 2px;
-		background: var(--seg);
-	}
-	.dots i.on {
-		background: var(--accent);
+	.back.hidden {
+		visibility: hidden;
 	}
 	.skip {
+		min-height: 44px;
+		padding: 0 12px;
 		font-size: 14px;
 		color: var(--muted);
 	}
-	section {
-		flex: 1;
-	}
-	.bar {
-		position: sticky;
-		bottom: 0;
-		display: grid;
-		gap: 8px;
-		padding: 12px 0 16px;
-		background: var(--bg);
-	}
-	.bar p {
-		margin: 0;
-		font-size: 14px;
-	}
 
-	.opening {
-		display: grid;
-		place-content: center;
-		justify-items: center;
-		gap: 12px;
-		text-align: center;
-	}
-	.logo {
-		color: var(--accent);
-	}
-	.opening h1 {
-		font-size: 40px;
-		font-weight: 600;
-		color: var(--heading);
-	}
-	.opening p {
-		margin: 0;
-	}
-
-	.story {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
+	.film {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
 		cursor: pointer;
 	}
-	/* The drawings are made for a light background, so the stage stays light in the dark theme too. */
-	.stage {
-		position: relative;
+
+	/* The camera: the drawings fill the width at the top, and it zooms in on Milon's face for the question. */
+	.cam {
+		position: absolute;
+		top: calc(40px + env(safe-area-inset-top, 0px));
+		left: 0;
 		width: 100%;
-		max-height: 44dvh;
 		aspect-ratio: 470 / 680;
-		margin: 0 auto;
-		border-radius: 24px;
-		background: #f3f2ee;
-		overflow: hidden;
-		--accent: #0d6b63;
+		transform-origin: 50.4% 23.8%;
+		transition: transform 1.8s cubic-bezier(0.6, 0, 0.2, 1);
 	}
-	.stage img {
+	.cam.zoom {
+		transform: translateY(16%) scale(4.3);
+	}
+	.cam img {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
-		object-fit: contain;
+		/* The drawings are black lines on transparent; inverted they are white lines on black. */
+		filter: invert(1);
+	}
+	.scene {
 		opacity: 0;
-		transform: scale(0.96);
-		transition:
-			opacity 0.9s ease,
-			transform 1.4s ease;
+		transition: opacity 0.6s ease;
 	}
-	.stage img.shown {
+	.scene.shown {
 		opacity: 1;
-		transform: none;
+		transition-duration: 1s;
+		animation: kenburns 16s ease-out both;
 	}
-	.stage img.still {
-		transition: opacity 0.3s ease;
-		transform: none;
+	@keyframes kenburns {
+		to {
+			transform: scale(1.08) translateY(-2%);
+		}
 	}
-	/* Milon's face from the app on the last drawing's blank face (its position in scen-3.png). */
+
+	/* Milon steps forward: the drawing without its hand, and the hand on its own so it can wave from the wrist. */
+	.hero {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+	}
+	.hero.shown {
+		animation: rise 1.1s cubic-bezier(0.2, 0.9, 0.3, 1.15) 0.45s both;
+	}
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(7%) scale(0.94);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	.fig {
+		transition: opacity 1.4s ease 0.3s;
+	}
+	.zoom .fig {
+		opacity: 0;
+	}
+	/* The hand's box in scen-3.png. Move these if the final drawing moves the hand. */
+	.body {
+		mask:
+			linear-gradient(#000 0 0) 0 0 / 100% 100% no-repeat exclude,
+			linear-gradient(#000 0 0) 84% 26.6% / 14.9% 11.5% no-repeat;
+	}
+	.hand {
+		clip-path: inset(23.5% 13.6% 65% 71.5%);
+		transform-origin: 77.7% 35.2%;
+	}
+	.wave .hand {
+		animation: wave 1.5s ease-in-out 1.7s both;
+	}
+	@keyframes wave {
+		0%,
+		100% {
+			transform: rotate(0);
+		}
+		20%,
+		60% {
+			transform: rotate(-14deg);
+		}
+		40%,
+		80% {
+			transform: rotate(9deg);
+		}
+	}
+
+	/* Milon's face from the app on the drawing's blank face (its position in scen-3.png). */
 	.face {
 		position: absolute;
 		left: 50.4%;
 		top: 23.8%;
-		width: 13%;
-		transform: translate(-50%, -50%) scale(0.6);
-		opacity: 0;
+		width: 12%;
+		aspect-ratio: 1;
 		display: grid;
-		place-items: center;
+		opacity: 0;
+		transform: translate(-50%, -50%) scale(0.4);
 		transition:
 			opacity 0.6s ease,
-			transform 0.6s ease;
+			transform 0.7s cubic-bezier(0.3, 1.6, 0.5, 1);
 	}
-	/* The face scales with the stage. */
-	.stage .face :global(.avatar) {
-		width: 100%;
-		height: auto;
-		aspect-ratio: 1;
-	}
-	.face.shown {
+	.shown .face {
 		opacity: 1;
 		transform: translate(-50%, -50%);
+		transition-delay: 1.3s;
+	}
+	.face :global(.avatar) {
+		width: 100%;
+		height: 100%;
+	}
+	.face :global(path) {
+		transition: stroke-width 1.8s;
+	}
+	.zoom .face :global(path) {
+		stroke-width: 6;
+	}
+
+	/* Subtitles on a fade to black, which goes away once only the avatar is left. */
+	.shade {
+		position: absolute;
+		inset: auto 0 0 0;
+		height: 55%;
+		background: linear-gradient(to bottom, transparent, var(--bg) 45%);
+		pointer-events: none;
+		transition: height 1.2s ease;
+	}
+	.asking .shade {
+		height: 0;
+	}
+	.subs {
+		position: absolute;
+		inset: auto 0 0 0;
+		display: grid;
+		gap: 14px;
+		justify-items: center;
+		padding: 0 26px calc(30px + env(safe-area-inset-bottom, 0px));
+		text-align: center;
+	}
+	.sub {
+		margin: 0;
+		min-height: 4.5em;
+		display: grid;
+		align-content: end;
+		font-family: 'Newsreader', Georgia, serif;
+		font-size: 22px;
+		line-height: 1.4;
+	}
+	.sub.milon {
+		font-family: inherit;
+		font-size: 18px;
+		line-height: 1.5;
+		color: var(--accent);
+	}
+	.sub.end {
+		min-height: 0;
 	}
 	[data-step-focus]:focus {
 		outline: none;
 	}
-	.text {
-		margin: 0;
-		font-size: 17px;
-		line-height: 1.5;
+	.more {
+		font-size: 12px;
+		color: var(--accent);
+		opacity: 0;
+		transition: opacity 0.2s;
+	}
+	.more.on {
+		opacity: 1;
+		animation: bob 1.1s ease-in-out infinite;
+	}
+	@keyframes bob {
+		50% {
+			transform: translateY(3px);
+		}
 	}
 
-	.milon {
+	/* Dialogue options, like a game: a dash in the accent, no button chrome. */
+	.opts {
+		width: 100%;
 		display: grid;
-		align-content: center;
-		justify-items: center;
-		gap: 20px;
+		gap: 2px;
+		padding-top: 10px;
+		border-top: 1px solid var(--line);
 	}
-	.said {
-		margin: 0;
-		font-size: 18px;
-		line-height: 1.5;
-		text-align: center;
-	}
-
-	.tour {
-		display: grid;
-		align-content: center;
+	.opt {
+		display: flex;
+		align-items: center;
 		gap: 12px;
+		min-height: 48px;
+		padding: 12px 8px;
+		border: 0;
+		border-radius: 14px;
+		background: none;
+		color: var(--text);
+		font-size: 18px;
+		text-align: left;
+		cursor: pointer;
+		animation: fade-up 0.45s ease both;
 	}
-	.icon {
-		width: 64px;
-		height: 64px;
-		border-radius: 18px;
-		display: grid;
-		place-items: center;
-		background: var(--surface-2);
+	.opt:nth-child(2) {
+		animation-delay: 0.12s;
+	}
+	.opt::before {
+		content: '—';
 		color: var(--accent);
 	}
-	.tour h2 {
-		font-size: 28px;
-		font-weight: 600;
-		color: var(--heading);
+	.opt:hover,
+	.opt:active {
+		background: rgba(255, 255, 255, 0.06);
 	}
-	.tour p {
-		margin: 0;
-		font-size: 17px;
-		line-height: 1.5;
+	.opt.quiet {
+		font-size: 16px;
 		color: var(--soft);
+	}
+	@keyframes fade-up {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+	}
+	.error {
+		margin: 0;
+		font-size: 14px;
+	}
+
+	/* Reduced motion: text and pictures at once, no camera moves. */
+	@media (prefers-reduced-motion: reduce) {
+		.intro *,
+		.intro *::before,
+		.intro *::after {
+			animation: none !important;
+			transition-duration: 0s !important;
+			transition-delay: 0s !important;
+		}
+		.hero.shown {
+			opacity: 1;
+		}
 	}
 </style>

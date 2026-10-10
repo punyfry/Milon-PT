@@ -12,9 +12,11 @@
 		instant?: boolean;
 		/** Milliseconds per character. */
 		speed?: number;
+		/** Milliseconds before the first character, e.g. to let a picture change first. */
+		delay?: number;
 		ondone?: () => void;
 	}
-	let { text, instant = false, speed = 32, ondone }: Props = $props();
+	let { text, instant = false, speed = 32, delay, ondone }: Props = $props();
 
 	let shown = $state(0);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -42,7 +44,7 @@
 		untrack(() => {
 			shown = skip ? text.length : 0;
 			if (skip) ondone?.();
-			else timer = setTimeout(tick, speed * 6);
+			else timer = setTimeout(tick, delay ?? speed * 6);
 		});
 		return () => clearTimeout(timer);
 	});

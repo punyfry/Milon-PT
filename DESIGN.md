@@ -42,6 +42,7 @@ Contrast: all text at least 4.5:1 against its surface. Surfaces step up visibly 
 
 - **Headings and text:** Bricolage Grotesque (400–600).
 - **Numbers and time:** DM Mono (400, 500). All weights, reps, set numbers and times.
+- **The intro's narrator:** Newsreader (400), only in `/valkommen`, so the story reads like subtitles in a film.
 - The fonts are self-hosted in `static/fonts/` (latin subset, SIL Open Font License) so they work offline.
 - No uppercase labels. Labels are sentence case.
 
@@ -89,6 +90,7 @@ No rest timer.
 
 ## Other screens
 
+- **Intro** (`/valkommen`): the one screen that is always dark, whatever the theme, with the drawings as white lines on black. Subtitles at the bottom, one line per tap, the narrator in Newsreader and Milon in the accent. Choices are dialogue options (an accent "—" before each), not buttons.
 - **Start:** greeting with first name and date, this week's sessions against the weekly goal, a card for a workout in progress, workout cards with their first exercises.
 - **Workout overview** (before "Starta passet"): a list with hairlines, per exercise the name ("Inbytt"/"Ny" tag), target, last time's note and an "Instruktion" toggle when there is one; on the right "Byt" and a small Milon icon (icon only, with an aria-label). One "Fråga Milon om passet" below the list. No weights or reps here.
 - **Library (Bibliotek):** week card (today outlined in the accent, volume per type without a heading), milestones, every exercise grouped by workout with search (untrained ones show "inte tränad än"), and "Ny övning" next to the Övningar heading, opening a sheet.
