@@ -8,7 +8,13 @@ declare global {
 			user: { id: string; email: string; name: string | null } | null;
 		}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The intro's step and choice, for its history entries (see src/routes/valkommen). */
+			introStep?: number;
+			introChoice?: 'on' | 'off' | null;
+			/** How many intro entries were pushed up to this one, so its back arrow never leaves the intro. */
+			introDepth?: number;
+		}
 		// interface Platform {}
 	}
 }
