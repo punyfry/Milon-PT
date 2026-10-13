@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
-import { createExercise, prependLogEntry, saveProfile, saveWorkoutVersion, updateExerciseDetails } from '$lib/server/data';
+import { createExercise, deleteExercise, prependLogEntry, saveProfile, saveWorkoutVersion, updateExerciseDetails } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -243,5 +243,28 @@ describe('POST /api/workouts/[slug]/restore', () => {
 		await updateExerciseDetails(state.storage, 'ex_plankan', { name: 'Plankan', type: 'time', instruction: '' });
 		const refused = await call(restore as Handler, { version: 1 }, {}, params);
 		expect(refused).toEqual({ status: 409, body: { message: 'Övningen Plankan har bytt typ sedan den här versionen.' } });
+
+		// Version 1 has only Plankan, so it can't be restored without it (no `skippable` above). Here it can.
+		await createExercise(state.storage, { name: 'Utfall', type: 'bodyweight', instruction: '' });
+		const c = (exercises: { exerciseId: string; sets: number; target: { reps: number } }[]) =>
+			saveWorkoutVersion(state.storage, { slug: 'pass-c', name: 'Pass C', createdAt: '2026-10-01', exercises });
+		await c([
+			{ exerciseId: 'ex_utfall', sets: 2, target: { reps: 10 } },
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }
+		]);
+		await c([{ exerciseId: 'ex_marklyft', sets: 4, target: { reps: 8 } }]);
+		await deleteExercise(state.storage, 'ex_utfall');
+		await createExercise(state.storage, { name: 'Utfall', type: 'bodyweight', instruction: '' });
+		const paramsC = { slug: 'pass-c' };
+		expect(await call(restore as Handler, { version: 1 }, {}, paramsC)).toEqual({
+			status: 409,
+			body: {
+				message: 'Övningen Utfall togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.',
+				skippable: true
+			}
+		});
+		expect((await call(restore as Handler, { version: 1, skipConflicts: 'ja' }, {}, paramsC)).status).toBe(400);
+		expect((await call(restore as Handler, 'inte json', {}, paramsC)).status).toBe(400);
+		expect(await call(restore as Handler, { version: 1, skipConflicts: true }, {}, paramsC)).toEqual({ status: 200, body: { version: 3 } });
 	});
 });

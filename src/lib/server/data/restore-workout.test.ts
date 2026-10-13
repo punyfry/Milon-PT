@@ -42,7 +42,7 @@ describe('restore workout version', () => {
 		const storage = await setup();
 		await updateExerciseDetails(storage, 'ex_plankan', { name: 'Plankan', type: 'time', instruction: '' });
 		await expect(restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08')).rejects.toThrow(
-			new WorkoutRestoreError('Övningen Plankan har bytt typ sedan den här versionen.')
+			new WorkoutRestoreError('Övningen Plankan har bytt typ sedan den här versionen.', true)
 		);
 		expect((await getLatestWorkout(storage, 'pass-b'))!.version).toBe(2);
 
@@ -74,5 +74,99 @@ describe('restore workout version', () => {
 			'Övningen Plankan togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.'
 		);
 		expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+	});
+
+	describe('without the conflicting exercises (#71)', () => {
+		it('says when skipping is possible, and names every conflict', async () => {
+			const storage = await setup();
+			// The latest version must differ from version 1 without the conflicts, or skipping would change nothing.
+			await saveWorkoutVersion(storage, {
+				slug: 'pass-b',
+				name: 'Pass B',
+				createdAt: '2026-10-03',
+				exercises: [{ exerciseId: 'ex_marklyft', sets: 4, target: { reps: 8 } }]
+			});
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_plankan');
+			await createExercise(storage, { name: 'Plankan', type: 'bodyweight', instruction: '' });
+			const refused = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08').catch((e: WorkoutRestoreError) => e);
+			expect(refused).toMatchObject({
+				skippable: true,
+				message:
+					'Övningen Utfall har bytt typ sedan den här versionen. Övningen Plankan togs bort och det finns en ny övning med samma namn. Ta bort den nya eller byt namn på den först.'
+			});
+		});
+
+		it('saves the version without them, and still brings back other deleted exercises', async () => {
+			const storage = await setup();
+			await createExercise(storage, { name: 'Knäböj', type: 'weight', instruction: '' });
+			await saveWorkoutVersion(storage, {
+				slug: 'pass-b',
+				name: 'Pass B',
+				createdAt: '2026-10-03',
+				exercises: [{ exerciseId: 'ex_knaboj', sets: 3, target: { reps: 5 } }]
+			});
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_marklyft');
+			await deleteExercise(storage, 'ex_plankan');
+			await createExercise(storage, { name: 'Plankan', type: 'bodyweight', instruction: '' });
+
+			const restored = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored).toMatchObject({ version: 4, changeNote: 'Återställd från version 1 utan Utfall, Plankan' });
+			expect(restored!.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft']);
+			expect((await getExercise(storage, 'ex_marklyft'))!.data.deleted).toBeUndefined();
+			expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+		});
+
+		it('does not bring back a skipped exercise that changed type and was then deleted', async () => {
+			const storage = await setup();
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_utfall');
+			const restored = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored).toMatchObject({ changeNote: 'Återställd från version 1 utan Utfall' });
+			expect((await getExercise(storage, 'ex_utfall'))!.data.deleted).toBe(true);
+		});
+
+		it('names an exercise that both changed type and lost its name once in the change note', async () => {
+			const storage = await setup();
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_utfall');
+			await createExercise(storage, { name: 'Utfall', type: 'time', instruction: '' });
+			const restored = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored!.changeNote).toBe('Återställd från version 1 utan Utfall');
+		});
+
+		it('does not offer skipping when the result would equal the latest version', async () => {
+			const storage = await setup();
+			// Version 2 is version 1 without Plankan and Utfall.
+			await updateExerciseDetails(storage, 'ex_plankan', { name: 'Plankan', type: 'time', instruction: '' });
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			const refused = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true }).catch((e) => e);
+			expect(refused).toMatchObject({
+				skippable: false,
+				message: 'Övningarna Plankan, Utfall har bytt typ sedan den här versionen. Utan dem blir den likadan som versionen du har nu.'
+			});
+			expect((await getLatestWorkout(storage, 'pass-b'))!.version).toBe(2);
+		});
+
+		it('restores as usual when there is nothing to skip', async () => {
+			const restored = await restoreWorkoutVersion(await setup(), 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored).toMatchObject({ version: 3, changeNote: 'Återställd från version 1' });
+			expect(restored!.exercises).toHaveLength(3);
+		});
+
+		it('refuses when no exercise would be left, and does not offer skipping', async () => {
+			const storage = await setup();
+			const only = [{ exerciseId: 'ex_plankan', sets: 2, target: { reps: 10 } }];
+			await saveWorkoutVersion(storage, { slug: 'pass-b', name: 'Pass B', createdAt: '2026-10-03', exercises: only });
+			await saveWorkoutVersion(storage, { slug: 'pass-b', name: 'Pass B', createdAt: '2026-10-04', exercises: [] });
+			await deleteExercise(storage, 'ex_plankan');
+			await createExercise(storage, { name: 'Plankan', type: 'bodyweight', instruction: '' });
+
+			const refused = await restoreWorkoutVersion(storage, 'pass-b', 3, '2026-10-08', { skipConflicts: true }).catch((e) => e);
+			expect(refused).toBeInstanceOf(WorkoutRestoreError);
+			expect(refused.skippable).toBe(false);
+			expect((await getLatestWorkout(storage, 'pass-b'))!.version).toBe(4);
+		});
 	});
 });

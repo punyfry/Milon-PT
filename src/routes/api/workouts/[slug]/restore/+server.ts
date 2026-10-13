@@ -5,19 +5,22 @@ import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import type { RequestHandler } from './$types';
 
-/** Restores an older version by saving it as the next version. Nothing is overwritten. */
+/** Restores an older version by saving it as the next version, optionally without conflicting exercises. Nothing is overwritten. */
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const storage = storageFor(locals);
 	const body: unknown = await request.json().catch(() => null);
 	const version = isObject(body) ? body.version : undefined;
 	if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) error(400, 'Ogiltig version');
+	const skipConflicts = isObject(body) ? body.skipConflicts : undefined;
+	if (skipConflicts !== undefined && typeof skipConflicts !== 'boolean') error(400, 'Ogiltigt val');
 
 	try {
-		const saved = await restoreWorkoutVersion(storage, params.slug, version, todayInStockholm());
+		const saved = await restoreWorkoutVersion(storage, params.slug, version, todayInStockholm(), { skipConflicts });
 		if (!saved) error(404, 'Versionen finns inte');
 		return json({ version: saved.version });
 	} catch (e) {
-		if (e instanceof WorkoutRestoreError) error(409, e.message);
+		// `skippable` tells the client it can offer to restore without the conflicting exercises.
+		if (e instanceof WorkoutRestoreError) return json({ message: e.message, ...(e.skippable ? { skippable: true } : {}) }, { status: 409 });
 		throw e;
 	}
 };
