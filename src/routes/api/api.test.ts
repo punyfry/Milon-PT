@@ -252,7 +252,7 @@ describe('POST /api/workouts/[slug]/restore', () => {
 			{ exerciseId: 'ex_utfall', sets: 2, target: { reps: 10 } },
 			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }
 		]);
-		await c([{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }]);
+		await c([{ exerciseId: 'ex_marklyft', sets: 4, target: { reps: 8 } }]);
 		await deleteExercise(state.storage, 'ex_utfall');
 		await createExercise(state.storage, { name: 'Utfall', type: 'bodyweight', instruction: '' });
 		const paramsC = { slug: 'pass-c' };
@@ -264,6 +264,7 @@ describe('POST /api/workouts/[slug]/restore', () => {
 			}
 		});
 		expect((await call(restore as Handler, { version: 1, skipConflicts: 'ja' }, {}, paramsC)).status).toBe(400);
+		expect((await call(restore as Handler, 'inte json', {}, paramsC)).status).toBe(400);
 		expect(await call(restore as Handler, { version: 1, skipConflicts: true }, {}, paramsC)).toEqual({ status: 200, body: { version: 3 } });
 	});
 });

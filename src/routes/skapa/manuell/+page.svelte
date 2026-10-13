@@ -180,7 +180,6 @@
 		await invalidateAll();
 		reset();
 	}
-
 </script>
 
 <svelte:head><title>{title} · Milon-PT</title></svelte:head>

@@ -79,6 +79,13 @@ describe('restore workout version', () => {
 	describe('without the conflicting exercises (#71)', () => {
 		it('says when skipping is possible, and names every conflict', async () => {
 			const storage = await setup();
+			// The latest version must differ from version 1 without the conflicts, or skipping would change nothing.
+			await saveWorkoutVersion(storage, {
+				slug: 'pass-b',
+				name: 'Pass B',
+				createdAt: '2026-10-03',
+				exercises: [{ exerciseId: 'ex_marklyft', sets: 4, target: { reps: 8 } }]
+			});
 			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
 			await deleteExercise(storage, 'ex_plankan');
 			await createExercise(storage, { name: 'Plankan', type: 'bodyweight', instruction: '' });
@@ -109,6 +116,37 @@ describe('restore workout version', () => {
 			expect(restored!.exercises.map((e) => e.exerciseId)).toEqual(['ex_marklyft']);
 			expect((await getExercise(storage, 'ex_marklyft'))!.data.deleted).toBeUndefined();
 			expect((await getExercise(storage, 'ex_plankan'))!.data.deleted).toBe(true);
+		});
+
+		it('does not bring back a skipped exercise that changed type and was then deleted', async () => {
+			const storage = await setup();
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_utfall');
+			const restored = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored).toMatchObject({ changeNote: 'Återställd från version 1 utan Utfall' });
+			expect((await getExercise(storage, 'ex_utfall'))!.data.deleted).toBe(true);
+		});
+
+		it('names an exercise that both changed type and lost its name once in the change note', async () => {
+			const storage = await setup();
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			await deleteExercise(storage, 'ex_utfall');
+			await createExercise(storage, { name: 'Utfall', type: 'time', instruction: '' });
+			const restored = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true });
+			expect(restored!.changeNote).toBe('Återställd från version 1 utan Utfall');
+		});
+
+		it('does not offer skipping when the result would equal the latest version', async () => {
+			const storage = await setup();
+			// Version 2 is version 1 without Plankan and Utfall.
+			await updateExerciseDetails(storage, 'ex_plankan', { name: 'Plankan', type: 'time', instruction: '' });
+			await updateExerciseDetails(storage, 'ex_utfall', { name: 'Utfall', type: 'time', instruction: '' });
+			const refused = await restoreWorkoutVersion(storage, 'pass-b', 1, '2026-10-08', { skipConflicts: true }).catch((e) => e);
+			expect(refused).toMatchObject({
+				skippable: false,
+				message: 'Övningarna Plankan, Utfall har bytt typ sedan den här versionen. Utan dem blir den likadan som versionen du har nu.'
+			});
+			expect((await getLatestWorkout(storage, 'pass-b'))!.version).toBe(2);
 		});
 
 		it('restores as usual when there is nothing to skip', async () => {
