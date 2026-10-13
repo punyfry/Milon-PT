@@ -11,6 +11,7 @@ import {
 	listLatestWorkouts,
 	listSessionIds,
 	parseSaveSessionInput,
+	prependLogEntry,
 	saveSession,
 	saveSessionRecord,
 	saveWorkoutVersion
@@ -60,6 +61,19 @@ function active(overrides: Partial<ActiveSession> = {}): ActiveSession {
 	};
 }
 
+/** Makes the next session record write fail, as when a save fails halfway after writing the logs. */
+function failNextRecordWrite(storage: MemoryUserStorage) {
+	const write = storage.writeJson.bind(storage);
+	let failed = false;
+	storage.writeJson = async (path, data, options) => {
+		if (!failed && path.startsWith('sessions/')) {
+			failed = true;
+			throw new Error('network');
+		}
+		return write(path, data, options);
+	};
+}
+
 const input = (session: ActiveSession, extra = {}) =>
 	parseSaveSessionInput({ session, endedAt: '2026-10-06T18:05:00+02:00', kcalEstimate: 300, saveAsNewVersion: false, ...extra });
 
@@ -71,7 +85,12 @@ describe('save session', () => {
 
 		const marklyft = (await getExercise(storage, 'ex_marklyft'))!.data;
 		expect(marklyft.log).toEqual([
-			{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }] }
+			{
+				sessionId: 's_20261006',
+				startedAt: '2026-10-06T17:10:00+02:00',
+				date: '2026-10-06',
+				sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }]
+			}
 		]);
 		expect((await getExercise(storage, 'ex_plankan'))!.data.log[0].sets).toEqual([{ seconds: 45 }]);
 		expect((await getExercise(storage, 'ex_hantelpress'))!.data.log).toEqual([]);
@@ -152,6 +171,85 @@ describe('save session', () => {
 
 		expect(await saveSession(storage, second)).toEqual({ sessionId: 's_20261006_2', alreadySaved: true });
 		expect(await listSessionIds(storage)).toEqual(['s_20261006_2']);
+	});
+
+	describe('a save that failed halfway (#66)', () => {
+		const second = active({ startedAt: '2026-10-06T19:00:00+02:00' });
+		const third = active({ startedAt: '2026-10-06T21:00:00+02:00' });
+		const ids = async (exerciseId: string) => (await getExercise(storage!, exerciseId))!.data.log.map((l) => [l.sessionId, l.startedAt]);
+		let storage: MemoryUserStorage | undefined;
+
+		it('does not lose the sets of a session saved before the retry, nor duplicate the retried ones', async () => {
+			storage = await setup();
+			await saveSession(storage, input(active()));
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(second))).rejects.toThrow('network');
+
+			expect(await saveSession(storage, input(third))).toEqual({ sessionId: 's_20261006_3', alreadySaved: false });
+			expect(await saveSession(storage, input(second))).toEqual({ sessionId: 's_20261006_2', alreadySaved: false });
+			expect(await ids('ex_marklyft')).toEqual([
+				['s_20261006_3', third.startedAt],
+				['s_20261006_2', second.startedAt],
+				['s_20261006', '2026-10-06T17:10:00+02:00']
+			]);
+			expect((await listSessionIds(storage)).sort()).toEqual(['s_20261006', 's_20261006_2', 's_20261006_3']);
+		});
+
+		it('skips every id that a half-finished save holds', async () => {
+			storage = await setup();
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(active()))).rejects.toThrow('network');
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(second))).rejects.toThrow('network');
+
+			expect((await saveSession(storage, input(third))).sessionId).toBe('s_20261006_3');
+			expect((await saveSession(storage, input(second))).sessionId).toBe('s_20261006_2');
+			expect((await saveSession(storage, input(active()))).sessionId).toBe('s_20261006');
+			expect((await ids('ex_marklyft')).map(([id]) => id).sort()).toEqual(['s_20261006', 's_20261006_2', 's_20261006_3']);
+		});
+
+		it('treats entries without a start time and without a record as taken, never as its own', async () => {
+			storage = await setup();
+			await prependLogEntry(storage, 'ex_marklyft', { sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 30, reps: 8 }] });
+
+			expect((await saveSession(storage, input(active()))).sessionId).toBe('s_20261006_2');
+			expect(await ids('ex_marklyft')).toEqual([
+				['s_20261006_2', '2026-10-06T17:10:00+02:00'],
+				['s_20261006', undefined]
+			]);
+		});
+
+		it('keeps the base id free when the first session of the day failed halfway', async () => {
+			storage = await setup();
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(active()))).rejects.toThrow('network');
+
+			expect((await saveSession(storage, input(second))).sessionId).toBe('s_20261006_2');
+			expect((await saveSession(storage, input(active()))).sessionId).toBe('s_20261006');
+			expect(await ids('ex_plankan')).toEqual([
+				['s_20261006_2', second.startedAt],
+				['s_20261006', '2026-10-06T17:10:00+02:00']
+			]);
+		});
+
+		it('moves the entries to a new id when a session with other exercises took the old one', async () => {
+			storage = await setup();
+			await saveSession(storage, input(active()));
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(second))).rejects.toThrow('network');
+			const other = active({
+				startedAt: third.startedAt,
+				exercises: [{ exerciseId: 'ex_hantelpress', sets: [{ weight: 12.5, reps: 10, done: true }] }]
+			});
+			expect((await saveSession(storage, input(other))).sessionId).toBe('s_20261006_2');
+
+			expect(await saveSession(storage, input(second))).toEqual({ sessionId: 's_20261006_3', alreadySaved: false });
+			expect(await ids('ex_marklyft')).toEqual([
+				['s_20261006_3', second.startedAt],
+				['s_20261006', '2026-10-06T17:10:00+02:00']
+			]);
+			expect(await ids('ex_hantelpress')).toEqual([['s_20261006_2', third.startedAt]]);
+		});
 	});
 
 	it('does not take a session from another day with the same clock time for a retry', async () => {
@@ -314,7 +412,14 @@ describe('exercises written in during the session', () => {
 		const created = (await getExercise(storage, 'ex_hantelrodd'))!.data;
 		expect(created).toMatchObject(rows);
 		expect(created.deleted).toBeUndefined();
-		expect(created.log).toEqual([{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 14, reps: 10 }, { weight: 14, reps: 9 }] }]);
+		expect(created.log).toEqual([
+			{
+				sessionId: 's_20261006',
+				startedAt: '2026-10-06T17:10:00+02:00',
+				date: '2026-10-06',
+				sets: [{ weight: 14, reps: 10 }, { weight: 14, reps: 9 }]
+			}
+		]);
 		const record = (await getSession(storage, 's_20261006'))!.data;
 		expect(record.exerciseIds).toContain('ex_hantelrodd');
 		expect(record.deviations).toEqual([{ type: 'swap', from: 'ex_hantelpress', to: 'ex_hantelrodd' }]);

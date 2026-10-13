@@ -162,13 +162,14 @@ export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues,
 	}
 	const before = issues.list.length;
 	const sessionId = v.sessionId === undefined ? undefined : id(v, 'sessionId', issues, path);
+	const startedAt = v.startedAt === undefined ? undefined : datetime(v, 'startedAt', issues, path);
 	const d = date(v, 'date', issues, path);
 	const rawSets = arr(v, 'sets', issues, path) ?? [];
 	const sets = rawSets.map((s, i) => validateSet(s, type, issues, join(join(path, 'sets'), i)));
 	const note = str(v, 'note', issues, path, { optional: true, allowEmpty: true })?.trim();
 	if (note && note.length > NOTE_MAX) issues.add(join(path, 'note'), `får vara högst ${NOTE_MAX} tecken`);
 	if (issues.list.length !== before || d === undefined) return null;
-	return { ...(sessionId ? { sessionId } : {}), date: d, sets: sets as ExerciseSet[], ...(note ? { note } : {}) };
+	return { ...(sessionId ? { sessionId } : {}), ...(startedAt ? { startedAt } : {}), date: d, sets: sets as ExerciseSet[], ...(note ? { note } : {}) };
 }
 
 export function validateExercise(v: unknown, issues: Issues, path: string): Exercise | null {

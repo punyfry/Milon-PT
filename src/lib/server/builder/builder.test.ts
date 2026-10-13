@@ -4,7 +4,7 @@ import { createExercise, getExercise, listLatestWorkouts, saveProfile, saveWorko
 import { MemoryUserStorage } from '../storage/memory';
 import { loadConversation, requestParams, runTurn, saveConversation, saveTurn, startConversation, type CreateMessage } from './conversation';
 import { StorageConflictError } from '../storage/types';
-import { buildSystemPrompt } from './prompt';
+import { buildSystemPrompt, CATALOG_NOTE_MAX, formatCatalog, formatNote } from './prompt';
 import { executeTool, type BuilderState } from './tools';
 
 const TODAY = '2026-10-06';
@@ -58,6 +58,37 @@ describe('system prompt', () => {
 		expect(prompt).toContain('ex_marklyft | Marklyft | weight');
 		expect(prompt).toContain('Pass A (version 2)\n1. Marklyft (ex_marklyft): 3 set × 8 reps');
 		expect(buildSystemPrompt({}, [], null)).toContain('(inga angivna)');
+	});
+
+	it("includes the user's exercise notes in the catalog and asks Milon to take them into account (#71)", async () => {
+		const storage = await setup();
+		const ex = (await getExercise(storage, 'ex_marklyft'))!.data;
+		const prompt = buildSystemPrompt({}, [{ ...ex, note: 'Gör ont i ryggen' }, { ...ex, id: 'ex_gammal', name: 'Gammal', note: 'Borta', deleted: true }], null);
+		expect(prompt).toContain('(id | namn | typ | användarens anteckning, om det finns en)');
+		expect(prompt).toContain('ex_marklyft | Marklyft | weight | Gör ont i ryggen');
+		expect(prompt).toMatch(/8\. Anteckningarna är användarens egna/);
+		expect(prompt).not.toContain('Borta');
+	});
+});
+
+describe('formatNote', () => {
+	it('gives nothing for a missing or blank note, so the catalog line gets no empty column', () => {
+		expect(formatNote(undefined)).toBe('');
+		expect(formatNote(' \n ')).toBe('');
+		const ex = { id: 'ex_a', name: 'A', type: 'time' as const, instruction: '', note: '  ', log: [] };
+		expect(formatCatalog([ex])).toBe('ex_a | A | time');
+	});
+
+	it('cuts at the limit, trims a space before the ellipsis, and never splits an emoji', () => {
+		const exact = 'x'.repeat(CATALOG_NOTE_MAX);
+		expect(formatNote(exact, CATALOG_NOTE_MAX)).toBe(exact);
+		expect(formatNote(`${exact}y`, CATALOG_NOTE_MAX)).toBe(`${'x'.repeat(CATALOG_NOTE_MAX - 1)}…`);
+		expect(formatNote('abc def', 5)).toBe('abc…');
+		expect(formatNote('ab😀😀😀', 4)).toBe('ab😀…');
+	});
+
+	it('keeps the note in its own column', () => {
+		expect(formatNote('tung | lätt')).toBe('tung / lätt');
 	});
 });
 

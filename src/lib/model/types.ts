@@ -25,6 +25,12 @@ export type ExerciseSet = WeightSet | RepsSet | TimeSet;
 export interface LogEntry {
 	/** Missing for entries imported without a session. */
 	sessionId?: string;
+	/**
+	 * Start time of the session save that wrote the entry. Tells a half-finished
+	 * save's entries (no session record yet) apart from another session's (#66).
+	 * Missing for imported entries and entries saved before it was added.
+	 */
+	startedAt?: string;
 	/** YYYY-MM-DD */
 	date: string;
 	sets: ExerciseSet[];
@@ -37,7 +43,7 @@ export interface Exercise {
 	name: string;
 	type: ExerciseType;
 	instruction: string;
-	/** The user's own note, e.g. why the exercise looked interesting (#64). Not sent to Milon. */
+	/** The user's own note, e.g. why the exercise looked interesting (#64). Milon sees it, so it can suggest variants. */
 	note?: string;
 	/**
 	 * Deleted by the user: hidden everywhere exercises are listed or picked, but
