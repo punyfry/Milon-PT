@@ -203,7 +203,21 @@ describe('buildHelperPrompt', () => {
 		expect(system).toContain(`Användarens anteckning om övningen: Gör ont i axeln. ${'x'.repeat(300)}\nPlankan: ingen historik än`);
 		const line = formatCatalog([plankan]);
 		expect(line).toMatch(/^ex_plankan \| Plankan \| time \| Gör ont i axeln\. x+…$/);
-		expect(line.length).toBeLessThan('ex_plankan | Plankan | time | '.length + 201);
+		expect(Array.from(line).length).toBe('ex_plankan | Plankan | time | '.length + 200);
+	});
+
+	it('puts the note before the history when the exercise has been logged', () => {
+		const plankan = {
+			id: 'ex_plankan',
+			name: 'Plankan',
+			type: 'time' as const,
+			instruction: '',
+			note: 'För lätt',
+			log: [{ date: '2026-10-01', sets: [{ seconds: 60 }] }]
+		};
+		expect(buildHelperPrompt('Pass B', session(), new Map(), plankan, [])).toContain(
+			'Användarens anteckning om övningen: För lätt\nPlankan:\n- 2026-10-01: 60 s'
+		);
 	});
 
 	it('leaves the note out where there is none', () => {

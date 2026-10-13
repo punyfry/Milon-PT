@@ -38,10 +38,13 @@ export function formatGoalsAndRules(profile: Profile): string {
 /** Longest exercise note in the catalog; the whole note is only given for the exercise a question is about. */
 export const CATALOG_NOTE_MAX = 200;
 
-/** The user's note on one line, cut to `max` characters. */
+/**
+ * The user's note on one line, cut to `max` characters (code points, so an
+ * emoji is never split). "|" becomes "/" so the note can't add catalog columns.
+ */
 export function formatNote(note: string | undefined, max = Infinity): string {
-	const line = (note ?? '').replace(/\s+/g, ' ').trim();
-	return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+	const chars = Array.from((note ?? '').replace(/\s+/g, ' ').replaceAll('|', '/').trim());
+	return chars.length > max ? `${chars.slice(0, max - 1).join('').trimEnd()}…` : chars.join('');
 }
 
 export function formatCatalog(exercises: readonly Exercise[]): string {
