@@ -11,6 +11,7 @@ import {
 	listLatestWorkouts,
 	listSessionIds,
 	parseSaveSessionInput,
+	prependLogEntry,
 	saveSession,
 	saveSessionRecord,
 	saveWorkoutVersion
@@ -192,6 +193,30 @@ describe('save session', () => {
 				['s_20261006', '2026-10-06T17:10:00+02:00']
 			]);
 			expect((await listSessionIds(storage)).sort()).toEqual(['s_20261006', 's_20261006_2', 's_20261006_3']);
+		});
+
+		it('skips every id that a half-finished save holds', async () => {
+			storage = await setup();
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(active()))).rejects.toThrow('network');
+			failNextRecordWrite(storage);
+			await expect(saveSession(storage, input(second))).rejects.toThrow('network');
+
+			expect((await saveSession(storage, input(third))).sessionId).toBe('s_20261006_3');
+			expect((await saveSession(storage, input(second))).sessionId).toBe('s_20261006_2');
+			expect((await saveSession(storage, input(active()))).sessionId).toBe('s_20261006');
+			expect((await ids('ex_marklyft')).map(([id]) => id).sort()).toEqual(['s_20261006', 's_20261006_2', 's_20261006_3']);
+		});
+
+		it('treats entries without a start time and without a record as taken, never as its own', async () => {
+			storage = await setup();
+			await prependLogEntry(storage, 'ex_marklyft', { sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 30, reps: 8 }] });
+
+			expect((await saveSession(storage, input(active()))).sessionId).toBe('s_20261006_2');
+			expect(await ids('ex_marklyft')).toEqual([
+				['s_20261006_2', '2026-10-06T17:10:00+02:00'],
+				['s_20261006', undefined]
+			]);
 		});
 
 		it('keeps the base id free when the first session of the day failed halfway', async () => {

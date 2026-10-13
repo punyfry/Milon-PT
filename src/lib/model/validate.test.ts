@@ -11,6 +11,15 @@ const deadlift = {
 };
 
 describe('validation', () => {
+	it("keeps a log entry's startedAt and refuses one that is not an ISO time (#66)", () => {
+		const entry = { ...deadlift.log[0], startedAt: '2026-10-06T17:10:00+02:00' };
+		expect(assertValid('övning', { ...deadlift, log: [entry] }, validateExercise).log).toEqual([entry]);
+		expect(assertValid('övning', deadlift, validateExercise).log[0]).not.toHaveProperty('startedAt');
+		expect(() => assertValid('övning', { ...deadlift, log: [{ ...entry, startedAt: '2026-10-06' }] }, validateExercise)).toThrow(
+			/startedAt/
+		);
+	});
+
 	it('accepts the examples in README.md', () => {
 		expect(assertValid('övning', deadlift, validateExercise)).toEqual(deadlift);
 		const workout = {
