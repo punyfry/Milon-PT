@@ -6,7 +6,7 @@ const TEMPLATE = `Du är Milon, en personlig tränare. Du hjälper användaren a
 Användarens mål och regler:
 {{goals_and_rules}}
 
-Befintliga övningar (id | namn | typ):
+Befintliga övningar (id | namn | typ | användarens anteckning, om det finns en):
 {{exercise_catalog}}
 
 Passet som redigeras (tomt om nytt):
@@ -19,7 +19,8 @@ Arbetssätt:
 4. När användaren godkänner en övning, anropa verktyget propose_exercise. Skriv aldrig övningsdata som JSON i texten.
 5. När användaren vill spara passet, anropa set_workout med övningarna i ordning.
 6. Typ är weight (vikt x reps), bodyweight (bara reps) eller time (sekunder).
-7. Instruktionen ska vara 2-4 korta punkter om utgångsläge, rörelse och vanligaste felet.`;
+7. Instruktionen ska vara 2-4 korta punkter om utgångsläge, rörelse och vanligaste felet.
+8. Anteckningarna är användarens egna om övningen. Ta hänsyn till dem: har något gjort ont eller varit för lätt, föreslå en annan variant.`;
 
 export function formatTarget(target: Target): string {
 	return 'seconds' in target ? `${target.seconds} s` : `${target.reps} reps`;
@@ -34,10 +35,24 @@ export function formatGoalsAndRules(profile: Profile): string {
 	return parts.length ? parts.join('\n') : '(inga angivna)';
 }
 
+/** Longest exercise note in the catalog; the whole note is only given for the exercise a question is about. */
+export const CATALOG_NOTE_MAX = 200;
+
+/** The user's note on one line, cut to `max` characters. */
+export function formatNote(note: string | undefined, max = Infinity): string {
+	const line = (note ?? '').replace(/\s+/g, ' ').trim();
+	return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+}
+
 export function formatCatalog(exercises: readonly Exercise[]): string {
 	const active = exercises.filter((e) => !e.deleted).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 	if (!active.length) return '(inga än)';
-	return active.map((e) => `${e.id} | ${e.name} | ${e.type}`).join('\n');
+	return active
+		.map((e) => {
+			const note = formatNote(e.note, CATALOG_NOTE_MAX);
+			return `${e.id} | ${e.name} | ${e.type}${note ? ` | ${note}` : ''}`;
+		})
+		.join('\n');
 }
 
 export function formatWorkout(workout: WorkoutTemplate | null, names: ReadonlyMap<string, string>): string {

@@ -1,6 +1,6 @@
 import { formatSet as formatSetForDisplay } from '../../format';
 import type { ActiveSession, Exercise, LogEntry } from '../../model';
-import { formatCatalog } from '../builder/prompt';
+import { formatCatalog, formatNote } from '../builder/prompt';
 
 /** System prompt for the helper, with the context filled in. The prompt lives here, not in the docs. */
 const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. {{situation}} Svara på svenska i högst fyra meningar, utan inledning.
@@ -8,12 +8,13 @@ const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. {{situati
 Pass: {{workout_name}}
 Övningar och dagens set hittills: {{session_state}}
 Historik för aktuell övning (senaste fem): {{exercise_history}}
-Tillgängliga övningar i katalogen: {{exercise_catalog}}
+Tillgängliga övningar i katalogen (id | namn | typ | användarens anteckning, om det finns en): {{exercise_catalog}}
 
 Regler:
 - Svara bara på det som frågas. Kommentera inte set, vikter eller form oombett.
 - Ber användaren om mer instruktion: ge två-tre konkreta punkter.
 - Vill användaren byta övning: ge direkt två konkreta alternativ i första svaret, utan motfrågor. Båda måste träna samma muskelgrupp som övningen som byts ut, och gå att göra mitt i passet med ungefär samma utrustning. Föreslå aldrig en katalogövning som tränar en annan muskelgrupp, bara för att den finns i katalogen; föreslå hellre två nya. Fråga sedan vilket användaren väljer, och anropa swap_exercise direkt när hen svarar.
+- Användarens anteckning om en övning är hens egen. Ta hänsyn till den, särskilt vid byten: har något gjort ont eller varit för lätt, föreslå en annan variant.
 - En ny övning får ett svenskt namn när det finns ett vedertaget (Hantelrodd, inte Dumbbell rows).
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.
 - Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.`;
@@ -34,12 +35,15 @@ export function formatSessionState(session: ActiveSession, exercises: ReadonlyMa
 	return '\n' + lines.join('\n');
 }
 
-/** The five latest log entries, newest first. Never the whole log. */
+/** The user's note on the exercise and the five latest log entries, newest first. Never the whole log. */
 export function formatHistory(exercise: Exercise | undefined): string {
 	if (!exercise) return '(okänd övning)';
+	const note = formatNote(exercise.note);
+	const noteLine = note ? `Användarens anteckning om övningen: ${note}\n` : '';
 	const entries: LogEntry[] = exercise.log.slice(0, 5);
-	if (!entries.length) return `${exercise.name}: ingen historik än`;
+	if (!entries.length) return `${noteLine}${exercise.name}: ingen historik än`;
 	return (
+		noteLine +
 		`${exercise.name}:\n` +
 		entries
 			.map((e) => `- ${e.date}: ${e.sets.map((s) => formatSet(exercise.type, s)).join(', ')}${e.note ? ` (anteckning: ${e.note})` : ''}`)

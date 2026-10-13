@@ -196,12 +196,20 @@ describe('buildHelperPrompt', () => {
 		expect(system).not.toContain('hela passet');
 	});
 
-	it('never includes the exercise\'s own note (#64)', () => {
-		const plankan = { id: 'ex_plankan', name: 'Plankan', type: 'time' as const, instruction: '', note: 'HEMLIG ANTECKNING', log: [] };
+	it("includes the exercise's own note, whole for the current exercise and cut in the catalog (#71)", () => {
+		const note = `Gör ont i\n axeln. ${'x'.repeat(300)}`;
+		const plankan = { id: 'ex_plankan', name: 'Plankan', type: 'time' as const, instruction: '', note, log: [] };
 		const system = buildHelperPrompt('Pass B', session(), new Map([[plankan.id, plankan]]), plankan, [plankan]);
-		expect(system).toContain('Plankan');
-		expect(system).not.toContain('HEMLIG ANTECKNING');
-		expect(formatCatalog([plankan])).not.toContain('HEMLIG ANTECKNING');
+		expect(system).toContain(`Användarens anteckning om övningen: Gör ont i axeln. ${'x'.repeat(300)}\nPlankan: ingen historik än`);
+		const line = formatCatalog([plankan]);
+		expect(line).toMatch(/^ex_plankan \| Plankan \| time \| Gör ont i axeln\. x+…$/);
+		expect(line.length).toBeLessThan('ex_plankan | Plankan | time | '.length + 201);
+	});
+
+	it('leaves the note out where there is none', () => {
+		const plankan = { id: 'ex_plankan', name: 'Plankan', type: 'time' as const, instruction: '', log: [] };
+		expect(formatCatalog([plankan])).toBe('ex_plankan | Plankan | time');
+		expect(buildHelperPrompt('Pass B', session(), new Map(), plankan, [plankan])).not.toContain('Användarens anteckning om övningen');
 	});
 });
 
