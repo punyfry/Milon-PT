@@ -98,6 +98,11 @@ export function flushPendingSaves(userId: string | null, fetcher: typeof fetch =
 	return flushing;
 }
 
+/** Drops the account's queued sessions (sign-out); other accounts' stay. */
+export function clearPendingSaves(userId: string): void {
+	write(readAll().filter((p) => p.userId !== userId));
+}
+
 export function discardPendingSave(key: string): void {
 	write(readAll().filter((p) => p.key !== key));
 }
