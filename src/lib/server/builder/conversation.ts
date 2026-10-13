@@ -29,6 +29,18 @@ export interface BuilderConversation extends BuilderState {
 }
 
 const ID = /^b_[a-z0-9]{6,40}$/;
+
+/**
+ * Most user messages in one conversation. Every call sends the whole
+ * conversation, so a long one costs more per turn and drifts; past this the
+ * user starts a new one.
+ */
+export const MAX_TURNS = 40;
+
+/** The conversation has room for another user message. */
+export function canTakeTurn(conversation: BuilderConversation): boolean {
+	return conversation.log.filter((l) => l.role === 'user').length < MAX_TURNS;
+}
 const path = (id: string) => `builder/${id}.json`;
 
 export function newConversationId(now = Date.now()): string {

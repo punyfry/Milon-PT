@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
 import { createExercise, deleteExercise, prependLogEntry, saveProfile, saveWorkoutVersion, updateExerciseDetails } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
+import { MAX_TURNS, saveConversation, startConversation } from '$lib/server/builder/conversation';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
 const createMessage = vi.hoisted(() => vi.fn());
@@ -50,6 +51,7 @@ beforeEach(() => {
 	createMessage.mockReset();
 	createMessage.mockRejectedValue(new Error('Claude ska inte anropas i testerna'));
 	env.ANTHROPIC_API_KEY = 'test';
+	env.AUTH_SECRET = 'test-secret';
 	delete env.AI_DAILY_LIMIT;
 });
 
@@ -171,6 +173,17 @@ describe('POST /api/builder', () => {
 		const res = await call(builder as Handler, { message: 'Hej' });
 		expect(res.status).toBe(403);
 		expect(res.body.message).toMatch(/Milon är avstängd/);
+		expect(await state.storage.list('usage/')).toEqual([]);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
+	it('refuses a conversation that has reached the turn limit, without counting or calling Claude', async () => {
+		const conversation = await startConversation(state.storage, null);
+		conversation.log = Array.from({ length: MAX_TURNS }, () => ({ role: 'user' as const, text: 'Hej' }));
+		await saveConversation(state.storage, conversation);
+		const res = await call(builder as Handler, { message: 'Hej', conversationId: conversation.id });
+		expect(res.status).toBe(409);
+		expect(res.body.message).toMatch(/Nytt pass/);
 		expect(await state.storage.list('usage/')).toEqual([]);
 		expect(createMessage).not.toHaveBeenCalled();
 	});

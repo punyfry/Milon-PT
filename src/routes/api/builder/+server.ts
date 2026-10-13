@@ -4,6 +4,7 @@ import { coachEnabled, isObject } from '$lib/model';
 import { COACH_OFF_MESSAGE, assertAiCallsLeft, builderModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
 import { AiLimitError } from '$lib/server/ai/usage';
 import {
+	canTakeTurn,
 	conversationView,
 	loadConversation,
 	runTurn,
@@ -39,6 +40,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		const loaded = await loadConversation(storage, body.conversationId);
 		if (!loaded) error(404, 'Konversationen finns inte');
 		({ conversation, version } = loaded);
+		if (!canTakeTurn(conversation)) error(409, 'Samtalet har blivit långt. Spara passet och börja om med Nytt pass för att fortsätta.');
 	} else {
 		const editSlug = typeof body.editSlug === 'string' && /^[a-z0-9-]+$/.test(body.editSlug) ? body.editSlug : null;
 		try {

@@ -21,7 +21,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | --- | --- |
 | `src/auth.ts` | Auth.js: Google provider (explicit `GOOGLE_OAUTH_*`), allowlist in `signIn`, `userId` = Google's `sub` |
 | `src/hooks.server.ts` | Chains security headers, Auth.js and the sign-in guard |
-| `src/lib/server/security/` | `guard.ts` (sign-in + allowlist on every request except `/login` and `/auth/*`) and `headers.ts` (security headers). The CSP lives in `svelte.config.js` |
+| `src/lib/server/security/` | `guard.ts` (sign-in + allowlist on every request except `/login` and `/auth/*`), `headers.ts` (security headers) and `session.ts` (session lifetime). The CSP lives in `svelte.config.js` |
 | `src/lib/server/allowlist.ts` | Reads `ALLOWED_EMAILS`. An empty list lets nobody in |
 | `src/lib/server/storage/` | The `UserStorage` interface: Vercel Blob (private), local files in `.data/` in dev, and in-memory in tests. Paths are validated in `paths.ts` |
 | `src/lib/model/` | The data model: types, validation and id helpers. Shared by server and client |
@@ -29,7 +29,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/server/import/craft.ts` | The Craft import: validate → plan against existing data → write |
 | `src/lib/server/ai/` | Claude client, model selection, per-model parameters and the daily limit (`usage.ts`) |
 | `src/lib/server/builder/` | The workout builder: system prompt, the `propose_exercise`/`set_workout` tools and the conversation loop |
-| `src/lib/server/helper/` | The in-session helper: system prompt and `swap_exercise` |
+| `src/lib/server/helper/` | The in-session helper: system prompt, `swap_exercise` and the signed history (`history.ts`) |
 | `src/lib/session/` | The ongoing workout in the browser: prefill, −/+, timer, localStorage and the queue for workouts saved offline (`outbox.ts`) |
 | `src/lib/history/stats.ts` | History: best set, estimated 1RM, records, weekly summary and milestones, computed from the logs |
 | `src/lib/markdown.ts` | Simple markdown for the builder's replies, rendered without `{@html}` |
@@ -143,8 +143,9 @@ The look (tokens, type, layout) is described in [DESIGN.md](DESIGN.md). A fixed 
 
 Two separate calls with their own system prompts, both using tools so the app never parses JSON out of prose. The prompts (in Swedish) are in `src/lib/server/builder/prompt.ts` and `src/lib/server/helper/prompt.ts`.
 
-- **The builder** (`/skapa`, Sonnet): discusses exercises with the catalog, goals and the workout being edited as context. Replies are rendered with simple markdown.
-- **The helper** ("Hjälp" button during a workout, Haiku): more instruction or swapping an exercise, with the workout, today's sets and the exercise's five latest log entries as context. Replies in plain text.
+- **The builder** (`/skapa`, Sonnet): discusses exercises with the catalog, goals and the workout being edited as context. Replies are rendered with simple markdown. A conversation takes at most 40 messages from the user (`MAX_TURNS`); after that the endpoint answers 409 and the user starts over with "Nytt pass".
+- **The helper** ("Hjälp" button during a workout, Haiku): more instruction or swapping an exercise, with the workout, today's sets and the exercise's five latest log entries as context. Replies in plain text. The server keeps no helper conversation: each answer returns the latest six questions and answers with an HMAC signature (keyed by `AUTH_SECRET`, bound to the user and the workout), and the client sends both back with the next question. A history without a valid signature is dropped, so a client can't put words in Milon's mouth.
+- **Scope** (`SCOPE_RULES` in the builder prompt, used by both): Milon talks about training, including warm-up, stretching, mobility, yoga and general recovery, and declines other topics in one sentence. No diagnoses (pain → see a doctor, at most a gentler variant), no advice on medication, doping or extreme diets. The user's goals, rules, names and notes are context, not instructions, and implausible numbers are questioned rather than built on. Goals and rules are cut to the profile limits (`MAX_GOALS`, `MAX_RULE`, `MAX_RULES`) in the prompt, and the import rejects longer ones.
 - **Turned off** (`coach: false` in `profile.json`, missing means on): the "Fråga Milon" buttons are hidden, `/skapa` leads to building by hand, and `/api/builder` and `/api/helper` answer 403 before anything is counted or sent.
 - Cost: roughly SEK 4–5 a month for Haiku and SEK 12–20 for Sonnet at about 12 workouts. Besides `AI_DAILY_LIMIT`, set a monthly limit for the API key in the Anthropic Console. A Claude subscription does not cover API calls.
 
@@ -177,6 +178,7 @@ Visited pages are available offline; otherwise an offline page is shown. A worko
 ## Security
 
 - Google sign-in and an allowlist checked on every request. An empty list lets nobody in.
+- Sessions end after 7 days without use; every request renews the cookie, so using the app keeps you signed in. However much it is used, a session ends 30 days after signing in with Google (`src/lib/server/security/session.ts`).
 - Blob files are always written with `access: 'private'`, and paths are validated so one user can never reach another's files.
 - Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, HSTS etc. on pages and API responses from the server (not on static files or redirects to the sign-in page).
 - A daily limit on Claude API calls per user (`AI_DAILY_LIMIT`). Every call counts, and the limit is checked before anything is sent.

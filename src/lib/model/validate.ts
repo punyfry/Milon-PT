@@ -212,6 +212,10 @@ export function issueText(issue: string): string {
 }
 
 export const MAX_EXERCISE_NAME = 80;
+/** Limits for the profile's free text, which is sent to Milon with every call. */
+export const MAX_GOALS = 2000;
+export const MAX_RULE = 300;
+export const MAX_RULES = 30;
 export const MAX_INSTRUCTION = 1000;
 
 /** Name, type and instruction of an exercise written in by the user, trimmed. */

@@ -1,6 +1,6 @@
 import { formatSet as formatSetForDisplay } from '../../format';
 import type { ActiveSession, Exercise, LogEntry } from '../../model';
-import { formatCatalog, formatNote } from '../builder/prompt';
+import { SCOPE_RULES, formatCatalog, formatNote } from '../builder/prompt';
 
 /** System prompt for the helper, with the context filled in. The prompt lives here, not in the docs. */
 const TEMPLATE = `Du är Milon, tränaren i användarens träningsapp. {{situation}} Svara på svenska i högst fyra meningar, utan inledning.
@@ -17,7 +17,9 @@ Regler:
 - Användarens anteckning om en övning är hens egen. Ta hänsyn till den, särskilt vid byten: har något gjort ont eller varit för lätt, föreslå en annan variant.
 - En ny övning får ett svenskt namn när det finns ett vedertaget (Hantelrodd, inte Dumbbell rows).
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.
-- Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.`;
+- Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.
+
+{{scope}}`;
 
 /** As in the app, but with regular spaces in the prompt. */
 export function formatSet(...args: Parameters<typeof formatSetForDisplay>): string {
@@ -72,5 +74,6 @@ export function buildHelperPrompt(
 		.replace('{{exercise_history}}', () =>
 			current === undefined ? '(frågan gäller hela passet, ingen enskild övning; vill användaren byta och det är oklart vilken övning, fråga först vilken)' : '\n' + formatHistory(current ?? undefined)
 		)
-		.replace('{{exercise_catalog}}', () => '\n' + formatCatalog(catalog));
+		.replace('{{exercise_catalog}}', () => '\n' + formatCatalog(catalog))
+		.replace('{{scope}}', () => SCOPE_RULES);
 }

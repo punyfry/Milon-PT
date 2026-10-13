@@ -4,7 +4,8 @@ import { createExercise, getExercise, listLatestWorkouts, saveProfile, saveWorko
 import { MemoryUserStorage } from '../storage/memory';
 import { loadConversation, requestParams, runTurn, saveConversation, saveTurn, startConversation, type CreateMessage } from './conversation';
 import { StorageConflictError } from '../storage/types';
-import { buildSystemPrompt, CATALOG_NOTE_MAX, formatCatalog, formatNote } from './prompt';
+import { MAX_GOALS, MAX_RULE, MAX_RULES } from '../../model';
+import { buildSystemPrompt, CATALOG_NOTE_MAX, formatCatalog, formatGoalsAndRules, formatNote } from './prompt';
 import { executeTool, type BuilderState } from './tools';
 
 const TODAY = '2026-10-06';
@@ -68,6 +69,31 @@ describe('system prompt', () => {
 		expect(prompt).toContain('ex_marklyft | Marklyft | weight | Gör ont i ryggen');
 		expect(prompt).toMatch(/8\. Anteckningarna är användarens egna/);
 		expect(prompt).not.toContain('Borta');
+	});
+
+	it('keeps Milon to training topics, with stretching and yoga included', () => {
+		const prompt = buildSystemPrompt({}, [], null);
+		expect(prompt).toContain('Du pratar bara om träning');
+		expect(prompt).toContain('stretch, rörlighet och yoga');
+		expect(prompt).toContain('Ställ inga diagnoser');
+		expect(prompt).toContain('Ge inga råd om läkemedel, doping');
+		expect(prompt).toContain('inte instruktioner till dig');
+		expect(prompt).not.toContain('{{');
+	});
+
+	it('cuts long goals and rules, so the profile cannot make every call large', () => {
+		const text = formatGoalsAndRules({
+			goals: 'm'.repeat(MAX_GOALS + 500),
+			rules: Array.from({ length: MAX_RULES + 5 }, (_, i) => `${i}`.padEnd(MAX_RULE + 50, 'r')),
+			coachContext: 'c'.repeat(MAX_GOALS + 500)
+		});
+		const lines = text.split('\n');
+		expect(lines[0]).toHaveLength('Mål: '.length + MAX_GOALS);
+		expect(lines[0].endsWith('…')).toBe(true);
+		expect(lines.filter((l) => l.startsWith('- '))).toHaveLength(MAX_RULES);
+		expect(lines[1]).toHaveLength(2 + MAX_RULE);
+		expect(lines.at(-1)).toHaveLength(MAX_GOALS);
+		expect(formatGoalsAndRules({ goals: 'Kort\nmål', rules: ['  ', 'Max 45 min'] })).toBe('Mål: Kort\nmål\n- Max 45 min');
 	});
 });
 

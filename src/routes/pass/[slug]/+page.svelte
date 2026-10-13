@@ -379,8 +379,10 @@
 	// --- helper --------------------------------------------------------------
 
 	interface HelpState {
-		/** Questions and answers sent as history (always in pairs). */
+		/** Questions and answers sent as history (always in pairs), as the server last returned them. */
 		turns: { role: 'user' | 'assistant'; text: string }[];
+		/** The server's signature on `turns`. */
+		token: string;
 		log: { role: 'user' | 'assistant' | 'event'; text: string }[];
 		busy: boolean;
 		error: string | null;
@@ -388,7 +390,7 @@
 	let help = $state<Record<string, HelpState>>({});
 
 	function openHelp(exerciseId: string) {
-		help[exerciseId] ??= { turns: [], log: [], busy: false, error: null };
+		help[exerciseId] ??= { turns: [], token: '', log: [], busy: false, error: null };
 		sheet = { kind: 'help', exerciseId };
 	}
 
@@ -410,12 +412,14 @@
 					session: $state.snapshot(session),
 					exerciseId,
 					history: $state.snapshot(state.turns),
+					historyToken: state.token,
 					question
 				})
 			});
 			const body = await res.json().catch(() => null);
 			if (!res.ok) throw new Error(body?.message ?? `Servern svarade ${res.status}`);
-			state.turns.push({ role: 'user', text: question }, { role: 'assistant', text: body.reply });
+			state.turns = body.history;
+			state.token = body.historyToken;
 			state.log.push({ role: 'assistant', text: body.reply });
 			if (body.swap && round === helpRound) {
 				const { from, to } = body.swap as { from: string; to: ExerciseInfo };
