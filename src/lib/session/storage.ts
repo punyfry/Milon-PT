@@ -19,7 +19,6 @@ export function loadActiveSession(userId: string | null): ActiveSession | null {
 		if (!raw) return null;
 		const owner = localStorage.getItem(OWNER_KEY);
 		if (owner && owner !== userId) return null;
-		if (!owner) localStorage.setItem(OWNER_KEY, userId);
 		const parsed: unknown = JSON.parse(raw);
 		if (
 			isObject(parsed) &&
@@ -31,6 +30,7 @@ export function loadActiveSession(userId: string | null): ActiveSession | null {
 			Array.isArray(parsed.exercises) &&
 			Array.isArray(parsed.deviations)
 		) {
+			if (!owner) localStorage.setItem(OWNER_KEY, userId);
 			return parsed as unknown as ActiveSession;
 		}
 	} catch {
@@ -59,11 +59,19 @@ export function clearActiveSession(): void {
 }
 
 /**
- * Everything the app keeps in the browser for the signed-in user: the
- * active session and the workouts waiting to be sent. Run on sign-out.
- * The theme stays, since it belongs to the device rather than the account.
+ * Empties what the app keeps in the browser for one account: its active
+ * session and its workouts waiting to be sent. Run on sign-out. Another
+ * account's data on the same device is left alone (the user signing out
+ * was never warned about it), and the theme stays, since it belongs to the
+ * device rather than the account.
  */
-export function clearUserData(): void {
-	clearActiveSession();
-	clearPendingSaves();
+export function clearUserData(userId: string | null): void {
+	if (!userId) return;
+	try {
+		const owner = localStorage.getItem(OWNER_KEY);
+		if (!owner || owner === userId) clearActiveSession();
+	} catch {
+		// ignored
+	}
+	clearPendingSaves(userId);
 }

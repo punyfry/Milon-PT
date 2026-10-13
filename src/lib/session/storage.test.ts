@@ -44,18 +44,42 @@ describe('active session per account', () => {
 		clearActiveSession();
 		expect(store.size).toBe(0);
 	});
+
+	it('ignores a broken session without taking it over', () => {
+		store.set(ACTIVE_SESSION_KEY, '{broken');
+		expect(loadActiveSession('u1')).toBeNull();
+		expect(store.has('milonpt.activeSessionOwner')).toBe(false);
+	});
 });
 
+const queued = (id: string, userId: string) => ({ key: pendingKey(id, session.startedAt), userId, workoutName: 'Pass', body: {} });
+
 describe('sign-out', () => {
-	it('empties the active session and the queue of unsent workouts, but keeps the theme', () => {
+	it("empties the account's active session and unsent workouts, but keeps the theme", () => {
 		store.set('milonpt.theme', 'dark');
 		saveActiveSession(session, 'u1');
-		queueSave({ key: pendingKey('s1', session.startedAt), userId: 'u1', workoutName: 'Pass A', body: {} });
-		queueSave({ key: pendingKey('s2', session.startedAt), userId: 'u2', workoutName: 'Pass B', body: {} });
-		clearUserData();
+		queueSave(queued('s1', 'u1'));
+		clearUserData('u1');
 		expect(loadActiveSession('u1')).toBeNull();
 		expect(pendingSaves('u1')).toEqual([]);
-		expect(pendingSaves('u2')).toEqual([]);
 		expect([...store.keys()]).toEqual(['milonpt.theme']);
+	});
+
+	it("leaves another account's active session and unsent workouts alone", () => {
+		saveActiveSession(session, 'u1');
+		queueSave(queued('s1', 'u1'));
+		queueSave(queued('s2', 'u2'));
+		clearUserData('u2');
+		expect(loadActiveSession('u1')).toEqual(session);
+		expect(pendingSaves('u1')).toHaveLength(1);
+		expect(pendingSaves('u2')).toEqual([]);
+	});
+
+	it('clears a session from before the owner was stored, and nothing without an account', () => {
+		store.set(ACTIVE_SESSION_KEY, JSON.stringify(session));
+		clearUserData(null);
+		expect(store.has(ACTIVE_SESSION_KEY)).toBe(true);
+		clearUserData('u1');
+		expect(store.has(ACTIVE_SESSION_KEY)).toBe(false);
 	});
 });

@@ -44,7 +44,7 @@
 				return;
 			}
 		}
-		clearUserData();
+		clearUserData(page.data.userId);
 	}
 
 	function confirmSignout() {
@@ -55,11 +55,11 @@
 
 	const signoutText = $derived.by(() => {
 		if (!signoutWarning) return '';
-		const parts = [
-			...(signoutWarning.active ? ['ett pågående pass'] : []),
-			...(signoutWarning.pending ? [signoutWarning.pending === 1 ? 'ett pass som inte har skickats än' : `${signoutWarning.pending} pass som inte har skickats än`] : [])
-		];
-		return `På den här enheten finns ${parts.join(' och ')}. ${parts.length > 1 || signoutWarning.pending > 1 ? 'De raderas' : 'Det raderas'} när du loggar ut.`;
+		const { active, pending } = signoutWarning;
+		const unsent = pending === 1 ? 'ett pass som inte har skickats än' : `${pending} pass som inte har skickats än`;
+		const what = [...(active ? ['ett pågående pass'] : []), ...(pending ? [unsent] : [])].join(' och ');
+		const several = (active && pending > 0) || pending > 1;
+		return `På den här enheten finns ${what}. ${several ? 'De raderas' : 'Det raderas'} när du loggar ut.`;
 	});
 
 	// --- Craft import -------------------------------------------------------
