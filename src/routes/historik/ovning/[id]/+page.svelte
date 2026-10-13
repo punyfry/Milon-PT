@@ -76,6 +76,18 @@
 		<h1>{ex.name}</h1>
 	</div>
 	{#if ex.note}<p class="exnote">{ex.note}</p>{/if}
+	{#if !ex.deleted}
+		<p class="inworkouts">
+			{#if ex.workouts.length}
+				{ex.workouts.length === 1 ? 'Ingår i passet' : 'Ingår i passen'}
+				<span>
+					{#each ex.workouts as w, i (w.slug)}{#if i},{' '}{/if}<a href={`/pass/${w.slug}`}>{w.name}</a>{/each}
+				</span>
+			{:else}
+				Ingår inte i något pass
+			{/if}
+		</p>
+	{/if}
 
 	<section class="chart">
 		<div class="head">
@@ -206,6 +218,11 @@
 		margin: 8px 0 0;
 		white-space: pre-line;
 		color: var(--soft);
+	}
+	.inworkouts {
+		margin: 8px 0 0;
+		font-size: 14px;
+		color: var(--muted);
 	}
 	.remove {
 		margin-top: 24px;

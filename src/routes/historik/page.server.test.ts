@@ -1,6 +1,6 @@
 import { isRedirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getExercise } from '$lib/server/data';
+import { createExercise, deleteExercise, getExercise, saveWorkoutVersion } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
@@ -9,7 +9,7 @@ vi.mock('$lib/server/storage', async (original) => ({
 	storageFor: () => state.storage
 }));
 
-const { actions } = await import('./+page.server');
+const { actions, load } = await import('./+page.server');
 
 /** Runs the create action with form fields; a redirect comes back as `{ redirect }`. */
 async function create(fields: Record<string, string>) {
@@ -26,6 +26,37 @@ async function create(fields: Record<string, string>) {
 
 beforeEach(() => {
 	state.storage = new MemoryUserStorage('u1');
+});
+
+describe('the exercise list', () => {
+	it('lists every active exercise alphabetically with its type, whether or not a workout uses it (#71)', async () => {
+		for (const [name, type] of [
+			['Ölyft', 'weight'],
+			['Zebra', 'weight'],
+			['Åtta', 'time'],
+			['Armhävning', 'bodyweight'],
+			['Plankan', 'time'],
+			['Borta', 'time']
+		] as const)
+			await createExercise(state.storage, { name, type, instruction: '' });
+		await deleteExercise(state.storage, 'ex_borta');
+		await saveWorkoutVersion(state.storage, {
+			slug: 'pass-a',
+			name: 'Pass A',
+			createdAt: '2026-10-01',
+			exercises: [{ exerciseId: 'ex_plankan', sets: 2, target: { seconds: 30 } }]
+		});
+		const data = (await load({ locals: { user: { id: 'u1' } }, url: new URL('https://milon.test/historik') } as never)) as {
+			exercises: { name: string; type: string }[];
+		};
+		expect(data.exercises.map((e) => [e.name, e.type])).toEqual([
+			['Armhävning', 'bodyweight'],
+			['Plankan', 'time'],
+			['Zebra', 'weight'],
+			['Åtta', 'time'],
+			['Ölyft', 'weight']
+		]);
+	});
 });
 
 describe('creating an exercise in the library (#64)', () => {

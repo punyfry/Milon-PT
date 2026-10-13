@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import ExerciseFields from '$lib/components/ExerciseFields.svelte';
+	import ExerciseFields, { TYPE_LABEL } from '$lib/components/ExerciseFields.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import type { ExerciseType } from '$lib/model';
@@ -42,11 +42,7 @@
 
 	let query = $state('');
 	const q = $derived(query.trim().toLocaleLowerCase('sv'));
-	const groups = $derived(
-		data.groups
-			.map((g) => ({ ...g, exercises: g.exercises.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)) }))
-			.filter((g) => g.exercises.length)
-	);
+	const exercises = $derived(data.exercises.filter((e) => !q || e.name.toLocaleLowerCase('sv').includes(q)));
 </script>
 
 <svelte:head><title>Bibliotek · Milon-PT</title></svelte:head>
@@ -154,33 +150,26 @@
 		{/each}
 	</div>
 
-	{#snippet exerciseList(list: (typeof data.groups)[number]['exercises'])}
-		<ul class="list">
-			{#each list as ex (ex.id)}
-				<li>
-					<a href={`/historik/ovning/${ex.id}`}>
-						<span class="name">{ex.name}</span>
-						<span class="when">{ex.lastDate ? `senast ${shortDate(ex.lastDate)}` : 'inte tränad än'}</span>
-						{#if ex.lastDate}<span class="best num">{shortMetric(ex.metric)}{formatMetric(ex.type, ex.best)}</span>{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	{/snippet}
-
 	<div class="section-head">
 		<div class="section-title">Övningar</div>
 		<button class="btn small" onclick={openCreate}>Ny övning</button>
 	</div>
-	{#if data.groups.length}
+	{#if data.exercises.length}
 		<label class="sr-only" for="search">Sök övning</label>
 		<input id="search" class="search" type="search" placeholder="Sök övning" bind:value={query} />
-		{#each groups as g (g.name)}
-			<h3 class="group">{g.name}</h3>
-			{@render exerciseList(g.exercises)}
-		{:else}
-			<p class="muted">Ingen övning matchar ”{query}”.</p>
-		{/each}
+		<ul class="list">
+			{#each exercises as ex (ex.id)}
+				<li>
+					<a href={`/historik/ovning/${ex.id}`}>
+						<span class="name">{ex.name}</span>
+						<span class="when">{TYPE_LABEL[ex.type]} · {ex.lastDate ? `senast ${shortDate(ex.lastDate)}` : 'inte tränad än'}</span>
+						{#if ex.lastDate}<span class="best num">{shortMetric(ex.metric)}{formatMetric(ex.type, ex.best)}</span>{/if}
+					</a>
+				</li>
+			{:else}
+				<li class="muted">Ingen övning matchar ”{query}”.</li>
+			{/each}
+		</ul>
 	{:else}
 		<p class="muted">Inga övningar än.</p>
 	{/if}
@@ -383,16 +372,13 @@
 		background: var(--surface-2);
 		padding: 0 14px;
 	}
-	.group {
-		margin: 16px 0 4px;
-		font-size: 13px;
-		font-weight: 500;
-		color: var(--muted);
-	}
 	.list {
 		list-style: none;
-		margin: 0;
+		margin: 8px 0 0;
 		padding: 0;
+	}
+	.list > li.muted {
+		padding: 12px 0;
 	}
 	.list a {
 		min-height: 56px;

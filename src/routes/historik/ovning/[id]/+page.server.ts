@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { SAFE_ID, ValidationError } from '$lib/model';
 import { bestSet, metricFor, progressSeries, recordEntries } from '$lib/history/stats';
 import { volume } from '$lib/session/active';
-import { deleteExercise, deleteLockReason, getExercise, typeLockReason, updateExerciseDetails } from '$lib/server/data';
+import { deleteExercise, deleteLockReason, getExercise, typeLockReason, updateExerciseDetails, workoutsUsing } from '$lib/server/data';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -14,6 +14,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!stored) error(404, 'Övningen finns inte');
 	const ex = stored.data;
 	const records = recordEntries(ex);
+	// Read once; the locks are worked out from the same list.
+	const workouts = await workoutsUsing(storage, ex.id);
 
 	return {
 		exercise: {
@@ -24,8 +26,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			note: ex.note ?? '',
 			// A deleted exercise is still shown (an old session links here), but can't be changed.
 			deleted: ex.deleted === true,
-			typeLock: await typeLockReason(storage, ex),
-			deleteLock: await deleteLockReason(storage, ex)
+			typeLock: await typeLockReason(storage, ex, workouts),
+			deleteLock: await deleteLockReason(storage, ex, workouts),
+			/** The workouts whose latest version uses the exercise (#71). */
+			workouts: ex.deleted ? [] : workouts
 		},
 		metric: metricFor(ex.type),
 		points: progressSeries(ex).map((p) => ({ date: p.date, value: p.value })),

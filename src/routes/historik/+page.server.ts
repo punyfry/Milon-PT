@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { ValidationError } from '$lib/model';
-import { addDays, groupByWorkout, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
+import { addDays, isValidDate, metricFor, milestoneExercises, progressSeries, weekStartOf, weekSummary } from '$lib/history/stats';
 import { createExerciseFromInput, getProfile, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	// Deleted exercises still count in the week, but are not listed (#46).
 	const active = exercises.filter((e) => !e.deleted);
 
-	// Every exercise, most recently trained first and untrained ones last (#64). Summary only, never the whole log.
+	// Every exercise in alphabetical order (#71). Summary only, never the whole log.
 	const list = active
 		.map((e) => {
 			const lastDate = e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
@@ -33,9 +33,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			const best = series.reduce((b, p) => Math.max(b, p.value), 0);
 			return { id: e.id, name: e.name, type: e.type, lastDate, best, metric: metricFor(e.type).label };
 		})
-		.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'sv'));
-
-	const groups = groupByWorkout(list, workouts);
+		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
 	const milestones = milestoneExercises(active).map((m) => ({
 		key: m.key,
@@ -58,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		prevWeek: isValidDate(addDays(start, -7)) ? addDays(start, -7) : null,
 		nextWeek: start < currentStart ? addDays(start, 7) : null,
 		isCurrentWeek: start === currentStart,
-		groups,
+		exercises: list,
 		milestones
 	};
 };
