@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Logo from '$lib/components/Logo.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -12,6 +13,7 @@
 <svelte:head><title>Logga in · Milon-PT</title></svelte:head>
 
 <main class="login">
+	<Logo width={84} />
 	<h1 class="mark">Milon<span>.</span></h1>
 	<p>Din träningslogg. Coachen finns här när du frågar.</p>
 	{#if data.error}
@@ -32,6 +34,9 @@
 		gap: 14px;
 		padding-inline: 28px;
 		padding-bottom: 60px;
+	}
+	.login > :global(.logo) {
+		margin-bottom: 18px;
 	}
 	.mark {
 		font-size: 64px;
