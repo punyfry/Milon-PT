@@ -395,7 +395,9 @@
 		font-size: 16px;
 		font-weight: 500;
 	}
+	/* Always under the name, also when there is no best value to fill the right column. */
 	.when {
+		grid-column: 1;
 		font-size: 13px;
 		color: var(--muted);
 	}
