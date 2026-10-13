@@ -98,6 +98,11 @@ export function flushPendingSaves(userId: string | null, fetcher: typeof fetch =
 	return flushing;
 }
 
+/** Drops the whole queue, for every account (sign-out). */
+export function clearPendingSaves(): void {
+	write([]);
+}
+
 export function discardPendingSave(key: string): void {
 	write(readAll().filter((p) => p.key !== key));
 }

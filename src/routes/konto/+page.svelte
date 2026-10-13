@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import Sheet from '$lib/components/Sheet.svelte';
+	import { pendingSaves } from '$lib/session/outbox';
+	import { clearUserData, loadActiveSession } from '$lib/session/storage';
 	import { applyTheme, loadTheme, type Theme } from '$lib/theme';
 	import type { PageProps } from './$types';
 
@@ -22,6 +26,41 @@
 		// Saved right away; the form also works without JavaScript.
 		queueMicrotask(() => goalForm?.requestSubmit());
 	}
+
+	// --- sign-out -------------------------------------------------------------
+	// Signing out empties what the app keeps in the browser. A workout in progress or
+	// waiting to be sent would be lost, so that is confirmed first.
+	let signoutForm: HTMLFormElement | undefined = $state();
+	let signoutWarning = $state<{ active: boolean; pending: number } | null>(null);
+	let signoutConfirmed = false;
+
+	function onSignout(e: SubmitEvent) {
+		if (!signoutConfirmed) {
+			const active = loadActiveSession(page.data.userId);
+			const warning = { active: Boolean(active && !active.preparing), pending: pendingSaves(page.data.userId).length };
+			if (warning.active || warning.pending) {
+				e.preventDefault();
+				signoutWarning = warning;
+				return;
+			}
+		}
+		clearUserData();
+	}
+
+	function confirmSignout() {
+		signoutConfirmed = true;
+		signoutWarning = null;
+		signoutForm?.requestSubmit();
+	}
+
+	const signoutText = $derived.by(() => {
+		if (!signoutWarning) return '';
+		const parts = [
+			...(signoutWarning.active ? ['ett pågående pass'] : []),
+			...(signoutWarning.pending ? [signoutWarning.pending === 1 ? 'ett pass som inte har skickats än' : `${signoutWarning.pending} pass som inte har skickats än`] : [])
+		];
+		return `På den här enheten finns ${parts.join(' och ')}. ${parts.length > 1 || signoutWarning.pending > 1 ? 'De raderas' : 'Det raderas'} när du loggar ut.`;
+	});
 
 	// --- Craft import -------------------------------------------------------
 	let importData = $state<unknown>(null);
@@ -155,13 +194,26 @@
 		</div>
 	</div>
 
-	<form method="POST" action="/signout" class="logout">
+	<form method="POST" action="/signout" class="logout" bind:this={signoutForm} onsubmit={onSignout}>
 		<input type="hidden" name="redirectTo" value="/login" />
 		<button type="submit" class="btn full">Logga ut</button>
 	</form>
 </main>
 
+{#if signoutWarning}
+	<Sheet title="Logga ut" onclose={() => (signoutWarning = null)}>
+		<h2 class="sheet-title">Logga ut?</h2>
+		<p class="muted">{signoutText}</p>
+		<button class="btn primary full" onclick={() => (signoutWarning = null)}>Avbryt</button>
+		<button class="btn full" onclick={confirmSignout}>Logga ut ändå</button>
+	</Sheet>
+{/if}
+
 <style>
+	.sheet-title {
+		font-size: 20px;
+		font-weight: 600;
+	}
 	.email {
 		font-size: 14px;
 	}

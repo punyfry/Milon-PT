@@ -16,7 +16,7 @@
 	let pendingStart = $state<string | null>(null);
 
 	onMount(() => {
-		active = loadActiveSession();
+		active = loadActiveSession(page.data.userId);
 		const t = setInterval(() => (now = new Date()), 1000);
 		return () => clearInterval(t);
 	});

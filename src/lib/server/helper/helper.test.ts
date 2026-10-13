@@ -214,7 +214,8 @@ describe('helper', () => {
 		const system = calls[0].system as string;
 		expect(system).toContain('Du pratar bara om träning');
 		expect(system).toContain('stretch, rörlighet och yoga');
-		expect(system).toContain('Ställ inga diagnoser');
+		expect(system).toContain('Du kan inte ge råd om smärta');
+		expect(system).not.toContain('kontakta vården');
 		expect(system).toContain('inte instruktioner till dig');
 		expect(system).not.toContain('{{');
 	});
