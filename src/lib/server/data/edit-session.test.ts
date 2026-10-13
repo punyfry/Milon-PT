@@ -117,7 +117,12 @@ describe('editing a session', () => {
 		);
 		const log = (await getExercise(storage, 'ex_marklyft'))!.data.log;
 		expect(log).toEqual([
-			{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 42.5, reps: 8 }, { weight: 45, reps: 6 }, { weight: 45, reps: 5 }] },
+			{
+				sessionId: 's_20261006',
+				startedAt: '2026-10-06T17:10:00+02:00',
+				date: '2026-10-06',
+				sets: [{ weight: 42.5, reps: 8 }, { weight: 45, reps: 6 }, { weight: 45, reps: 5 }]
+			},
 			{ sessionId: 's_20261001', date: '2026-10-01', sets: [{ weight: 30, reps: 8 }] }
 		]);
 	});
@@ -163,7 +168,9 @@ describe('editing a session', () => {
 			input(third.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] }, { exerciseId: 'ex_plankan', sets: [{ seconds: 50 }], note: 'Ny' }] }),
 			now
 		);
-		expect((await getExercise(storage, 'ex_plankan'))!.data.log).toEqual([{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ seconds: 50 }], note: 'Ny' }]);
+		expect((await getExercise(storage, 'ex_plankan'))!.data.log).toEqual([
+			{ sessionId: 's_20261006', startedAt: '2026-10-06T17:10:00+02:00', date: '2026-10-06', sets: [{ seconds: 50 }], note: 'Ny' }
+		]);
 		expect(() =>
 			parseEditSessionInput({ version: 'v', startTime: '10:00', end: '2026-10-06T11:00', kcalEstimate: null, exercises: [{ exerciseId: 'ex_a', sets: [{ reps: 1 }], note: 5 }] })
 		).toThrow(/måste vara text/);

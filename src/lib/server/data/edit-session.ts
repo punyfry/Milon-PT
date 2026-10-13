@@ -175,7 +175,15 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 			const i = log.findIndex((l) => l.sessionId === id);
 			if (!sets) return i < 0 ? null : log.filter((l) => l.sessionId !== id);
 			const note = notes.has(exerciseId) ? notes.get(exerciseId) : log[i]?.note;
-			const entry: LogEntry = { sessionId: id, date: i < 0 ? startDate : log[i].date, sets, ...(note ? { note } : {}) };
+			// The start a save is recognised by, so the entry looks like one the save wrote.
+			const savedAt = i < 0 ? (record.originalStartedAt ?? record.startedAt) : log[i].startedAt;
+			const entry: LogEntry = {
+				sessionId: id,
+				...(savedAt ? { startedAt: savedAt } : {}),
+				date: i < 0 ? startDate : log[i].date,
+				sets,
+				...(note ? { note } : {})
+			};
 			if (i < 0) return sortLog([entry, ...log]);
 			if (JSON.stringify(log[i]) === JSON.stringify(entry)) return null;
 			return log.map((l, j) => (j === i ? entry : l));
