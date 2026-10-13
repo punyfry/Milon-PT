@@ -108,14 +108,17 @@ export async function saveExercise(
  */
 export async function typeLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
 	if (exercise.log.length) return 'Typen går inte att ändra när det finns loggade set.';
-	const using = await workoutsUsing(storage, exercise.id);
+	const using = (await workoutsUsing(storage, exercise.id)).map((w) => w.name);
 	if (using.length) return `Typen går inte att ändra när övningen finns i ett pass (${using.join(', ')}).`;
 	return null;
 }
 
-/** Names of the workouts whose latest version uses the exercise. */
-async function workoutsUsing(storage: UserStorage, id: string): Promise<string[]> {
-	return (await listLatestWorkouts(storage)).filter((w) => w.exercises.some((e) => e.exerciseId === id)).map((w) => w.name);
+/** The workouts whose latest version uses the exercise, by name. */
+export async function workoutsUsing(storage: UserStorage, id: string): Promise<{ slug: string; name: string }[]> {
+	return (await listLatestWorkouts(storage))
+		.filter((w) => w.exercises.some((e) => e.exerciseId === id))
+		.map((w) => ({ slug: w.slug, name: w.name }))
+		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 }
 
 /**
@@ -124,7 +127,7 @@ async function workoutsUsing(storage: UserStorage, id: string): Promise<string[]
  * exercise back.
  */
 export async function deleteLockReason(storage: UserStorage, exercise: Exercise): Promise<string | null> {
-	const using = await workoutsUsing(storage, exercise.id);
+	const using = (await workoutsUsing(storage, exercise.id)).map((w) => w.name);
 	if (!using.length) return null;
 	return `Övningen används i ${using.length === 1 ? 'passet' : 'passen'} ${using.join(', ')}. Ta bort den ur passet först.`;
 }

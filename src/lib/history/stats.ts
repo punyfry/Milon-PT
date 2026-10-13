@@ -237,25 +237,3 @@ export function milestoneExercises(exercises: readonly Exercise[]) {
 		};
 	});
 }
-
-// --- exercise list --------------------------------------------------------
-
-/**
- * Groups exercises by workout, in each workout's own order, workouts sorted
- * by name. An exercise in several workouts shows under the first one only;
- * exercises in no workout go under "Övrigt".
- */
-export function groupByWorkout<T extends { id: string }>(
-	exercises: readonly T[],
-	workouts: readonly { name: string; exercises: readonly { exerciseId: string }[] }[]
-): { name: string; exercises: T[] }[] {
-	const left = new Map(exercises.map((e) => [e.id, e]));
-	const groups: { name: string; exercises: T[] }[] = [];
-	for (const w of [...workouts].sort((a, b) => a.name.localeCompare(b.name, 'sv'))) {
-		const items = w.exercises.map((we) => left.get(we.exerciseId)).filter((e) => e !== undefined);
-		for (const e of items) left.delete(e.id);
-		if (items.length) groups.push({ name: w.name, exercises: items });
-	}
-	if (left.size) groups.push({ name: 'Övrigt', exercises: [...left.values()] });
-	return groups;
-}

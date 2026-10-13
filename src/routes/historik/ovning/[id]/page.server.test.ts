@@ -9,7 +9,7 @@ vi.mock('$lib/server/storage', async (original) => ({
 	storageFor: () => state.storage
 }));
 
-const { actions } = await import('./+page.server');
+const { actions, load } = await import('./+page.server');
 
 /** Runs the delete action; a redirect comes back as `{ redirect }`. */
 async function remove(id: string) {
@@ -31,6 +31,33 @@ beforeEach(async () => {
 		name: 'Pass A',
 		createdAt: '2026-10-01',
 		exercises: [{ exerciseId: 'ex_knaboj', sets: 3, target: { reps: 8 } }]
+	});
+});
+
+describe('the exercise page', () => {
+	const workoutsOf = async (id: string) =>
+		((await load({ locals: { user: { id: 'u1' } }, params: { id } } as never)) as { exercise: { workouts: unknown[] } }).exercise.workouts;
+
+	it('lists the workouts whose latest version uses the exercise, by name (#71)', async () => {
+		await saveWorkoutVersion(state.storage, {
+			slug: 'ben',
+			name: 'Ben',
+			createdAt: '2026-10-01',
+			exercises: [{ exerciseId: 'ex_knaboj', sets: 3, target: { reps: 5 } }]
+		});
+		await saveWorkoutVersion(state.storage, {
+			slug: 'pass-b',
+			name: 'Pass B',
+			createdAt: '2026-10-01',
+			exercises: [{ exerciseId: 'ex_rodd', sets: 3, target: { reps: 8 } }]
+		});
+		// An older version that used it doesn't count.
+		await saveWorkoutVersion(state.storage, { slug: 'pass-b', name: 'Pass B', createdAt: '2026-10-02', exercises: [] });
+		expect(await workoutsOf('ex_knaboj')).toEqual([
+			{ slug: 'ben', name: 'Ben' },
+			{ slug: 'pass-a', name: 'Pass A' }
+		]);
+		expect(await workoutsOf('ex_rodd')).toEqual([]);
 	});
 });
 
