@@ -43,7 +43,7 @@ export interface Exercise {
 	name: string;
 	type: ExerciseType;
 	instruction: string;
-	/** The user's own note, e.g. why the exercise looked interesting (#64). Not sent to Milon. */
+	/** The user's own note, e.g. why the exercise looked interesting (#64). Milon sees it, so it can suggest variants. */
 	note?: string;
 	/**
 	 * Deleted by the user: hidden everywhere exercises are listed or picked, but
