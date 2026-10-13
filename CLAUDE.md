@@ -13,9 +13,10 @@ npm run check   # svelte-check, must be 0 errors and 0 warnings
 npm test        # vitest
 npm run build   # adapter-vercel build
 npm run test:coverage
+npm run test:e2e  # Playwright UI tests (here: PW_CHROMIUM_PATH=/opt/pw-browsers/chromium)
 ```
 
-CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the required check), plus a separate `npm audit --omit=dev --audit-level=high` job. Run check, test and build locally before pushing.
+CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the required check), the Playwright UI tests in a job of their own, plus a separate `npm audit --omit=dev --audit-level=high` job. Run check, test and build locally before pushing.
 
 ## Hard rules
 
@@ -43,7 +44,8 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 - SvelteKit virtual modules are stubbed for vitest in `src/test/` (`$env/dynamic/private` is a mutable `env` object; `$app/environment` has `dev = false`).
 - Endpoint tests (`src/routes/api/api.test.ts`) mock `storageFor` and `createMessage`; never call the real Claude API in tests.
 - Security-relevant code (guard, allowlist, paths, Blob storage, AI limit, headers) has tests; keep them green and add cases when changing it.
-- Browser-only code (service worker, localStorage, wake lock, Svelte components) is verified manually with Playwright. Chromium is at `/opt/pw-browsers`; log in locally by minting an Auth.js session cookie with `encode` from `@auth/core/jwt` (salt = cookie name `authjs.session-token`) and starting the dev server with `AUTH_SECRET`, `ALLOWED_EMAILS` and dummy `GOOGLE_OAUTH_*` on the command line.
+- UI tests (`e2e/*.spec.ts`, see "UI tests" in README.md) run Playwright against the dev server with in-memory storage and a fresh signed-in user per test. Add one for each new or changed user flow; seed data with `user.seed` and check what was saved with `user.files()`. Locate elements by role and accessible name, not CSS classes.
+- What the UI tests don't cover (service worker, wake lock, timers across a locked screen, Milon's answers) is verified manually with Playwright. Chromium is at `/opt/pw-browsers`; log in locally by minting an Auth.js session cookie with `encode` from `@auth/core/jwt` (salt = cookie name `authjs.session-token`) and starting the dev server with `AUTH_SECRET`, `ALLOWED_EMAILS` and dummy `GOOGLE_OAUTH_*` on the command line.
 
 ## Workflow
 

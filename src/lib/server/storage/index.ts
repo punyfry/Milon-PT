@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { BlobUserStorage } from './blob';
+import { e2eStorage } from './e2e';
 import { LocalFileUserStorage } from './local';
 import { RequestStorage, type StorageStats } from './request';
 import type { UserStorage } from './types';
@@ -28,7 +29,8 @@ export function requestStats(locals: App.Locals): StorageStats | null {
 
 /**
  * Storage scoped to the signed-in user. Use this from routes.
- * In dev without a Blob token, files are kept locally under `.data/`.
+ * In dev without a Blob token, files are kept locally under `.data/`. The UI
+ * tests run the dev server with `E2E_MEMORY_STORAGE=1` to keep them in memory.
  */
 export function storageFor(locals: App.Locals): UserStorage {
 	if (!locals.user) error(401, 'Inte inloggad');
@@ -41,6 +43,9 @@ export function storageFor(locals: App.Locals): UserStorage {
 }
 
 function userStorage(userId: string): UserStorage {
+	// Checked first so the UI tests never touch Blob, even with a token in `.env`.
+	// `dev` is false in builds, so this can never be switched on in production.
+	if (dev && env.E2E_MEMORY_STORAGE === '1') return e2eStorage(userId);
 	if (env.BLOB_READ_WRITE_TOKEN) return new BlobUserStorage(userId, env.BLOB_READ_WRITE_TOKEN);
 	if (dev) return new LocalFileUserStorage(userId);
 	error(500, 'BLOB_READ_WRITE_TOKEN saknas');
