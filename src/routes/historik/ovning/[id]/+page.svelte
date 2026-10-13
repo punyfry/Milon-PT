@@ -80,7 +80,9 @@
 		<p class="inworkouts">
 			{#if ex.workouts.length}
 				{ex.workouts.length === 1 ? 'Ingår i passet' : 'Ingår i passen'}
-				{#each ex.workouts as w, i (w.slug)}{i ? ', ' : ' '}<a href={`/pass/${w.slug}`}>{w.name}</a>{/each}
+				<span>
+					{#each ex.workouts as w, i (w.slug)}{#if i},{' '}{/if}<a href={`/pass/${w.slug}`}>{w.name}</a>{/each}
+				</span>
 			{:else}
 				Ingår inte i något pass
 			{/if}

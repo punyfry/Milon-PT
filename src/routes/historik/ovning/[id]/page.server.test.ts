@@ -39,6 +39,7 @@ describe('the exercise page', () => {
 		((await load({ locals: { user: { id: 'u1' } }, params: { id } } as never)) as { exercise: { workouts: unknown[] } }).exercise.workouts;
 
 	it('lists the workouts whose latest version uses the exercise, by name (#71)', async () => {
+		// beforeEach saves Pass A with Knäböj.
 		await saveWorkoutVersion(state.storage, {
 			slug: 'ben',
 			name: 'Ben',
@@ -57,6 +58,11 @@ describe('the exercise page', () => {
 			{ slug: 'ben', name: 'Ben' },
 			{ slug: 'pass-a', name: 'Pass A' }
 		]);
+		expect(await workoutsOf('ex_rodd')).toEqual([]);
+	});
+
+	it('lists no workouts for a deleted exercise', async () => {
+		expect(await remove('ex_rodd')).toEqual({ redirect: '/historik' });
 		expect(await workoutsOf('ex_rodd')).toEqual([]);
 	});
 });

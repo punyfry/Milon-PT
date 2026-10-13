@@ -32,6 +32,8 @@ describe('the exercise list', () => {
 	it('lists every active exercise alphabetically with its type, whether or not a workout uses it (#71)', async () => {
 		for (const [name, type] of [
 			['Ölyft', 'weight'],
+			['Zebra', 'weight'],
+			['Åtta', 'time'],
 			['Armhävning', 'bodyweight'],
 			['Plankan', 'time'],
 			['Borta', 'time']
@@ -50,6 +52,8 @@ describe('the exercise list', () => {
 		expect(data.exercises.map((e) => [e.name, e.type])).toEqual([
 			['Armhävning', 'bodyweight'],
 			['Plankan', 'time'],
+			['Zebra', 'weight'],
+			['Åtta', 'time'],
 			['Ölyft', 'weight']
 		]);
 	});

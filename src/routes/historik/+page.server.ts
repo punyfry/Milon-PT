@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			const best = series.reduce((b, p) => Math.max(b, p.value), 0);
 			return { id: e.id, name: e.name, type: e.type, lastDate, best, metric: metricFor(e.type).label };
 		})
-		.sort((a, b) => a.name.localeCompare(b.name, 'sv') || a.type.localeCompare(b.type));
+		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
 	const milestones = milestoneExercises(active).map((m) => ({
 		key: m.key,
