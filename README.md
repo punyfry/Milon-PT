@@ -112,13 +112,14 @@ Four file types per user, plus conversations and counters. Sets live on the exer
   "name": "Marklyft",
   "type": "weight",
   "instruction": "Stång över mellanfoten, rak rygg, tryck golvet ifrån dig.",
-  "log": [{ "sessionId": "s_20261006", "date": "2026-10-06", "sets": [{ "weight": 40, "reps": 8 }], "note": "Marginal kvar" }]
+  "log": [{ "sessionId": "s_20261006", "startedAt": "2026-10-06T17:10:00+02:00", "date": "2026-10-06", "sets": [{ "weight": 40, "reps": 8 }], "note": "Marginal kvar" }]
 }
 ```
 
 - `type`: `weight` (weight × reps), `bodyweight` (reps) or `time` (seconds). Sets per type: `{ weight, reps }`, `{ reps }` or `{ seconds }`.
 - Older files may have a `loadClass` (weight steps). It is no longer used and is dropped when the exercise is read.
 - Session ids are `s_YYYYMMDD` (Swedish time), with `_2`, `_3` … for several workouts the same day.
+- A log entry's `startedAt` is the start of the session that saved it. Saving writes the logs before the session record, so entries without a record come from a save that failed halfway: a retry with the same start reuses their id, and other sessions don't take it.
 - The ongoing workout is in localStorage under `milonpt.activeSession`; workouts waiting for the network under `milonpt.pendingSaves`.
 
 Volume: `weight` = sum of weight × reps, `bodyweight` = sum of reps, `time` = sum of seconds. Estimated 1RM: weight × (1 + reps / 30). Records count for the best set (1RM, reps or time) and, for weight exercises, the heaviest weight; the first session never counts as a record.

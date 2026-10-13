@@ -3,8 +3,8 @@
  * and finally the session record.
  *
  * Saving is idempotent: if it fails halfway and the client retries, log
- * entries already written (same sessionId) and an already created workout
- * version are skipped. The session record is written last and marks completion.
+ * entries already written (same sessionId and startedAt) and an already created
+ * workout version are skipped. The session record is written last and marks completion.
  */
 import {
 	Issues,
@@ -22,6 +22,7 @@ import {
 	type Deviation,
 	type Exercise,
 	type ExerciseSet,
+	type LogEntry,
 	type NewSessionExercise,
 	type SessionRecord,
 	type Target,
@@ -225,6 +226,21 @@ async function findSameDaySession(
 	return records.find((r) => r && savedStart(r.data) === startedAt)?.data.id ?? null;
 }
 
+/**
+ * The id for a session that has no record yet. Log entries whose id has no
+ * record were left by a save that failed halfway (#66): this save's own (same
+ * start time) give back the id it used then, and another save's keep their id
+ * taken so that a retry of that save can still finish it.
+ */
+function newSessionId(base: string, date: string, startedAt: string, recordIds: readonly string[], exercises: Iterable<Exercise>): string {
+	const records = new Set(recordIds);
+	const orphans = [...exercises].flatMap((e) => e.log).filter((l) => l.sessionId !== undefined && !records.has(l.sessionId));
+	const own = orphans.find((l) => l.startedAt === startedAt)?.sessionId;
+	if (own) return own;
+	const used = new Set([...records, ...orphans.map((l) => l.sessionId!)]);
+	return used.has(base) ? sessionIdFor(date, used) : base;
+}
+
 export async function saveSession(storage: UserStorage, input: SaveSessionInput): Promise<SaveSessionResult> {
 	const base = (await getWorkout(storage, input.session.workoutSlug, input.session.workoutVersion))?.data;
 	if (!base) throw new ValidationError('sparning', [`Passet ${input.session.workoutSlug} v${input.session.workoutVersion} finns inte`]);
@@ -268,17 +284,20 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 		if (retryOf) {
 			sessionId = retryOf;
 			alreadySaved = true;
-		} else if (existing) sessionId = sessionIdFor(date, new Set(taken));
+		} else sessionId = newSessionId(sessionId, date, session.startedAt, taken, exercises.values());
 	}
 
 	// Exercise logs, without duplicates on retry. The record is written last, so
 	// once it exists every log entry was written; it may since have been edited
-	// (an exercise removed), which a retry must not undo.
+	// (an exercise removed), which a retry must not undo. An entry from an earlier
+	// attempt under an id another session has taken since is moved to this id.
+	const { startedAt } = session;
+	const fromThisSave = (e: LogEntry) => e.startedAt === startedAt;
 	for (const [exerciseId, sets] of doneSets) {
 		if (alreadySaved) break;
-		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId)) continue;
+		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId && fromThisSave(e))) continue;
 		const note = notes.get(exerciseId);
-		await prependLogEntry(storage, exerciseId, { sessionId, date, sets, ...(note ? { note } : {}) });
+		await prependLogEntry(storage, exerciseId, { sessionId, startedAt, date, sets, ...(note ? { note } : {}) }, fromThisSave);
 	}
 
 	// New workout version with the deviations, if the user wants it.

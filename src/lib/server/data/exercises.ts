@@ -217,16 +217,17 @@ export function sortLog(log: LogEntry[]): LogEntry[] {
 }
 
 /**
- * Adds a log entry. The log is kept sorted newest first; an entry with the
- * same date as existing ones goes before them.
+ * Adds a log entry, in place of any entries `replaces` matches. The log is kept
+ * sorted newest first; an entry with the same date as existing ones goes before them.
  */
 export async function prependLogEntry(
 	storage: UserStorage,
 	exerciseId: string,
-	entry: LogEntry
+	entry: LogEntry,
+	replaces: (existing: LogEntry) => boolean = () => false
 ): Promise<StoredJson<Exercise>> {
 	const current = await getExercise(storage, exerciseId);
 	if (!current) throw new Error(`Övningen ${exerciseId} finns inte`);
-	const updated = { ...current.data, log: sortLog([entry, ...current.data.log]) };
+	const updated = { ...current.data, log: sortLog([entry, ...current.data.log.filter((e) => !replaces(e))]) };
 	return saveExercise(storage, updated, current.version);
 }

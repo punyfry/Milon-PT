@@ -117,7 +117,12 @@ describe('editing a session', () => {
 		);
 		const log = (await getExercise(storage, 'ex_marklyft'))!.data.log;
 		expect(log).toEqual([
-			{ sessionId: 's_20261006', date: '2026-10-06', sets: [{ weight: 42.5, reps: 8 }, { weight: 45, reps: 6 }, { weight: 45, reps: 5 }] },
+			{
+				sessionId: 's_20261006',
+				startedAt: '2026-10-06T17:10:00+02:00',
+				date: '2026-10-06',
+				sets: [{ weight: 42.5, reps: 8 }, { weight: 45, reps: 6 }, { weight: 45, reps: 5 }]
+			},
 			{ sessionId: 's_20261001', date: '2026-10-01', sets: [{ weight: 30, reps: 8 }] }
 		]);
 	});
