@@ -2,6 +2,7 @@ import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { env } from '$env/dynamic/private';
 import { isAllowedEmail } from '$lib/server/allowlist';
+import { SESSION_IDLE_SECONDS, checkSessionAge } from '$lib/server/security/session';
 
 export const { handle, signIn, signOut } = SvelteKitAuth(async () => ({
 	providers: [
@@ -14,7 +15,7 @@ export const { handle, signIn, signOut } = SvelteKitAuth(async () => ({
 	],
 	secret: env.AUTH_SECRET,
 	trustHost: true,
-	session: { strategy: 'jwt' },
+	session: { strategy: 'jwt', maxAge: SESSION_IDLE_SECONDS },
 	pages: {
 		signIn: '/login',
 		error: '/login'
@@ -28,7 +29,7 @@ export const { handle, signIn, signOut } = SvelteKitAuth(async () => ({
 		jwt({ token, account }) {
 			// Google's stable user ID (the `sub` claim) is our userId.
 			if (account?.provider === 'google') token.userId = account.providerAccountId;
-			return token;
+			return checkSessionAge(token, Boolean(account));
 		},
 		session({ session, token }) {
 			if (typeof token.userId === 'string') session.user.id = token.userId;

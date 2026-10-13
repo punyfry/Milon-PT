@@ -6,7 +6,9 @@ import { checkActiveSession } from '../data/save-session';
 import { listExercises } from '../data/exercises';
 import { getWorkout } from '../data/workouts';
 import type { UserStorage } from '../storage/types';
+import { clip } from '../builder/prompt';
 import { buildHelperPrompt } from './prompt';
+import { assertHistoryKey, signHistory, verifyHistory } from './history';
 import { SWAP_TOOL, executeSwap } from './swap';
 
 export interface HelperTurn {
@@ -20,13 +22,20 @@ export interface HelperInput {
 	exerciseId: string;
 	/** Earlier questions and answers in this helper panel, as text. */
 	history: HelperTurn[];
+	/** The server's signature on `history`, from the previous answer. */
+	historyToken: string;
 	question: string;
 }
 
 export interface HelperResult {
 	reply: string;
 	swap: { from: string; to: ExerciseInfo; created: boolean } | null;
+	/** The history to send with the next question (the latest turns), and its signature. */
+	history: HelperTurn[];
+	historyToken: string;
 }
+
+type Answer = Pick<HelperResult, 'reply' | 'swap'>;
 
 const MAX_QUESTION = 500;
 const MAX_TURN = 1500;
@@ -50,14 +59,18 @@ export function parseHelperInput(raw: unknown): HelperInput {
 		else
 			raw.history.forEach((t, i) => {
 				const role = i % 2 === 0 ? 'user' : 'assistant';
-				if (!isObject(t) || t.role !== role || typeof t.text !== 'string' || !t.text.trim() || t.text.length > MAX_TURN)
+				// Counted in code points, like `clip`, so a reply the server cut is always accepted back.
+				if (!isObject(t) || t.role !== role || typeof t.text !== 'string' || !t.text.trim() || Array.from(t.text).length > MAX_TURN)
 					issues.push(`history[${i}] är ogiltig`);
 				else history.push({ role, text: t.text });
 			});
 		if (history.length % 2 !== 0) issues.push('history måste sluta med ett svar');
 	}
+	if (raw.historyToken !== undefined && (typeof raw.historyToken !== 'string' || raw.historyToken.length > 100))
+		issues.push('historyToken är ogiltig');
+	const historyToken = typeof raw.historyToken === 'string' ? raw.historyToken : '';
 	if (issues.length || !session) throw new ValidationError('fråga', issues);
-	return { session, exerciseId, history, question };
+	return { session, exerciseId, history, historyToken, question };
 }
 
 /**
@@ -70,6 +83,23 @@ export async function askHelper(
 	input: HelperInput,
 	options: { model: string; createMessage: CreateMessage }
 ): Promise<HelperResult> {
+	const { session } = input;
+	// Fails before Claude is called (and counted) if the history can't be signed.
+	assertHistoryKey();
+	// A history the server didn't sign (edited, or from before a secret rotation) is not sent to the model.
+	let history = input.history;
+	if (history.length && !verifyHistory(storage.userId, session.workoutSlug, history, input.historyToken)) {
+		console.warn('Helper: history signature did not match; answering without it');
+		history = [];
+	}
+	const { reply, swap } = await answer(storage, { ...input, history }, options);
+	// The reply is cut to the length a history turn may have, so the next question is never rejected for it.
+	const next: HelperTurn[] = [...history, { role: 'user', text: input.question }, { role: 'assistant', text: clip(reply, MAX_TURN) }];
+	const kept = next.slice(-MAX_HISTORY);
+	return { reply, swap, history: kept, historyToken: signHistory(storage.userId, session.workoutSlug, kept) };
+}
+
+async function answer(storage: UserStorage, input: HelperInput, options: { model: string; createMessage: CreateMessage }): Promise<Answer> {
 	const { session } = input;
 	const [workout, all] = await Promise.all([
 		getWorkout(storage, session.workoutSlug, session.workoutVersion),

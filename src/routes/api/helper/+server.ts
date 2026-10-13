@@ -8,7 +8,7 @@ import { getProfile } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
 import type { RequestHandler } from './$types';
 
-/** The in-session helper: { session, exerciseId, history, question } → { reply, swap }. */
+/** The in-session helper: { session, exerciseId, history, historyToken, question } → { reply, swap, history, historyToken }. */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
 	if (!isAiConfigured()) error(503, 'ANTHROPIC_API_KEY saknas på servern');

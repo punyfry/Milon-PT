@@ -17,6 +17,9 @@
  */
 import {
 	Issues,
+	MAX_GOALS,
+	MAX_RULE,
+	MAX_RULES,
 	ValidationError,
 	exerciseIdBase,
 	isCalendarDate,
@@ -182,10 +185,17 @@ function parseProfile(v: unknown, issues: Issues): ImportProfile | undefined {
 			if (goals.length) out.goals = goals.map((g) => `- ${g}`).join('\n');
 		}
 	} else if (v.goals !== undefined) issues.add('profile.goals', 'måste vara text eller en lista med text');
+	if (out.goals && out.goals.length > MAX_GOALS) issues.add('profile.goals', `får vara högst ${MAX_GOALS} tecken`);
 
 	if (v.rules !== undefined) {
 		if (!Array.isArray(v.rules) || !v.rules.every((r) => typeof r === 'string')) issues.add('profile.rules', 'måste vara en lista med text');
-		else out.rules = (v.rules as string[]).map((r) => r.trim()).filter(Boolean);
+		else {
+			out.rules = (v.rules as string[]).map((r) => r.trim()).filter(Boolean);
+			if (out.rules.length > MAX_RULES) issues.add('profile.rules', `får ha högst ${MAX_RULES} regler`);
+			out.rules.forEach((r, i) => {
+				if (r.length > MAX_RULE) issues.add(`profile.rules[${i}]`, `får vara högst ${MAX_RULE} tecken`);
+			});
+		}
 	}
 	if (v.kcalEstimates !== undefined) {
 		const k = validateKcalEstimates(v.kcalEstimates, issues, 'profile.kcalEstimates');

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ValidationError } from '../../model';
+import { MAX_GOALS, MAX_RULE, MAX_RULES, ValidationError } from '../../model';
 import { createExercise, createSession, deleteExercise, getExercise, listExercises, getProfile, listLatestWorkouts, listSessions, saveProfile, saveWorkoutVersion } from '../data';
 import { kcalSuggestion } from '../../session/active';
 import { MemoryUserStorage } from '../storage/memory';
@@ -315,6 +315,14 @@ describe('import with profile, notes and sessions', () => {
 			/profile\.goals[\s\S]*profile\.kcalEstimates\.yoga/
 		);
 		expect(() => parseImportFile({ sessions: [{ date: '29/9', workout: '' }] })).toThrow(/sessions\[0\]\.date[\s\S]*sessions\[0\]\.workout/);
+	});
+
+	it('limits the length of goals and rules, which are sent to Milon with every call', () => {
+		expect(() => parseImportFile({ profile: { goals: 'm'.repeat(MAX_GOALS + 1) } })).toThrow(/profile\.goals: får vara högst/);
+		expect(() => parseImportFile({ profile: { goals: ['m'.repeat(MAX_GOALS)] } })).toThrow(/profile\.goals/);
+		expect(() => parseImportFile({ profile: { rules: ['ok', 'r'.repeat(MAX_RULE + 1)] } })).toThrow(/profile\.rules\[1\]/);
+		expect(() => parseImportFile({ profile: { rules: Array.from({ length: MAX_RULES + 1 }, (_, i) => `${i}`) } })).toThrow(/högst 30 regler/);
+		expect(() => parseImportFile({ profile: { goals: 'm'.repeat(MAX_GOALS), rules: ['r'.repeat(MAX_RULE)] } })).not.toThrow();
 	});
 
 	it('rejects a session for a workout that does not exist', async () => {

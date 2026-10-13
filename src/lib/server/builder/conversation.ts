@@ -29,6 +29,22 @@ export interface BuilderConversation extends BuilderState {
 }
 
 const ID = /^b_[a-z0-9]{6,40}$/;
+
+/**
+ * Most user messages in one conversation. Every call sends the whole
+ * conversation, so a long one costs more per turn and drifts; past this the
+ * user starts a new one.
+ */
+export const MAX_TURNS = 40;
+/** Extra turns for the "Spara pass" button past the limit, so a full conversation can still save its workout. */
+export const SAVE_TURNS = 3;
+
+const userTurns = (conversation: BuilderConversation) => conversation.log.filter((l) => l.role === 'user').length;
+
+/** The conversation has room for another user message (`save`: one from the "Spara pass" button). */
+export function canTakeTurn(conversation: BuilderConversation, save = false): boolean {
+	return userTurns(conversation) < MAX_TURNS + (save ? SAVE_TURNS : 0);
+}
 const path = (id: string) => `builder/${id}.json`;
 
 export function newConversationId(now = Date.now()): string {
@@ -214,6 +230,7 @@ export async function conversationView(storage: UserStorage, conversation: Build
 		conversationId: conversation.id,
 		editingSlug: conversation.editingSlug,
 		saved: conversation.saved ?? null,
+		turnsLeft: Math.max(0, MAX_TURNS - userTurns(conversation)),
 		log: conversation.log,
 		draft
 	};

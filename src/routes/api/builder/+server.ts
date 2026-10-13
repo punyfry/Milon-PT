@@ -4,6 +4,7 @@ import { coachEnabled, isObject } from '$lib/model';
 import { COACH_OFF_MESSAGE, assertAiCallsLeft, builderModel, isAiConfigured, limitedCreateMessage } from '$lib/server/ai/client';
 import { AiLimitError } from '$lib/server/ai/usage';
 import {
+	canTakeTurn,
 	conversationView,
 	loadConversation,
 	runTurn,
@@ -19,7 +20,8 @@ import type { RequestHandler } from './$types';
 const MAX_MESSAGE = 2000;
 
 /**
- * One turn in the workout builder: { message, conversationId? , editSlug? }.
+ * One turn in the workout builder: { message, conversationId?, editSlug?, save? }.
+ * `save` marks the "Spara pass" button, which may go a few turns past the limit.
  * Without conversationId a new conversation is started (for `editSlug` if given).
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -39,6 +41,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		const loaded = await loadConversation(storage, body.conversationId);
 		if (!loaded) error(404, 'Konversationen finns inte');
 		({ conversation, version } = loaded);
+		if (!canTakeTurn(conversation, body.save === true)) error(409, 'Samtalet är fullt. Spara passet, eller börja ett nytt samtal.');
 	} else {
 		const editSlug = typeof body.editSlug === 'string' && /^[a-z0-9-]+$/.test(body.editSlug) ? body.editSlug : null;
 		try {
