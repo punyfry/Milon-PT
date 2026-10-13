@@ -206,7 +206,7 @@
 						<img src="/intro/scen-3.png" alt="" class="body" />
 						<img src="/intro/scen-3.png" alt="" class="hand" />
 					</div>
-					<span class="face"><MilonAvatar /></span>
+					<span class="face"><MilonAvatar idle={zoomed} /></span>
 				</div>
 			</div>
 			<div class="shade"></div>
@@ -413,6 +413,8 @@
 		display: grid;
 		opacity: 0;
 		transform: translate(-50%, -50%) scale(0.4);
+		/* He starts blinking once the camera has zoomed in (the zoom takes 1.8 s). */
+		--idle-delay: 2.2s;
 		transition:
 			opacity 0.6s ease,
 			transform 0.7s cubic-bezier(0.3, 1.6, 0.5, 1);

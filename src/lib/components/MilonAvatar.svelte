@@ -1,7 +1,8 @@
 <script lang="ts">
 	/**
 	 * Milon's face (assets/avatar/milon.svg), inline so it takes the accent
-	 * color. `thinking` blinks the eyes while he works. Decorative: the text
+	 * color. `thinking` blinks the eyes while he works, `idle` blinks them now
+	 * and then so he feels present while he waits. Decorative: the text
 	 * next to it, or the button's aria-label, says it is Milon.
 	 */
 	interface Props {
@@ -9,14 +10,16 @@
 		/** In a circle, as the sender in a chat. */
 		framed?: boolean;
 		thinking?: boolean;
+		/** A calm, irregular blink every few seconds (starts after `--idle-delay`, default 0s). */
+		idle?: boolean;
 		/** Cropped to the face, as an icon next to text (the drawing leaves wide margins for the circle). */
 		tight?: boolean;
 	}
-	let { size = 28, framed = false, thinking = false, tight = false }: Props = $props();
+	let { size = 28, framed = false, thinking = false, idle = false, tight = false }: Props = $props();
 </script>
 
 <span class="avatar" class:framed style:--size="{size}px" aria-hidden="true">
-	<svg viewBox={tight ? '17 19 62 62' : '0 0 96 96'} class:blink={thinking}>
+	<svg viewBox={tight ? '17 19 62 62' : '0 0 96 96'} class:blink={thinking} class:idle={idle && !thinking}>
 		<g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
 			<path class="eye eye-l" d="M30 26V46" />
 			<path class="eye eye-r" d="M66 26V46" />
@@ -64,8 +67,33 @@
 			transform: scaleY(0.15);
 		}
 	}
+	/* One 13 s cycle: single blinks about 4 s apart, then a double blink, so it does not feel mechanical. */
+	.idle .eye {
+		animation: idle-blink 13s var(--idle-delay, 0s) ease-in-out infinite;
+	}
+	@keyframes idle-blink {
+		0%,
+		4%,
+		6%,
+		37%,
+		39%,
+		71%,
+		72.6%,
+		74%,
+		75.6%,
+		100% {
+			transform: scaleY(1);
+		}
+		5%,
+		38%,
+		71.8%,
+		74.8% {
+			transform: scaleY(0.1);
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.blink .eye {
+		.blink .eye,
+		.idle .eye {
 			animation: none;
 		}
 	}
