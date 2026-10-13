@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../test/env-private';
 import { createExercise, deleteExercise, prependLogEntry, saveProfile, saveWorkoutVersion, updateExerciseDetails } from '$lib/server/data';
 import { MemoryUserStorage } from '$lib/server/storage/memory';
-import { MAX_TURNS, saveConversation, startConversation } from '$lib/server/builder/conversation';
+import { MAX_TURNS, SAVE_TURNS, loadConversation, saveConversation, startConversation } from '$lib/server/builder/conversation';
 
 const state = vi.hoisted(() => ({ storage: null as unknown as MemoryUserStorage }));
 const createMessage = vi.hoisted(() => vi.fn());
@@ -183,9 +183,26 @@ describe('POST /api/builder', () => {
 		await saveConversation(state.storage, conversation);
 		const res = await call(builder as Handler, { message: 'Hej', conversationId: conversation.id });
 		expect(res.status).toBe(409);
-		expect(res.body.message).toMatch(/Nytt pass/);
+		expect(res.body.message).toMatch(/Samtalet är fullt/);
 		expect(await state.storage.list('usage/')).toEqual([]);
 		expect(createMessage).not.toHaveBeenCalled();
+	});
+
+	it('lets "Spara pass" through a few turns past the limit, so the workout can still be saved', async () => {
+		const conversation = await startConversation(state.storage, null);
+		conversation.log = Array.from({ length: MAX_TURNS }, () => ({ role: 'user' as const, text: 'Hej' }));
+		await saveConversation(state.storage, conversation);
+		createMessage.mockResolvedValue({ content: [{ type: 'text', text: 'Vad ska passet heta?' }], stop_reason: 'end_turn' });
+		const res = await call(builder as Handler, { message: 'Spara passet.', conversationId: conversation.id, save: true });
+		expect(res.status).toBe(200);
+		expect(res.body.turnsLeft).toBe(0);
+		expect(createMessage).toHaveBeenCalledTimes(1);
+
+		const full = (await loadConversation(state.storage, conversation.id))!.conversation;
+		full.log.push(...Array.from({ length: SAVE_TURNS }, () => ({ role: 'user' as const, text: 'Spara passet.' })));
+		const { version } = (await state.storage.readJson('builder/' + conversation.id + '.json'))!;
+		await state.storage.writeJson('builder/' + conversation.id + '.json', full, { ifMatch: version });
+		expect((await call(builder as Handler, { message: 'Spara passet.', conversationId: conversation.id, save: true })).status).toBe(409);
 	});
 
 	it('stops at the daily limit without calling Claude', async () => {

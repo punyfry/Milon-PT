@@ -8,7 +8,7 @@ import { getWorkout } from '../data/workouts';
 import type { UserStorage } from '../storage/types';
 import { clip } from '../builder/prompt';
 import { buildHelperPrompt } from './prompt';
-import { signHistory, verifyHistory } from './history';
+import { assertHistoryKey, signHistory, verifyHistory } from './history';
 import { SWAP_TOOL, executeSwap } from './swap';
 
 export interface HelperTurn {
@@ -59,7 +59,8 @@ export function parseHelperInput(raw: unknown): HelperInput {
 		else
 			raw.history.forEach((t, i) => {
 				const role = i % 2 === 0 ? 'user' : 'assistant';
-				if (!isObject(t) || t.role !== role || typeof t.text !== 'string' || !t.text.trim() || t.text.length > MAX_TURN)
+				// Counted in code points, like `clip`, so a reply the server cut is always accepted back.
+				if (!isObject(t) || t.role !== role || typeof t.text !== 'string' || !t.text.trim() || Array.from(t.text).length > MAX_TURN)
 					issues.push(`history[${i}] är ogiltig`);
 				else history.push({ role, text: t.text });
 			});
@@ -83,6 +84,8 @@ export async function askHelper(
 	options: { model: string; createMessage: CreateMessage }
 ): Promise<HelperResult> {
 	const { session } = input;
+	// Fails before Claude is called (and counted) if the history can't be signed.
+	assertHistoryKey();
 	// A history the server didn't sign (edited, or from before a secret rotation) is not sent to the model.
 	let history = input.history;
 	if (history.length && !verifyHistory(storage.userId, session.workoutSlug, history, input.historyToken)) {

@@ -12,8 +12,13 @@ import type { HelperTurn } from './ask';
  * moved to another account or another workout.
  */
 function key(): string {
+	assertHistoryKey();
+	return env.AUTH_SECRET!;
+}
+
+/** Throws if the history can't be signed, so the helper fails before calling Claude. */
+export function assertHistoryKey(): void {
 	if (!env.AUTH_SECRET) throw new Error('AUTH_SECRET is missing');
-	return env.AUTH_SECRET;
 }
 
 export function signHistory(userId: string, workoutSlug: string, history: readonly HelperTurn[]): string {

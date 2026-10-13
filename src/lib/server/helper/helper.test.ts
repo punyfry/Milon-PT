@@ -172,6 +172,29 @@ describe('helper', () => {
 		}
 	});
 
+	it('rejects a token of another length without throwing', () => {
+		expect(verifyHistory('u1', 'pass-b', [], 'short')).toBe(false);
+	});
+
+	it('fails before calling Claude when the history cannot be signed', async () => {
+		const storage = await setup();
+		const { create, calls } = scripted(reply([text('Ok.')], 'end_turn'));
+		delete env.AUTH_SECRET;
+		try {
+			await expect(askHelper(storage, parseHelperInput({ session: session(), question: 'Hej' }), { model: 'claude-haiku-4-5', createMessage: create })).rejects.toThrow(/AUTH_SECRET/);
+			expect(calls).toHaveLength(0);
+		} finally {
+			env.AUTH_SECRET = 'test-secret';
+		}
+	});
+
+	it('accepts back a cut reply with emoji, counting code points like the cut', async () => {
+		const storage = await setup();
+		const { create } = scripted(reply([text('💪'.repeat(2000))], 'end_turn'));
+		const result = await askHelper(storage, input('Peppa mig'), { model: 'claude-haiku-4-5', createMessage: create });
+		expect(() => input('Nästa', result.history, result.historyToken)).not.toThrow();
+	});
+
 	it('keeps the latest turns and cuts long replies, so the next question is accepted', async () => {
 		const storage = await setup();
 		const history: Turn[] = Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `t${i}` }));

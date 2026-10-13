@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { invalidateAll, replaceState } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -27,7 +27,8 @@
 		return 'seconds' in t ? `${t.seconds} s` : `${t.reps} reps`;
 	}
 
-	async function send(text: string) {
+	/** `save` marks the "Spara pass" button, which the server lets through a few turns past the limit. */
+	async function send(text: string, save = false) {
 		const message = text.trim();
 		if (!message || sending) return;
 		sending = true;
@@ -35,7 +36,7 @@
 		// Show the message immediately while Milon responds.
 		view = view
 			? { ...view, log: [...view.log, { role: 'user', text: message }] }
-			: { conversationId: '', editingSlug: data.editing?.slug ?? null, saved: null, draft: [], log: [{ role: 'user', text: message }] };
+			: { conversationId: '', editingSlug: data.editing?.slug ?? null, saved: null, turnsLeft: 0, draft: [], log: [{ role: 'user', text: message }] };
 		input = '';
 		await scrollDown();
 		try {
@@ -44,6 +45,7 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					message,
+					...(save ? { save: true } : {}),
 					...(view.conversationId ? { conversationId: view.conversationId } : { editSlug: data.editing?.slug })
 				})
 			});
@@ -69,6 +71,16 @@
 			await scrollDown();
 		}
 	}
+
+	/** Starts over with a new conversation, for the same workout when one is being edited. */
+	async function newConversation() {
+		view = null;
+		failure = null;
+		await goto(data.editing ? `/skapa?pass=${data.editing.slug}` : '/skapa', { replaceState: true });
+	}
+
+	/** Only for a conversation the server knows; null hides the hint. */
+	const turnsLeft = $derived(view?.conversationId ? view.turnsLeft : null);
 
 	async function scrollDown() {
 		await tick();
@@ -146,6 +158,11 @@
 		{/each}
 		{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
 		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
+		{#if turnsLeft === 0}
+			<p class="limit">Samtalet är fullt. Spara passet, eller <button type="button" class="link" onclick={newConversation}>börja ett nytt samtal</button>.</p>
+		{:else if turnsLeft !== null && turnsLeft <= 5}
+			<p class="limit">{turnsLeft === 1 ? '1 meddelande' : `${turnsLeft} meddelanden`} kvar i samtalet. Spara passet innan dess.</p>
+		{/if}
 		<div class="end" bind:this={logEnd}></div>
 	</section>
 
@@ -160,8 +177,8 @@
 			enterkeyhint="enter"
 		></textarea>
 		<div class="buttons">
-			<button type="submit" class="btn primary" disabled={sending || !input.trim()}>Skicka</button>
-			<button type="button" class="btn" disabled={sending || !draft.length} onclick={() => send('Spara passet.')}>Spara pass</button>
+			<button type="submit" class="btn primary" disabled={sending || !input.trim() || turnsLeft === 0}>Skicka</button>
+			<button type="button" class="btn" disabled={sending || !draft.length} onclick={() => send('Spara passet.', true)}>Spara pass</button>
 		</div>
 	</form>
 </div>
@@ -292,6 +309,11 @@
 	}
 	.manual {
 		align-self: flex-start;
+		font-size: 14px;
+	}
+	.limit {
+		margin: 0;
+		color: var(--muted);
 		font-size: 14px;
 	}
 	/* The last message scrolls into view above the composer and the menu, never behind them. */
