@@ -50,7 +50,9 @@ export default defineConfig({
 			command: `npx vite dev --port ${E2E_MILON_PORT} --strictPort`,
 			url: `http://localhost:${E2E_MILON_PORT}/login`,
 			env: E2E_MILON_ENV,
-			reuseExistingServer: !process.env.CI,
+			// Never reused: a server already on this port (e.g. one started with the real `.env`)
+			// could send the Milon tests to the real Claude API.
+			reuseExistingServer: false,
 			timeout: 120_000
 		}
 	]

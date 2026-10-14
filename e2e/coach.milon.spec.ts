@@ -36,7 +36,7 @@ test.describe('the helper', () => {
 		await expect(page.getByRole('alert')).toContainText('Milon kunde inte svara just nu');
 	});
 
-	test('stops at the daily limit without calling Claude', async ({ page, user }) => {
+	test('stops at the daily limit and counts nothing more', async ({ page, user }) => {
 		await user.seed({ [usagePath()]: { count: LIMIT } });
 		await askAboutWorkout(page, 'Hur många set ska jag köra?');
 		await expect(page.getByRole('alert')).toContainText('Dagens gräns för Milon är nådd');

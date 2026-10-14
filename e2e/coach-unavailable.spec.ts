@@ -17,8 +17,8 @@ test('without an API key Milon is hidden everywhere', async ({ page, user }) => 
 	await expect(page.getByRole('group', { name: 'Tema' })).toBeVisible();
 	await expect(page.getByRole('group', { name: 'Milon' })).toHaveCount(0);
 
-	// The endpoints refuse before anything is counted.
-	const res = await page.request.post('/api/helper', { data: { question: 'Hej' } });
-	expect(res.status()).toBe(503);
-	expect(Object.keys(await user.files()).some((p) => p.startsWith('usage/'))).toBe(false);
+	// The endpoints refuse before anything is counted or saved.
+	expect((await page.request.post('/api/helper', { data: { question: 'Hej' } })).status()).toBe(503);
+	expect((await page.request.post('/api/builder', { data: { message: 'Hej' } })).status()).toBe(503);
+	expect(Object.keys(await user.files()).some((p) => p.startsWith('usage/') || p.startsWith('builder/'))).toBe(false);
 });
