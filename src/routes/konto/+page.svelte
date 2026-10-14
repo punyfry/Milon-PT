@@ -6,6 +6,7 @@
 	import { pendingSaves } from '$lib/session/outbox';
 	import { clearUserData, loadActiveSession } from '$lib/session/storage';
 	import { applyTheme, loadTheme, type Theme } from '$lib/theme';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -61,6 +62,31 @@
 		const several = (active && pending > 0) || pending > 1;
 		return `På den här enheten finns ${what}. ${several ? 'De raderas' : 'Det raderas'} när du loggar ut.`;
 	});
+
+	// --- delete account ---------------------------------------------------------
+	// The server deletes every file; the page then empties the browser's copy and signs out.
+	let confirmDeleteAccount = $state(false);
+	let deletingAccount = $state(false);
+
+	function closeDeleteAccount() {
+		if (!deletingAccount) confirmDeleteAccount = false;
+	}
+
+	const enhanceDeleteAccount: SubmitFunction = () => {
+		deletingAccount = true;
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				confirmDeleteAccount = false;
+				signoutConfirmed = true;
+				clearUserData(page.data.userId);
+				signoutForm?.requestSubmit();
+				return;
+			}
+			deletingAccount = false;
+			confirmDeleteAccount = false;
+			await update({ reset: false });
+		};
+	};
 
 	// --- Craft import -------------------------------------------------------
 	let importData = $state<unknown>(null);
@@ -158,35 +184,37 @@
 			</div>
 		</div>
 
-		<section class="import" id="import">
-			<div class="row">
-				<div class="t">Importera från Craft<span>Visas först, sparas när du trycker Importera</span></div>
-				<label class="btn small file">
-					Välj fil
-					<input type="file" accept="application/json,.json" onchange={onFile} disabled={importing} class="sr-only" />
-				</label>
-			</div>
-			{#if importing}<p class="muted">Arbetar…</p>{/if}
-			{#if importIssues.length}
-				<div class="error" role="alert">
-					<p>{importFile || 'Filen'} kan inte importeras:</p>
-					<ul>{#each importIssues as issue, i (i)}<li>{issue}</li>{/each}</ul>
+		{#if data.canImport}
+			<section class="import" id="import">
+				<div class="row">
+					<div class="t">Importera från Craft<span>Visas först, sparas när du trycker Importera</span></div>
+					<label class="btn small file">
+						Välj fil
+						<input type="file" accept="application/json,.json" onchange={onFile} disabled={importing} class="sr-only" />
+					</label>
 				</div>
-			{/if}
-			{#if importResult}
-				{#if importResult.applied}
-					<p role="status"><strong>Klart:</strong> {importResult.writes} filer sparades från {importFile}.</p>
-				{:else if importResult.writes === 0}
-					<p role="status">Inget att importera, allt i {importFile} finns redan.</p>
-				{:else}
-					<p><strong>{importResult.writes} filer</strong> skulle sparas från {importFile}:</p>
+				{#if importing}<p class="muted">Arbetar…</p>{/if}
+				{#if importIssues.length}
+					<div class="error" role="alert">
+						<p>{importFile || 'Filen'} kan inte importeras:</p>
+						<ul>{#each importIssues as issue, i (i)}<li>{issue}</li>{/each}</ul>
+					</div>
 				{/if}
-				<pre class="plan">{importResult.summary.join('\n')}</pre>
-				{#if !importResult.applied && importResult.writes > 0}
-					<button class="btn primary full" onclick={() => runImport(true)} disabled={importing}>Importera</button>
+				{#if importResult}
+					{#if importResult.applied}
+						<p role="status"><strong>Klart:</strong> {importResult.writes} filer sparades från {importFile}.</p>
+					{:else if importResult.writes === 0}
+						<p role="status">Inget att importera, allt i {importFile} finns redan.</p>
+					{:else}
+						<p><strong>{importResult.writes} filer</strong> skulle sparas från {importFile}:</p>
+					{/if}
+					<pre class="plan">{importResult.summary.join('\n')}</pre>
+					{#if !importResult.applied && importResult.writes > 0}
+						<button class="btn primary full" onclick={() => runImport(true)} disabled={importing}>Importera</button>
+					{/if}
 				{/if}
-			{/if}
-		</section>
+			</section>
+		{/if}
 
 		<div class="row">
 			<div class="t">Introt<span>Milons historia och hur appen fungerar</span></div>
@@ -198,7 +226,27 @@
 		<input type="hidden" name="redirectTo" value="/login" />
 		<button type="submit" class="btn full">Logga ut</button>
 	</form>
+
+	<div class="delete-account">
+		{#if form?.deleteError}<p class="error" role="alert">{form.deleteError}</p>{/if}
+		{#if form?.accountDeleted}<p role="status">Kontot är raderat.</p>{/if}
+		<button type="button" class="btn ghost full danger" onclick={() => (confirmDeleteAccount = true)}>Radera konto</button>
+	</div>
 </main>
+
+{#if confirmDeleteAccount}
+	<Sheet title="Radera konto" onclose={closeDeleteAccount}>
+		<h2 class="sheet-title">Radera kontot?</h2>
+		<p class="muted">
+			Allt du har sparat raderas: pass, övningar, historik, mål och samtal med Milon. Det går inte att ångra. Du loggas ut, och loggar du in igen
+			börjar du från början.
+		</p>
+		<button class="btn primary full" onclick={closeDeleteAccount} disabled={deletingAccount}>Avbryt</button>
+		<form method="POST" action="?/deleteAccount" use:enhance={enhanceDeleteAccount}>
+			<button type="submit" class="btn ghost full danger" disabled={deletingAccount}>{deletingAccount ? 'Raderar…' : 'Radera allt'}</button>
+		</form>
+	</Sheet>
+{/if}
 
 {#if signoutWarning}
 	<Sheet title="Logga ut" onclose={() => (signoutWarning = null)}>
@@ -318,6 +366,17 @@
 	}
 	.logout {
 		margin-top: 28px;
+	}
+	.delete-account {
+		display: grid;
+		gap: 10px;
+		margin-top: 12px;
+	}
+	.delete-account p {
+		margin: 0;
+	}
+	.danger {
+		color: var(--danger);
 	}
 	.error p {
 		margin: 12px 0 4px;

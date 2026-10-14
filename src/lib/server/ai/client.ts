@@ -39,7 +39,7 @@ export const createMessage: CreateMessage = (params) => {
 
 /**
  * createMessage that counts every call against today's limit (AI_DAILY_LIMIT,
- * default 200 per user) and throws AiLimitError once it is reached.
+ * default 50 per user) and throws AiLimitError once it is reached.
  */
 export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage = createMessage): CreateMessage {
 	return async (params) => {

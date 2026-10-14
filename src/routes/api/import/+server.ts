@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { isObject, ValidationError } from '$lib/model';
+import { canImport } from '$lib/server/allowlist';
 import { applyImport, countWrites, parseImportFile, planImportFor, summarizePlan } from '$lib/server/import/craft';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
@@ -9,10 +10,11 @@ const MAX_BYTES = 1_000_000;
 
 /**
  * Import from Craft for the signed-in user: { data, apply }.
- * Without `apply` it is a dry run that only shows the plan.
+ * Without `apply` it is a dry run that only shows the plan. Only for IMPORT_EMAILS.
  */
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const storage = storageFor(locals);
+	if (!canImport(locals.user?.email)) error(403, 'Importen är inte tillgänglig');
 	if (Number(request.headers.get('content-length') ?? 0) > MAX_BYTES) error(413, 'Filen är för stor (max 1 MB)');
 	const text = await request.text();
 	if (new TextEncoder().encode(text).length > MAX_BYTES) error(413, 'Filen är för stor (max 1 MB)');

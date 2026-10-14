@@ -1,6 +1,7 @@
 import { addDays, isoWeek, weekStartOf, weekSummary } from '$lib/history/stats';
 import { getProfile, lastSessionBySlug, listExercises, listLatestWorkouts, listSessionsBetween } from '$lib/server/data';
 import { aiAvailable } from '$lib/server/ai/client';
+import { canImport } from '$lib/server/allowlist';
 import { storageFor } from '$lib/server/storage';
 import { todayInStockholm } from '$lib/time';
 import { redirect } from '@sveltejs/kit';
@@ -51,6 +52,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		cards,
 		coach: aiAvailable(profile.data),
+		canImport: canImport(locals.user?.email),
 		today,
 		week: {
 			number: isoWeek(weekStart),

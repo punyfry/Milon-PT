@@ -53,6 +53,7 @@ beforeEach(() => {
 	env.ANTHROPIC_API_KEY = 'test';
 	env.AUTH_SECRET = 'test-secret';
 	delete env.AI_DAILY_LIMIT;
+	env.IMPORT_EMAILS = 'a@b.c';
 });
 
 describe('POST /api/import', () => {

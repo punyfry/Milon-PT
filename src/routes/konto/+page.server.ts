@@ -1,7 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import { coachEnabled, type Profile } from '$lib/model';
 import { isAiConfigured } from '$lib/server/ai/client';
-import { getProfile, saveProfile } from '$lib/server/data';
+import { canImport } from '$lib/server/allowlist';
+import { deleteAccount, getProfile, saveProfile } from '$lib/server/data';
 import { storageFor, StorageConflictError } from '$lib/server/storage';
 import type { UserStorage } from '$lib/server/storage/types';
 import type { Actions, PageServerLoad } from './$types';
@@ -12,7 +13,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		user: locals.user,
 		weeklySessionGoal: profile.data.weeklySessionGoal ?? null,
 		coach: coachEnabled(profile.data),
-		aiConfigured: isAiConfigured()
+		aiConfigured: isAiConfigured(),
+		canImport: canImport(locals.user?.email)
 	};
 };
 
@@ -55,5 +57,19 @@ export const actions: Actions = {
 		});
 		if (!saved) return fail(409, { coachError: 'Profilen ändrades samtidigt. Försök igen.' });
 		return { coachSaved: true };
+	},
+
+	/**
+	 * Deletes everything the user has saved. The page then empties the browser's copy
+	 * and signs out. The address stays on the allowlist, so signing in again starts over.
+	 */
+	deleteAccount: async ({ locals }) => {
+		try {
+			await deleteAccount(storageFor(locals));
+		} catch (e) {
+			console.error('Could not delete account:', e);
+			return fail(500, { deleteError: 'Kontot kunde inte raderas helt. Försök igen.' });
+		}
+		return { accountDeleted: true };
 	}
 };
