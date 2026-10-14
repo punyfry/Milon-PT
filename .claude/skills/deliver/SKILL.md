@@ -26,7 +26,10 @@ You are the coder. Review and testing are done by two subagents: Gregory (`grego
 npm run check   # 0 errors, 0 warnings
 npm test
 npm run build
+npm run test:e2e  # when a page, component or user flow changed (here: PW_CHROMIUM_PATH=/opt/pw-browsers/chromium)
 ```
+
+A new or changed user flow gets a UI test in `e2e/` in the same change (see "UI tests" in README.md).
 
 Read your own diff critically before committing: what would make CI or the reviewer reject it?
 
@@ -45,9 +48,9 @@ Start both subagents in the same message so they run at the same time. Keep the 
 
 
 - `gregory`: give it the branch/PR number and what the change is meant to do, and point it at the risky parts of this particular change.
-- `nissa`: give it the branch, the affected functionality and what test data is available.
+- `nissa`: give it the branch, the affected functionality and what test data is available. She runs the UI tests; nobody else runs them while she does, since they share the test server's port.
 
-While they run, wait for CI (the GitHub Actions check **Check, test and build**, CodeQL and Vercel).
+While they run, wait for CI: every check on the PR (**Check, test and build**, **UI tests**, **Dependency audit**, CodeQL and Vercel). GitHub only requires **Check, test and build**, so waiting for the rest is up to you.
 
 ## 6. Handle findings
 
@@ -61,9 +64,9 @@ While they run, wait for CI (the GitHub Actions check **Check, test and build**,
 ## 7. Merge
 
 Merge only when:
-- CI is green on the latest commit,
+- every check is green on the latest commit (not only the required one),
 - the reviewer has no open blocker or should findings,
-- the tester has passed check, tests, build and the manual tests,
+- the tester has passed check, tests, build, the UI tests and the manual tests,
 - no owner decision has been guessed without saying so in the PR.
 
 Squash-merge with the PR number in the title, e.g. `History: archived exercises in a group of their own (#16)`, and stop watching the PR.

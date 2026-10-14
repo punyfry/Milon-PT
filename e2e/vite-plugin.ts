@@ -17,11 +17,15 @@ export function e2eStoragePlugin(): Plugin {
 			server.middlewares.use('/__e2e/files', (req, res) => {
 				handle(server, req)
 					.then((body) => {
+						// No keep-alive: the test runner would otherwise reuse a socket the server is
+						// just closing after its idle timeout, which fails with ECONNRESET.
+						res.setHeader('connection', 'close');
 						res.setHeader('content-type', 'application/json');
 						res.end(JSON.stringify(body));
 					})
 					.catch((e: unknown) => {
 						res.statusCode = 400;
+						res.setHeader('connection', 'close');
 						res.end(String(e));
 					});
 			});
