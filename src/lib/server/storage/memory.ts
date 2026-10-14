@@ -15,6 +15,7 @@ import {
 export class MemoryUserStorage implements UserStorage {
 	readonly userId: string;
 	readonly #files: Map<string, { body: string; version: string; uploadedAt: Date }>;
+
 	constructor(userId: string, files = new Map<string, { body: string; version: string; uploadedAt: Date }>()) {
 		userRoot(userId);
 		this.userId = userId;
