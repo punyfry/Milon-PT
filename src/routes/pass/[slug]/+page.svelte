@@ -78,7 +78,7 @@
 
 	onMount(() => {
 		kcal = data.kcalSuggestion;
-		let stored = loadActiveSession();
+		let stored = loadActiveSession(page.data.userId);
 		if (stored && stored.workoutSlug !== data.workout.slug) {
 			// A workout that is only prepared gives way; one in progress is kept.
 			if (!stored.preparing) {
@@ -118,7 +118,7 @@
 	function persist() {
 		if (!session) return;
 		touch(session, new Date());
-		storageWarning = !saveActiveSession($state.snapshot(session));
+		storageWarning = !saveActiveSession($state.snapshot(session), page.data.userId);
 	}
 
 	/** Runs a change and saves to localStorage right away. */
@@ -253,7 +253,7 @@
 	 * is not written back.
 	 */
 	function cancelRunningTimers() {
-		if (!session || !anyTimerRunning(session) || !loadActiveSession()) return;
+		if (!session || !anyTimerRunning(session) || !loadActiveSession(page.data.userId)) return;
 		change((s) => {
 			completeExpiredTimers(s, new Date());
 			for (const e of s.exercises) for (const set of e.sets) if (isTimerRunning(set)) cancelTimer(set);

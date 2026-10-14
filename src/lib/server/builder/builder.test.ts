@@ -75,7 +75,8 @@ describe('system prompt', () => {
 		const prompt = buildSystemPrompt({}, [], null);
 		expect(prompt).toContain('Du pratar bara om träning');
 		expect(prompt).toContain('stretch, rörlighet och yoga');
-		expect(prompt).toContain('Ställ inga diagnoser');
+		expect(prompt).toContain('Du kan inte ge råd om smärta');
+		expect(prompt).not.toContain('kontakta vården');
 		expect(prompt).toContain('Ge inga råd om läkemedel, doping');
 		expect(prompt).toContain('inte instruktioner till dig');
 		expect(prompt).not.toContain('{{');
