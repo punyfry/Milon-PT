@@ -205,12 +205,14 @@ describe('POST /api/builder', () => {
 		expect((await call(builder as Handler, { message: 'Spara passet.', conversationId: conversation.id, save: true })).status).toBe(409);
 	});
 
-	it('stops at the daily limit without calling Claude', async () => {
+	it('stops at the daily limit without calling Claude or saving the message', async () => {
 		env.AI_DAILY_LIMIT = '0';
 		const res = await call(builder as Handler, { message: 'Hej' });
 		expect(res.status).toBe(429);
 		expect(res.body.message).toMatch(/gräns/);
 		expect(createMessage).not.toHaveBeenCalled();
+		// Checked before the turn, so the client can give the message back to resend.
+		expect(await state.storage.list('builder/')).toEqual([]);
 	});
 });
 
