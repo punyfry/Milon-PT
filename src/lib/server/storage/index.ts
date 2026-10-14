@@ -45,7 +45,9 @@ export function storageFor(locals: App.Locals): UserStorage {
 function userStorage(userId: string): UserStorage {
 	// Checked first so the UI tests never touch Blob, even with a token in `.env`.
 	// `dev` is false in builds, so this can never be switched on in production.
-	if (dev && env.E2E_MEMORY_STORAGE === '1') return e2eStorage(userId);
+	// Read from the process environment, like the seeding plugin, so a flag in
+	// `.env` can't turn the dev server's storage into memory without seeding.
+	if (dev && process.env.E2E_MEMORY_STORAGE === '1') return e2eStorage(userId);
 	if (env.BLOB_READ_WRITE_TOKEN) return new BlobUserStorage(userId, env.BLOB_READ_WRITE_TOKEN);
 	if (dev) return new LocalFileUserStorage(userId);
 	error(500, 'BLOB_READ_WRITE_TOKEN saknas');

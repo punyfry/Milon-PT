@@ -69,7 +69,7 @@ Without `BLOB_READ_WRITE_TOKEN` the dev server stores data in local files under 
 
 `npm run test:e2e` runs the Playwright tests in `e2e/` against the dev server (port 5179, started and stopped by Playwright; a running one is reused locally). No `.env` is needed; the test server's own variables (below) override the one you have:
 
-- **Storage** is in memory: `E2E_MEMORY_STORAGE=1` makes `storageFor` use a shared `MemoryUserStorage` (`src/lib/server/storage/e2e.ts`). It only works in `vite dev`, so a build can never use it.
+- **Storage** is in memory: `E2E_MEMORY_STORAGE=1` makes `storageFor` use a shared `MemoryUserStorage` (`src/lib/server/storage/e2e.ts`). It only works in `vite dev` and is read from the process environment, not `.env`, so a build can never use it and a stray line in `.env` doesn't either.
 - **Sign-in**: each test gets a user of its own (new id, empty storage) through a minted Auth.js session cookie (`e2e/fixtures.ts`), so tests run in parallel without sharing data.
 - **Data**: `user.seed({ 'profile.json': … })` writes files and `user.files()` reads them back, through `/__e2e/files`, which only the dev server with the flag has (`e2e/vite-plugin.ts`). `e2e/data.ts` builds profiles, exercises and workouts.
 - **Milon** is unavailable (no API key), so no Claude calls are made.

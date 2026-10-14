@@ -66,6 +66,7 @@ describe('storage selection for the UI tests', () => {
 
 	afterEach(async () => {
 		const { env } = await import('$env/dynamic/private');
+		delete process.env.E2E_MEMORY_STORAGE;
 		delete env.E2E_MEMORY_STORAGE;
 		delete env.BLOB_READ_WRITE_TOKEN;
 		vi.doUnmock('$app/environment');
@@ -76,7 +77,7 @@ describe('storage selection for the UI tests', () => {
 		const { storageFor } = await import('./index');
 		const blob = await import('./blob');
 		const { env } = await import('$env/dynamic/private');
-		env.E2E_MEMORY_STORAGE = '1';
+		process.env.E2E_MEMORY_STORAGE = '1';
 		expect(() => storageFor(locals())).toThrow();
 		env.BLOB_READ_WRITE_TOKEN = 'token';
 		expect(storageFor(locals())).toBeInstanceOf(blob.BlobUserStorage);
@@ -87,12 +88,21 @@ describe('storage selection for the UI tests', () => {
 		const { storageFor } = await import('./index');
 		const memory = await import('./memory');
 		const { env } = await import('$env/dynamic/private');
-		env.E2E_MEMORY_STORAGE = '1';
+		process.env.E2E_MEMORY_STORAGE = '1';
 		env.BLOB_READ_WRITE_TOKEN = 'token';
 		const storage = storageFor(locals());
 		expect(storage).toBeInstanceOf(memory.MemoryUserStorage);
 		await storage.writeJson('profile.json', { goals: 'x' });
 		expect((await storageFor(locals()).readJson('profile.json'))?.data).toEqual({ goals: 'x' });
+	});
+
+	it('ignores E2E_MEMORY_STORAGE from .env, which only reaches $env/dynamic/private', async () => {
+		vi.doMock('$app/environment', () => ({ dev: true }));
+		const { storageFor } = await import('./index');
+		const memory = await import('./memory');
+		const { env } = await import('$env/dynamic/private');
+		env.E2E_MEMORY_STORAGE = '1';
+		expect(storageFor(locals())).not.toBeInstanceOf(memory.MemoryUserStorage);
 	});
 });
 
