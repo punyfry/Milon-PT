@@ -73,6 +73,7 @@ Without `BLOB_READ_WRITE_TOKEN` the dev server stores data in local files under 
 - **Sign-in**: each test gets a user of its own (new id, empty storage) through a minted Auth.js session cookie (`e2e/fixtures.ts`), so tests run in parallel without sharing data.
 - **Data**: `user.seed({ 'profile.json': … })` writes files and `user.files()` reads them back, through `/__e2e/files`, which only the dev server with the flag has (`e2e/vite-plugin.ts`). `e2e/data.ts` builds profiles, exercises and workouts.
 - **Milon** is unavailable (no API key), so no Claude calls are made.
+- Server errors and lost network are simulated with `page.route` (see `e2e/workout.spec.ts`).
 - Open pages with `open(page, path)`, which waits until the page is hydrated; on the dev server a click before that does nothing.
 
 The first run needs a browser: `npx playwright install chromium`. With another Chromium already installed, point to it with `PW_CHROMIUM_PATH` (e.g. `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e`). `npx playwright show-report` shows the latest report with traces of failed tests. CI runs the tests in the **UI tests** job and uploads the report when they fail.
