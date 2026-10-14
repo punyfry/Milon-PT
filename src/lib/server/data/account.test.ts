@@ -17,7 +17,7 @@ async function seed(storage: UserStorage) {
 }
 
 describe('deleteAccount', () => {
-	it("deletes every file the user has and nobody else's", async () => {
+	it("deletes every file the user has but the AI counters, and nobody else's", async () => {
 		const files = new Map();
 		const user = new MemoryUserStorage('u1', files);
 		// A user id that starts with the same characters must not be caught by the prefix.
@@ -26,8 +26,9 @@ describe('deleteAccount', () => {
 		await seed(other);
 		const before = (await other.list()).map((f) => f.path).sort();
 
-		expect(await deleteAccount(user)).toBe(4);
-		expect(await user.list()).toEqual([]);
+		expect(await deleteAccount(user)).toBe(3);
+		// Kept, so deleting the account doesn't reset the daily AI limit.
+		expect((await user.list()).map((f) => f.path)).toEqual(['usage/2026-10-14.json']);
 		expect((await other.list()).map((f) => f.path).sort()).toEqual(before);
 	});
 
@@ -52,7 +53,7 @@ describe('deleteAccount', () => {
 			delete: (p) => storage.delete(p)
 		};
 		await deleteAccount(racing);
-		expect(await storage.list()).toEqual([]);
+		expect((await storage.list()).map((f) => f.path)).toEqual(['usage/2026-10-14.json']);
 
 		const endless: UserStorage = {
 			...racing,

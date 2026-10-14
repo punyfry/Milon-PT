@@ -67,14 +67,18 @@
 	// The server deletes every file; the page then empties the browser's copy and signs out.
 	let confirmDeleteAccount = $state(false);
 	let deletingAccount = $state(false);
+	let deleteError = $state('');
 
 	function closeDeleteAccount() {
-		if (!deletingAccount) confirmDeleteAccount = false;
+		if (deletingAccount) return;
+		confirmDeleteAccount = false;
+		deleteError = '';
 	}
 
 	const enhanceDeleteAccount: SubmitFunction = () => {
 		deletingAccount = true;
-		return async ({ result, update }) => {
+		deleteError = '';
+		return async ({ result }) => {
 			if (result.type === 'success') {
 				confirmDeleteAccount = false;
 				signoutConfirmed = true;
@@ -82,9 +86,12 @@
 				signoutForm?.requestSubmit();
 				return;
 			}
+			// Kept in the sheet, so a lost network doesn't end on an error page.
 			deletingAccount = false;
-			confirmDeleteAccount = false;
-			await update({ reset: false });
+			deleteError =
+				result.type === 'failure' && typeof result.data?.deleteError === 'string'
+					? result.data.deleteError
+					: 'Kunde inte nå servern. Inget har raderats, försök igen.';
 		};
 	};
 
@@ -227,11 +234,7 @@
 		<button type="submit" class="btn full">Logga ut</button>
 	</form>
 
-	<div class="delete-account">
-		{#if form?.deleteError}<p class="error" role="alert">{form.deleteError}</p>{/if}
-		{#if form?.accountDeleted}<p role="status">Kontot är raderat.</p>{/if}
-		<button type="button" class="btn ghost full danger" onclick={() => (confirmDeleteAccount = true)}>Radera konto</button>
-	</div>
+	<button type="button" class="btn ghost full danger delete-account" onclick={() => (confirmDeleteAccount = true)}>Radera konto</button>
 </main>
 
 {#if confirmDeleteAccount}
@@ -241,6 +244,7 @@
 			Allt du har sparat raderas: pass, övningar, historik, mål och samtal med Milon. Det går inte att ångra. Du loggas ut, och loggar du in igen
 			börjar du från början.
 		</p>
+		{#if deleteError}<p class="error" role="alert">{deleteError}</p>{/if}
 		<button class="btn primary full" onclick={closeDeleteAccount} disabled={deletingAccount}>Avbryt</button>
 		<form method="POST" action="?/deleteAccount" use:enhance={enhanceDeleteAccount}>
 			<button type="submit" class="btn ghost full danger" disabled={deletingAccount}>{deletingAccount ? 'Raderar…' : 'Radera allt'}</button>
@@ -368,12 +372,7 @@
 		margin-top: 28px;
 	}
 	.delete-account {
-		display: grid;
-		gap: 10px;
 		margin-top: 12px;
-	}
-	.delete-account p {
-		margin: 0;
 	}
 	.danger {
 		color: var(--danger);

@@ -30,9 +30,10 @@ afterEach(() => {
 });
 
 describe('deleting the account', () => {
-	it('deletes all files', async () => {
+	it('deletes all files but the AI counters', async () => {
+		await state.storage.writeJson('usage/2026-10-14.json', { count: 50 });
 		expect(await konto.actions.deleteAccount(event())).toEqual({ accountDeleted: true });
-		expect(await state.storage.list()).toEqual([]);
+		expect((await state.storage.list()).map((f) => f.path)).toEqual(['usage/2026-10-14.json']);
 	});
 
 	it('answers 500 with a message when the storage fails', async () => {
