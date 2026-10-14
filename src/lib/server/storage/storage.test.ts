@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BlobUserStorage } from './blob';
 import { MemoryUserStorage } from './memory';
 import { resolvePath, userRoot } from './paths';
@@ -47,6 +47,62 @@ describe('memory storage', () => {
 		await expect(s.writeJson('x.json', 2, { ifMatch: 'fel' })).rejects.toBeInstanceOf(StorageConflictError);
 		await s.writeJson('x.json', 2, { ifMatch: version });
 		expect((await s.readJson('x.json'))?.data).toBe(2);
+	});
+
+	it('never hands out the same version from two instances sharing a file map', async () => {
+		const files = new Map();
+		const first = await new MemoryUserStorage('a', files).writeJson('x.json', 1);
+		const second = await new MemoryUserStorage('a', files).writeJson('x.json', 2);
+		expect(second.version).not.toBe(first.version);
+		await expect(new MemoryUserStorage('a', files).writeJson('x.json', 3, { ifMatch: first.version })).rejects.toBeInstanceOf(StorageConflictError);
+	});
+});
+
+describe('storage selection for the UI tests', () => {
+	const locals = () => ({ user: { id: 'u1', email: 'a@example.com', name: null } }) as App.Locals;
+
+	// Each test imports its own module graph (classes included), so `$app/environment` can be mocked per test.
+	beforeEach(() => vi.resetModules());
+
+	afterEach(async () => {
+		const { env } = await import('$env/dynamic/private');
+		delete process.env.E2E_MEMORY_STORAGE;
+		delete env.E2E_MEMORY_STORAGE;
+		delete env.BLOB_READ_WRITE_TOKEN;
+		vi.doUnmock('$app/environment');
+		vi.resetModules();
+	});
+
+	it('ignores E2E_MEMORY_STORAGE outside dev, so production always uses Blob', async () => {
+		const { storageFor } = await import('./index');
+		const blob = await import('./blob');
+		const { env } = await import('$env/dynamic/private');
+		process.env.E2E_MEMORY_STORAGE = '1';
+		expect(() => storageFor(locals())).toThrow();
+		env.BLOB_READ_WRITE_TOKEN = 'token';
+		expect(storageFor(locals())).toBeInstanceOf(blob.BlobUserStorage);
+	});
+
+	it('uses the shared in-memory store on the dev server with E2E_MEMORY_STORAGE=1, even with a Blob token', async () => {
+		vi.doMock('$app/environment', () => ({ dev: true }));
+		const { storageFor } = await import('./index');
+		const memory = await import('./memory');
+		const { env } = await import('$env/dynamic/private');
+		process.env.E2E_MEMORY_STORAGE = '1';
+		env.BLOB_READ_WRITE_TOKEN = 'token';
+		const storage = storageFor(locals());
+		expect(storage).toBeInstanceOf(memory.MemoryUserStorage);
+		await storage.writeJson('profile.json', { goals: 'x' });
+		expect((await storageFor(locals()).readJson('profile.json'))?.data).toEqual({ goals: 'x' });
+	});
+
+	it('ignores E2E_MEMORY_STORAGE from .env, which only reaches $env/dynamic/private', async () => {
+		vi.doMock('$app/environment', () => ({ dev: true }));
+		const { storageFor } = await import('./index');
+		const memory = await import('./memory');
+		const { env } = await import('$env/dynamic/private');
+		env.E2E_MEMORY_STORAGE = '1';
+		expect(storageFor(locals())).not.toBeInstanceOf(memory.MemoryUserStorage);
 	});
 });
 

@@ -9,12 +9,12 @@ import {
 
 /**
  * In-memory implementation with the same semantics as the Blob implementation
- * (path validation, ifMatch, createOnly). Used in tests and for import dry runs.
+ * (path validation, ifMatch, createOnly). Used in tests, for import dry runs and,
+ * with a shared file map, as the dev server's storage in the UI tests (`e2e.ts`).
  */
 export class MemoryUserStorage implements UserStorage {
 	readonly userId: string;
 	readonly #files: Map<string, { body: string; version: string; uploadedAt: Date }>;
-	#counter = 0;
 
 	constructor(userId: string, files = new Map<string, { body: string; version: string; uploadedAt: Date }>()) {
 		userRoot(userId);
@@ -34,7 +34,8 @@ export class MemoryUserStorage implements UserStorage {
 		if (options.ifMatch !== undefined && existing?.version !== options.ifMatch) {
 			throw new StorageConflictError(path);
 		}
-		const version = `v${++this.#counter}`;
+		// Random, so instances sharing one file map never hand out the same version.
+		const version = crypto.randomUUID();
 		this.#files.set(key, { body: JSON.stringify(data), version, uploadedAt: new Date() });
 		return { version };
 	}

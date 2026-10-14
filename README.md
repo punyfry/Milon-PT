@@ -41,6 +41,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `static/fonts/` | Self-hosted Bricolage Grotesque, DM Mono and Newsreader (the intro's narrator) (latin subset, SIL Open Font License) so they work offline |
 | `assets/logo/` | The logo (`logo.svg`, an M that is also a dumbbell, drawn in `currentColor`) and `logo-preview.html`, a standalone preview at different sizes |
 | `assets/avatar/` | Milon's avatar (`milon.svg`), the logo-to-Milon animation (`logo-to-milon.svg`/`.gif`) and a preview; see `assets/avatar/README.md` |
+| `e2e/` | Playwright UI tests, their fixtures (signed-in test user, seeding) and the dev server plugin behind seeding; see [UI tests](#ui-tests) |
 | `scripts/` | `import.ts` (import script) and `make_icons.py` (PWA icons and favicon, drawn from the logo) |
 | `.claude/` | Agent workflow: the `deliver` skill and the subagents Gregory (review) and Nissa (testing) |
 
@@ -63,6 +64,18 @@ Within one request `storageFor` returns the same storage. In GET requests, ident
 3. `npm run dev` and open http://localhost:5173
 
 Without `BLOB_READ_WRITE_TOKEN` the dev server stores data in local files under `.data/` (gitignored). Production requires the token.
+
+### UI tests
+
+`npm run test:e2e` runs the Playwright tests in `e2e/` against the dev server (port 5179, started and stopped by Playwright; a running one is reused locally). No `.env` is needed; the test server's own variables (below) override the one you have:
+
+- **Storage** is in memory: `E2E_MEMORY_STORAGE=1` makes `storageFor` use a shared `MemoryUserStorage` (`src/lib/server/storage/e2e.ts`). It only works in `vite dev` and is read from the process environment, not `.env`, so a build can never use it and a stray line in `.env` doesn't either.
+- **Sign-in**: each test gets a user of its own (new id, empty storage) through a minted Auth.js session cookie (`e2e/fixtures.ts`), so tests run in parallel without sharing data.
+- **Data**: `user.seed({ 'profile.json': … })` writes files and `user.files()` reads them back, through `/__e2e/files`, which only the dev server with the flag has (`e2e/vite-plugin.ts`). `e2e/data.ts` builds profiles, exercises and workouts.
+- **Milon** is unavailable (no API key), so no Claude calls are made.
+- Open pages with `open(page, path)`, which waits until the page is hydrated; on the dev server a click before that does nothing.
+
+The first run needs a browser: `npx playwright install chromium`. With another Chromium already installed, point to it with `PW_CHROMIUM_PATH` (e.g. `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e`). `npx playwright show-report` shows the latest report with traces of failed tests. CI runs the tests in the **UI tests** job and uploads the report when they fail.
 
 ### Environment variables
 

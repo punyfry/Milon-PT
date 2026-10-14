@@ -33,9 +33,9 @@ const config = {
 			}
 		},
 		typescript: {
-			// Also type-check the import script and the vitest config.
+			// Also type-check the import script, the vitest config and the UI tests.
 			config: (tsconfig) => {
-				tsconfig.include.push('../scripts/**/*.ts', '../vitest.config.ts');
+				tsconfig.include.push('../scripts/**/*.ts', '../vitest.config.ts', '../playwright.config.ts', '../e2e/**/*.ts');
 			}
 		}
 	}

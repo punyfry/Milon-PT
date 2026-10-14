@@ -23,3 +23,8 @@ vite.config.ts.timestamp-*
 # Local data storage in dev (without a Blob token)
 /.data
 coverage
+
+# Playwright
+/test-results
+/playwright-report
+/blob-report
