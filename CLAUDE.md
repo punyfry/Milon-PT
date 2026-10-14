@@ -45,7 +45,8 @@ CI (`.github/workflows/ci.yml`) runs check, test and build on every PR (the requ
 - Endpoint tests (`src/routes/api/api.test.ts`) mock `storageFor` and `createMessage`; never call the real Claude API in tests.
 - Security-relevant code (guard, allowlist, paths, Blob storage, AI limit, headers) has tests; keep them green and add cases when changing it.
 - UI tests (`e2e/*.spec.ts`, see "UI tests" in README.md) run Playwright against the dev server with in-memory storage and a fresh signed-in user per test. Add one for each new or changed user flow; seed data with `user.seed` and check what was saved with `user.files()`. Locate elements by role and accessible name, not CSS classes.
-- What the UI tests don't cover (service worker, wake lock, timers across a locked screen, Milon's answers) is verified manually with Playwright. Chromium is at `/opt/pw-browsers`; log in locally by minting an Auth.js session cookie with `encode` from `@auth/core/jwt` (salt = cookie name `authjs.session-token`) and starting the dev server with `AUTH_SECRET`, `ALLOWED_EMAILS` and dummy `GOOGLE_OAUTH_*` on the command line.
+- Milon's flows are UI-tested in `*.milon.spec.ts` against a fake Claude API (fixed reply, or an error with `#fel`).
+- What the UI tests don't cover (service worker, wake lock, timers across a locked screen, the content of Milon's real answers) is verified manually with Playwright. Chromium is at `/opt/pw-browsers`; log in locally by minting an Auth.js session cookie with `encode` from `@auth/core/jwt` (salt = cookie name `authjs.session-token`) and starting the dev server with `AUTH_SECRET`, `ALLOWED_EMAILS` and dummy `GOOGLE_OAUTH_*` on the command line.
 
 ## Workflow
 

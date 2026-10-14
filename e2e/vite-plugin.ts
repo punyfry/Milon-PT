@@ -7,6 +7,8 @@ import type { Connect, Plugin, ViteDevServer } from 'vite';
  *
  * - `POST /__e2e/files?user=<id>` with `{ "<path>": <json>, ... }` writes files.
  * - `GET /__e2e/files?user=<id>` returns all of the user's files as `{ "<path>": <json> }`.
+ * - `/__e2e/claude/v1/messages` is a fake Claude API. The Milon test server points the SDK at it
+ *   with `ANTHROPIC_BASE_URL`, so no test ever reaches the real API (see `fakeClaude`).
  */
 export function e2eStoragePlugin(): Plugin {
 	return {
@@ -29,6 +31,48 @@ export function e2eStoragePlugin(): Plugin {
 						res.end(String(e));
 					});
 			});
+			server.middlewares.use('/__e2e/claude', (req, res) => {
+				readBody(req)
+					.then((body) => {
+						const reply = fakeClaude(body);
+						res.statusCode = reply.status;
+						res.setHeader('connection', 'close');
+						res.setHeader('content-type', 'application/json');
+						res.end(JSON.stringify(reply.body));
+					})
+					.catch(() => {
+						res.statusCode = 500;
+						res.end();
+					});
+			});
+		}
+	};
+}
+
+/** Put in a question to Milon to make the fake Claude API answer with an error. */
+export const FAKE_CLAUDE_ERROR = '#fel';
+export const FAKE_CLAUDE_REPLY = 'Hej! Det här är ett testsvar från Milon.';
+
+/**
+ * Answers a Messages API request with a short text reply, or with a 400 error
+ * (which the SDK doesn't retry) when the request contains FAKE_CLAUDE_ERROR.
+ */
+function fakeClaude(body: string): { status: number; body: unknown } {
+	if (body.includes(FAKE_CLAUDE_ERROR)) {
+		return { status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: 'Fake error for the UI tests' } } };
+	}
+	const model = (JSON.parse(body) as { model?: string }).model ?? 'fake';
+	return {
+		status: 200,
+		body: {
+			id: 'msg_e2e',
+			type: 'message',
+			role: 'assistant',
+			model,
+			content: [{ type: 'text', text: FAKE_CLAUDE_REPLY }],
+			stop_reason: 'end_turn',
+			stop_sequence: null,
+			usage: { input_tokens: 1, output_tokens: 1 }
 		}
 	};
 }

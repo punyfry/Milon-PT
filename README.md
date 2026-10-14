@@ -72,7 +72,7 @@ Without `BLOB_READ_WRITE_TOKEN` the dev server stores data in local files under 
 - **Storage** is in memory: `E2E_MEMORY_STORAGE=1` makes `storageFor` use a shared `MemoryUserStorage` (`src/lib/server/storage/e2e.ts`). It only works in `vite dev` and is read from the process environment, not `.env`, so a build can never use it and a stray line in `.env` doesn't either.
 - **Sign-in**: each test gets a user of its own (new id, empty storage) through a minted Auth.js session cookie (`e2e/fixtures.ts`), so tests run in parallel without sharing data.
 - **Data**: `user.seed({ 'profile.json': … })` writes files and `user.files()` reads them back, through `/__e2e/files`, which only the dev server with the flag has (`e2e/vite-plugin.ts`). `e2e/data.ts` builds profiles, exercises and workouts.
-- **Milon** is unavailable (no API key), so no Claude calls are made.
+- **Milon** is unavailable on that server (no API key). Tests named `*.milon.spec.ts` run in their own project against a second dev server (port 5180) with a dummy key and `ANTHROPIC_BASE_URL` pointing at a fake Claude API on that server (`/__e2e/claude`, in `e2e/vite-plugin.ts`). It answers with a fixed text (`FAKE_CLAUDE_REPLY`), or with an API error when the request contains `#fel`. No test ever reaches the real Claude API.
 - Server errors and lost network are simulated with `page.route` (see `e2e/workout.spec.ts`).
 - Open pages with `open(page, path)`, which waits until the page is hydrated; on the dev server a click before that does nothing.
 
