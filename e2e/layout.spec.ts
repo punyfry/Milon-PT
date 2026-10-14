@@ -1,6 +1,9 @@
 import { exercise, profile, session, workout } from './data';
 import { open, test, expect } from './fixtures';
 
+// The narrowest common phone width; the project's Pixel 7 is 412 px.
+test.use({ viewport: { width: 390, height: 844 } });
+
 const PAGES = ['/', '/historik', '/historik/ovning/ex_knaboj', '/historik/pass/s_20261006', '/skapa/manuell', '/konto', '/pass/ben'];
 
 for (const theme of ['light', 'dark'] as const) {

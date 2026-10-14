@@ -21,8 +21,10 @@ test.beforeEach(async ({ user }) => {
 test('the session view shows times, kcal and sets', async ({ page }) => {
 	await open(page, `/historik/pass/${ID}`);
 	await expect(page.getByRole('heading', { name: 'Rygg' })).toBeVisible();
-	await expect(page.getByRole('definition').filter({ hasText: '17:00' })).toBeVisible();
-	await expect(page.getByRole('definition').filter({ hasText: '300' })).toBeVisible();
+	// The value (dd) next to a label (dt) in the stats list.
+	const stat = (term: string) => page.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) }).locator('xpath=following-sibling::dd[1]');
+	await expect(stat('Start')).toHaveText('17:00');
+	await expect(stat('Kcal')).toHaveText('300');
 	await expect(page.getByRole('listitem').filter({ hasText: 'Marklyft' })).toContainText('60');
 });
 
@@ -37,7 +39,7 @@ test('editing a set is saved to the exercise log', async ({ page, user }) => {
 	expect(log[0].sets).toEqual([{ weight: 60, reps: 5 }, { weight: 62.5, reps: 5 }]);
 });
 
-test('an edit made in another tab since the page was loaded is not overwritten', async ({ page, context }) => {
+test('an edit made in another tab since the page was loaded is not overwritten', async ({ page, context, user }) => {
 	const other = await context.newPage();
 	await open(page, `/historik/pass/${ID}`);
 	await open(other, `/historik/pass/${ID}`);
@@ -54,6 +56,7 @@ test('an edit made in another tab since the page was loaded is not overwritten',
 	// The view reloads what is stored: the other tab's change.
 	await page.getByRole('button', { name: 'Avbryt' }).click();
 	await expect(page.getByRole('listitem').filter({ hasText: 'Marklyft' })).toContainText('60 kg × 6 · 60 kg × 5');
+	expect(((await user.files())['exercises/ex_marklyft.json'] as Exercise).log[0].sets[0]).toEqual({ weight: 60, reps: 6 });
 });
 
 test('deleting a session removes it and its sets', async ({ page, user }) => {

@@ -14,10 +14,9 @@ test('the theme choice is applied and kept after a reload', async ({ page, user 
 test('the weekly goal is saved to the profile', async ({ page, user }) => {
 	await user.seed(profile());
 	await open(page, '/konto');
-	// Each step is saved right away.
-	await page.getByRole('button', { name: 'Öka veckomål' }).click();
-	await expect.poll(async () => ((await user.files())['profile.json'] as Profile).weeklySessionGoal).toBe(1);
-	await page.getByRole('button', { name: 'Öka veckomål' }).click();
-	await page.getByRole('button', { name: 'Öka veckomål' }).click();
-	await expect.poll(async () => ((await user.files())['profile.json'] as Profile).weeklySessionGoal).toBe(3);
+	// Each step is saved right away; wait for each save so the steps don't race.
+	for (const goal of [1, 2, 3]) {
+		await page.getByRole('button', { name: 'Öka veckomål' }).click();
+		await expect.poll(async () => ((await user.files())['profile.json'] as Profile).weeklySessionGoal).toBe(goal);
+	}
 });

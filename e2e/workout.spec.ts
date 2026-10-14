@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import type { Exercise, SessionRecord } from '../src/lib/model/types';
 import { exercise, profile, workout } from './data';
 import { open, test, expect } from './fixtures';
@@ -41,7 +42,7 @@ test('logs a workout from the start page to a saved session', async ({ page, use
 });
 
 /** Starts the seeded workout "Ben" and checks off the first set. */
-async function startAndCheckFirstSet(page: import('@playwright/test').Page) {
+async function startAndCheckFirstSet(page: Page) {
 	await open(page, '/pass/ben');
 	await page.getByRole('button', { name: 'Starta passet' }).click();
 	await page.getByRole('button', { name: 'Klarmarkera set 1' }).click();
