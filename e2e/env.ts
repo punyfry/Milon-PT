@@ -12,6 +12,8 @@ export const E2E_ENV: Record<string, string> = {
 	E2E_MEMORY_STORAGE: '1',
 	AUTH_SECRET: E2E_AUTH_SECRET,
 	ALLOWED_EMAILS: E2E_EMAIL,
+	// The test user may use the Craft import (e2e/import.spec.ts).
+	IMPORT_EMAILS: E2E_EMAIL,
 	GOOGLE_OAUTH_CLIENT_ID: 'e2e',
 	GOOGLE_OAUTH_CLIENT_SECRET: 'e2e',
 	// Empty values override `.env`: no Blob, no Claude.

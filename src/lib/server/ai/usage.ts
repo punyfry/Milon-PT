@@ -1,7 +1,7 @@
 import { StorageConflictError, type UserStorage } from '../storage/types';
 
 /** Default for AI_DAILY_LIMIT: Claude API calls per user and day (one builder turn can make several). */
-export const DEFAULT_DAILY_LIMIT = 200;
+export const DEFAULT_DAILY_LIMIT = 50;
 
 export class AiLimitError extends Error {
 	constructor(readonly limit: number) {

@@ -7,7 +7,7 @@ import { FAKE_CLAUDE_ERROR, FAKE_CLAUDE_REPLY } from './vite-plugin';
 
 /** Today's AI usage counter, as the server names it (the date in Stockholm). */
 const usagePath = () => `usage/${new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' }).format(new Date())}.json`;
-const LIMIT = 200; // AI_DAILY_LIMIT is unset on the test server, so the default applies.
+const LIMIT = 50; // AI_DAILY_LIMIT is unset on the test server, so the default applies.
 
 test.beforeEach(async ({ user }) => {
 	await user.seed({

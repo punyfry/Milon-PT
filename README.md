@@ -25,7 +25,7 @@ The app's UI and the AI coach are in Swedish; code and developer docs are in Eng
 | `src/lib/server/allowlist.ts` | Reads `ALLOWED_EMAILS`. An empty list lets nobody in |
 | `src/lib/server/storage/` | The `UserStorage` interface: Vercel Blob (private), local files in `.data/` in dev, and in-memory in tests. Paths are validated in `paths.ts` |
 | `src/lib/model/` | The data model: types, validation and id helpers. Shared by server and client |
-| `src/lib/server/data/` | Read/write exercises, workout templates (versioned), saved sessions and the profile. `save-session.ts` saves a finished workout and is safe to retry without duplicates; `manual-workout.ts` saves a workout built by hand |
+| `src/lib/server/data/` | Read/write exercises, workout templates (versioned), saved sessions and the profile. `save-session.ts` saves a finished workout and is safe to retry without duplicates; `manual-workout.ts` saves a workout built by hand; `account.ts` deletes all of a user's files |
 | `src/lib/server/import/craft.ts` | The Craft import: validate → plan against existing data → write |
 | `src/lib/server/ai/` | Claude client, model selection, per-model parameters and the daily limit (`usage.ts`) |
 | `src/lib/server/builder/` | The workout builder: system prompt, the `propose_exercise`/`set_workout` tools and the conversation loop |
@@ -86,11 +86,12 @@ The first run needs a browser: `npx playwright install chromium`. With another C
 | `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth client ID. Passed explicitly to the Google provider (Auth.js otherwise looks for `AUTH_GOOGLE_ID`) |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth secret, passed the same way |
 | `ALLOWED_EMAILS` | Comma-separated list of e-mail addresses allowed to sign in |
+| `IMPORT_EMAILS` | Comma-separated list of the addresses that see the Craft import on Konto (and may call `/api/import`). Empty hides it for everyone |
 | `BLOB_READ_WRITE_TOKEN` | Created when the Blob store is connected to the Vercel project |
 | `ANTHROPIC_API_KEY` | Claude API key. Without it the builder and helper answer 503 |
 | `MODEL_BUILDER` | Model for the builder (default `claude-sonnet-5-5`) |
 | `MODEL_HELPER` | Model for the helper (default `claude-haiku-4-5`) |
-| `AI_DAILY_LIMIT` | Max Claude API calls per user and day, builder and helper combined (default 200, `0` disables). One builder turn can make several calls |
+| `AI_DAILY_LIMIT` | Max Claude API calls per user and day, builder and helper combined (default 50, `0` disables). One builder turn can make several calls |
 
 ### Google OAuth client
 
@@ -151,7 +152,7 @@ The look (tokens, type, layout) is described in [DESIGN.md](DESIGN.md). A fixed 
    **By hand** (`/skapa/manuell`, where `/skapa` leads when Milon is off or not configured, and linked from the builder otherwise): name the workout, add exercises from your own or write in new ones, set sets and target (reps or seconds), reorder and remove. "Spara pass" goes through `POST /api/workouts` and creates `v1` or the next version with a generated change note; nothing is saved if nothing changed. New exercises are created on save, reusing an active one with the same name and type.
 6. **Library (Bibliotek, `/historik`):** week (days with today outlined, sessions vs. weekly goal, volume per type), milestones (Pull-up and Handstand, with progression exercises until the goal exercise is logged), every exercise in one alphabetical list with search, each with its type and when it was last trained ("inte tränad än" if never), **Ny övning** to add an exercise on its own without putting it in a workout (name, type, instruction and a note of your own, e.g. why it looked interesting; the note is shown on the exercise page, and Milon sees it in the builder's and the helper's exercise catalog, cut to 200 characters, and in full for the exercise a question is about, so it can suggest another variant if something hurt or was too easy), and per exercise the workouts whose latest version uses it (linked), a chart and the latest sessions as rows. **Ändra** on an exercise changes its name, type (only while no sets are logged and no workout uses it, since sets and targets depend on the type), instruction and note. **Ta bort övning** deletes it, unless the latest version of a workout uses it. A deleted exercise keeps its file and log (`deleted: true`): it disappears from every list and picker, but its sets stay in the week's numbers and in the sessions where they were done, and restoring an old workout version that uses it brings it back (refused if a new exercise has taken its name, as is a restore where an exercise has changed type since; the versions sheet then offers to restore without those exercises), as does saving a session's swaps as a new version built on such a version (which uses the new exercise instead if one has taken the name). A new exercise with the same name is a new one. There is no archiving; `archived` in older files is ignored, so those exercises are active.
    **Session view** (`/historik/pass/[id]`, from the week's session list or a date in an exercise's history): start, end, length, kcal and each exercise's sets. **Redigera** corrects the start time (the start date is fixed, it is part of the session id), the end date and time, kcal, the sets (change, add, remove) and each exercise's note, and can remove an exercise from the session. **Ta bort pass** deletes the session and its sets; workout versions it created stay. Edits go through `PUT`/`DELETE /api/sessions/[id]` with the record's version, write the log entries first and the record last, and answer 409 if the session changed since the page was loaded. A changed start keeps the saved value in `originalStartedAt`, so a queued retry of the original save is still recognised as already saved (and then writes no log entries).
-7. **Account:** weekly goal, Milon on or off (shown when the API key is set), theme (system, dark, light), the Craft import, the intro again and sign-out.
+7. **Account:** weekly goal, Milon on or off (shown when the API key is set), theme (system, dark, light), the Craft import (only for `IMPORT_EMAILS`), the intro again, sign-out and **Radera konto**. Deleting the account asks first, then deletes every file under `users/<userId>/` (profile, exercises, workouts, sessions, builder conversations) except the AI counters, which hold only a count per day and are kept so the daily limit can't be reset that way; it then empties the browser's copy and signs out. The address stays on the allowlist, so signing in again starts from scratch with the intro; remove it from `ALLOWED_EMAILS` to take away access too.
 
 ## The AI coach
 
@@ -164,6 +165,8 @@ Two separate calls with their own system prompts, both using tools so the app ne
 - Cost: roughly SEK 4–5 a month for Haiku and SEK 12–20 for Sonnet at about 12 workouts. Besides `AI_DAILY_LIMIT`, set a monthly limit for the API key in the Anthropic Console. A Claude subscription does not cover API calls.
 
 ## Craft import
+
+Only offered to the addresses in `IMPORT_EMAILS`, since the format is the owner's own export.
 
 **Easiest:** sign in, go to **Konto → Importera från Craft** and pick the JSON file. The app first shows what would be saved and only saves when you press **Importera**. See `scripts/import-example.json` for the format. Besides exercises and workouts, the file can contain:
 
@@ -220,4 +223,4 @@ GitHub Actions (`.github/workflows/ci.yml`) runs type check, tests and build on 
 - Rest timer between sets
 - RPE per set and bodyweight with added load (weight vest)
 - External exercise database
-- More users: the data model is already per `userId`. What's missing is payment, per-user quotas and open sign-up instead of an allowlist.
+- More users: the data model is already per `userId`. What's missing is payment, per-user quotas, open sign-up instead of an allowlist, data export and a privacy policy.

@@ -1,7 +1,7 @@
 import { isHttpError, isRedirect } from '@sveltejs/kit';
 import { afterEach, describe, expect, it } from 'vitest';
 import { env } from '../../../test/env-private';
-import { allowedEmails, isAllowedEmail } from '../allowlist';
+import { allowedEmails, canImport, isAllowedEmail } from '../allowlist';
 import { authorization, isPublic } from './guard';
 import { SECURITY_HEADERS, securityHeaders } from './headers';
 
@@ -24,6 +24,7 @@ async function guard(pathname: string, session: Session) {
 
 afterEach(() => {
 	delete env.ALLOWED_EMAILS;
+	delete env.IMPORT_EMAILS;
 });
 
 describe('allowlist', () => {
@@ -40,6 +41,15 @@ describe('allowlist', () => {
 		expect(isAllowedEmail(' SOFIE@example.COM ')).toBe(true);
 		expect(isAllowedEmail('sofie@example.co')).toBe(false);
 		expect(isAllowedEmail(null)).toBe(false);
+	});
+
+	it('offers the Craft import only to IMPORT_EMAILS, separately from the allowlist', () => {
+		env.ALLOWED_EMAILS = 'sofie@example.com';
+		expect(canImport('sofie@example.com')).toBe(false);
+		env.IMPORT_EMAILS = ' Sofie@Example.com ';
+		expect(canImport('SOFIE@example.com')).toBe(true);
+		expect(canImport('annan@example.com')).toBe(false);
+		expect(canImport(null)).toBe(false);
 	});
 });
 

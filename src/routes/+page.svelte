@@ -94,10 +94,12 @@
 		<section class="empty">
 			<h2>Inga pass än</h2>
 			<p class="muted">
-				{data.coach ? 'Bygg ditt första pass tillsammans med Milon' : 'Bygg ditt första pass'}, eller importera dina pass från Craft.
+				{data.coach ? 'Bygg ditt första pass tillsammans med Milon' : 'Bygg ditt första pass'}{data.canImport
+					? ', eller importera dina pass från Craft.'
+					: '.'}
 			</p>
 			<a class="btn primary full" href="/skapa">Skapa pass</a>
-			<a class="btn full" href="/konto#import">Importera från Craft</a>
+			{#if data.canImport}<a class="btn full" href="/konto#import">Importera från Craft</a>{/if}
 		</section>
 	{:else}
 		<div class="section-title">Dina pass</div>
