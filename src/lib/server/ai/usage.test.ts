@@ -4,7 +4,15 @@ import { StorageConflictError } from '../storage/types';
 import { env } from '../../../test/env-private';
 import { limitedCreateMessage } from './client';
 import type { CreateMessage } from './models';
-import { AiLimitError, DEFAULT_DAILY_LIMIT, consumeAiCall, dailyLimit, remainingAiCalls } from './usage';
+import {
+	AiLimitError,
+	DEFAULT_DAILY_LIMIT,
+	DEFAULT_STARTER_CALLS,
+	consumeAiCall,
+	dailyLimit,
+	remainingAiCalls,
+	starterCalls
+} from './usage';
 import { vi } from 'vitest';
 
 describe('daily AI limit', () => {
@@ -16,20 +24,25 @@ describe('daily AI limit', () => {
 		expect(dailyLimit('2.5')).toBe(DEFAULT_DAILY_LIMIT);
 		expect(dailyLimit(' 50 ')).toBe(50);
 		expect(dailyLimit('0')).toBe(0);
+		expect(starterCalls(undefined)).toBe(DEFAULT_STARTER_CALLS);
+		expect(starterCalls(' 20 ')).toBe(20);
+		expect(starterCalls('0')).toBe(0);
 	});
 
 	it('counts per day and stops at the limit', async () => {
 		const storage = new MemoryUserStorage('u1');
-		expect(await consumeAiCall(storage, '2026-10-07', 2)).toBe(1);
-		expect(await consumeAiCall(storage, '2026-10-07', 2)).toBe(2);
-		await expect(consumeAiCall(storage, '2026-10-07', 2)).rejects.toBeInstanceOf(AiLimitError);
-		expect(await consumeAiCall(storage, '2026-10-08', 2)).toBe(1);
-		await expect(consumeAiCall(storage, '2026-10-07', 0).catch((e) => e.message)).resolves.toMatch(/gräns/);
+		expect(await consumeAiCall(storage, '2026-10-07', { daily: 2, starter: 0 })).toBe(1);
+		expect(await consumeAiCall(storage, '2026-10-07', { daily: 2, starter: 0 })).toBe(2);
+		await expect(consumeAiCall(storage, '2026-10-07', { daily: 2, starter: 0 })).rejects.toBeInstanceOf(AiLimitError);
+		expect(await consumeAiCall(storage, '2026-10-08', { daily: 2, starter: 0 })).toBe(1);
+		await expect(consumeAiCall(storage, '2026-10-07', { daily: 0, starter: 0 }).catch((e) => e.message)).resolves.toMatch(/gräns/);
 	});
 
 	it('counts correctly when several calls arrive at once', async () => {
 		const storage = new MemoryUserStorage('u1');
-		const results = await Promise.allSettled(Array.from({ length: 4 }, () => consumeAiCall(storage, '2026-10-07', 10)));
+		const results = await Promise.allSettled(
+			Array.from({ length: 4 }, () => consumeAiCall(storage, '2026-10-07', { daily: 10, starter: 0 }))
+		);
 		const counts = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
 		expect(new Set(counts).size).toBe(counts.length);
 		expect((await storage.readJson<{ count: number }>('usage/2026-10-07.json'))?.data.count).toBe(counts.length);
@@ -40,6 +53,7 @@ describe('daily AI limit', () => {
 describe('counting per Claude call', () => {
 	it('counts every call and stops before calling Claude when the limit is reached', async () => {
 		env.AI_DAILY_LIMIT = '2';
+		env.AI_STARTER_CALLS = '0';
 		const storage = new MemoryUserStorage('u1');
 		const inner = vi.fn(async () => ({}) as never) as unknown as CreateMessage;
 		const create = limitedCreateMessage(storage, inner);
@@ -48,21 +62,78 @@ describe('counting per Claude call', () => {
 		await expect(create({} as never)).rejects.toBeInstanceOf(AiLimitError);
 		expect(inner).toHaveBeenCalledTimes(2);
 		delete env.AI_DAILY_LIMIT;
+		delete env.AI_STARTER_CALLS;
 	});
 
 	it('reports how many are left without counting', async () => {
 		const storage = new MemoryUserStorage('u1');
-		expect(await remainingAiCalls(storage, '2026-10-07', 3)).toBe(3);
-		await consumeAiCall(storage, '2026-10-07', 3);
-		expect(await remainingAiCalls(storage, '2026-10-07', 3)).toBe(2);
-		expect(await remainingAiCalls(storage, '2026-10-07', 3)).toBe(2);
+		expect(await remainingAiCalls(storage, '2026-10-07', { daily: 3, starter: 0 })).toBe(3);
+		await consumeAiCall(storage, '2026-10-07', { daily: 3, starter: 0 });
+		expect(await remainingAiCalls(storage, '2026-10-07', { daily: 3, starter: 0 })).toBe(2);
+		expect(await remainingAiCalls(storage, '2026-10-07', { daily: 3, starter: 0 })).toBe(2);
 	});
 
 	it('prunes counters older than 30 days when a new day starts', async () => {
 		const storage = new MemoryUserStorage('u1');
-		await consumeAiCall(storage, '2026-08-01', 5);
-		await consumeAiCall(storage, '2026-09-20', 5);
-		await consumeAiCall(storage, '2026-10-07', 5);
-		expect((await storage.list('usage/')).map((f) => f.path).sort()).toEqual(['usage/2026-09-20.json', 'usage/2026-10-07.json']);
+		await consumeAiCall(storage, '2026-08-01', { daily: 5, starter: 0 });
+		await consumeAiCall(storage, '2026-09-20', { daily: 5, starter: 0 });
+		await consumeAiCall(storage, '2026-10-07', { daily: 5, starter: 0 });
+		expect((await storage.list('usage/')).map((f) => f.path).sort()).toEqual([
+			'usage/2026-09-20.json',
+			'usage/2026-10-07.json',
+			'usage/starter.json'
+		]);
+	});
+});
+
+describe('starter pot', () => {
+	const limits = { daily: 2, starter: 3 };
+	const starter = async (storage: MemoryUserStorage) => (await storage.readJson('usage/starter.json'))?.data;
+
+	it('starts on the first call and is used once the day is used up', async () => {
+		const storage = new MemoryUserStorage('u1');
+		expect(await consumeAiCall(storage, '2026-10-07', limits)).toBe(1);
+		expect(await starter(storage)).toEqual({ startedAt: '2026-10-07', used: 0 });
+		expect(await remainingAiCalls(storage, '2026-10-07', limits)).toBe(4);
+		await consumeAiCall(storage, '2026-10-07', limits);
+		// The day's limit is reached; the next three calls come from the pot.
+		for (const used of [1, 2, 3]) expect(await consumeAiCall(storage, '2026-10-07', limits)).toBe(used);
+		expect(await remainingAiCalls(storage, '2026-10-07', limits)).toBe(0);
+		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
+		// A new day has its own limit, but the pot stays used.
+		expect(await consumeAiCall(storage, '2026-10-08', limits)).toBe(1);
+		expect(await starter(storage)).toEqual({ startedAt: '2026-10-07', used: 3 });
+	});
+
+	it('lasts 14 days from the first call', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await consumeAiCall(storage, '2026-10-01', limits);
+		await storage.writeJson('usage/2026-10-14.json', { count: 2 });
+		expect(await remainingAiCalls(storage, '2026-10-14', limits)).toBe(3);
+		expect(await consumeAiCall(storage, '2026-10-14', limits)).toBe(1);
+		await storage.writeJson('usage/2026-10-15.json', { count: 2 });
+		expect(await remainingAiCalls(storage, '2026-10-15', limits)).toBe(0);
+		await expect(consumeAiCall(storage, '2026-10-15', limits)).rejects.toBeInstanceOf(AiLimitError);
+	});
+
+	it('gives nothing without a valid pot file, and nothing when turned off', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await storage.writeJson('usage/2026-10-07.json', { count: 2 });
+		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
+		await storage.writeJson('usage/starter.json', { startedAt: 7 });
+		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
+		await storage.writeJson('usage/starter.json', { startedAt: '2026-10-07', used: 0 });
+		await expect(consumeAiCall(storage, '2026-10-07', { daily: 2, starter: 0 })).rejects.toBeInstanceOf(AiLimitError);
+		expect(await consumeAiCall(storage, '2026-10-07', limits)).toBe(1);
+	});
+
+	it('never hands out more than the pot when calls arrive at once', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await storage.writeJson('usage/starter.json', { startedAt: '2026-10-07', used: 0 });
+		await storage.writeJson('usage/2026-10-07.json', { count: 2 });
+		const results = await Promise.allSettled(Array.from({ length: 6 }, () => consumeAiCall(storage, '2026-10-07', limits)));
+		const ok = results.filter((r) => r.status === 'fulfilled').length;
+		expect(ok).toBeLessThanOrEqual(3);
+		expect(((await starter(storage)) as { used: number }).used).toBe(ok);
 	});
 });
