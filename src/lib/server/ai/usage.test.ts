@@ -116,9 +116,22 @@ describe('starter pot', () => {
 		await expect(consumeAiCall(storage, '2026-10-15', limits)).rejects.toBeInstanceOf(AiLimitError);
 	});
 
-	it('gives nothing without a valid pot file, and nothing when turned off', async () => {
+	it('starts a missing pot when it is first needed, once', async () => {
+		const storage = new MemoryUserStorage('u1');
+		// The day began before the pot existed (or creating it failed).
+		await storage.writeJson('usage/2026-10-07.json', { count: 2 });
+		await expect(consumeAiCall(storage, '2026-10-07', { daily: 2, starter: 0 })).rejects.toBeInstanceOf(AiLimitError);
+		expect(await starter(storage)).toBeUndefined();
+		expect(await consumeAiCall(storage, '2026-10-07', limits)).toBe(1);
+		expect(await starter(storage)).toEqual({ startedAt: '2026-10-07', used: 1 });
+	});
+
+	it('gives nothing with an invalid or future pot file, and nothing when turned off', async () => {
 		const storage = new MemoryUserStorage('u1');
 		await storage.writeJson('usage/2026-10-07.json', { count: 2 });
+		await storage.writeJson('usage/starter.json', { startedAt: '2026-10-08', used: 0 });
+		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
+		await storage.writeJson('usage/starter.json', { used: 'x' });
 		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
 		await storage.writeJson('usage/starter.json', { startedAt: 7 });
 		await expect(consumeAiCall(storage, '2026-10-07', limits)).rejects.toBeInstanceOf(AiLimitError);
@@ -135,5 +148,14 @@ describe('starter pot', () => {
 		const ok = results.filter((r) => r.status === 'fulfilled').length;
 		expect(ok).toBeLessThanOrEqual(3);
 		expect(((await starter(storage)) as { used: number }).used).toBe(ok);
+	});
+
+	it('hands out the last call in the pot only once', async () => {
+		const storage = new MemoryUserStorage('u1');
+		await storage.writeJson('usage/starter.json', { startedAt: '2026-10-07', used: 2 });
+		await storage.writeJson('usage/2026-10-07.json', { count: 2 });
+		const results = await Promise.allSettled([1, 2].map(() => consumeAiCall(storage, '2026-10-07', limits)));
+		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+		expect(((await starter(storage)) as { used: number }).used).toBe(3);
 	});
 });

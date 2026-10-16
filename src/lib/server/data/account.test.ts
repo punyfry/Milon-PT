@@ -14,6 +14,7 @@ async function seed(storage: UserStorage) {
 		exercises: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }]
 	});
 	await storage.writeJson('usage/2026-10-14.json', { count: 3 });
+	await storage.writeJson('usage/starter.json', { startedAt: '2026-10-14', used: 10 });
 }
 
 describe('deleteAccount', () => {
@@ -27,8 +28,8 @@ describe('deleteAccount', () => {
 		const before = (await other.list()).map((f) => f.path).sort();
 
 		expect(await deleteAccount(user)).toBe(3);
-		// Kept, so deleting the account doesn't reset the daily AI limit.
-		expect((await user.list()).map((f) => f.path)).toEqual(['usage/2026-10-14.json']);
+		// Kept, so deleting the account resets neither the daily AI limit nor the starter pot.
+		expect((await user.list()).map((f) => f.path).sort()).toEqual(['usage/2026-10-14.json', 'usage/starter.json']);
 		expect((await other.list()).map((f) => f.path).sort()).toEqual(before);
 	});
 
@@ -53,7 +54,7 @@ describe('deleteAccount', () => {
 			delete: (p) => storage.delete(p)
 		};
 		await deleteAccount(racing);
-		expect((await storage.list()).map((f) => f.path)).toEqual(['usage/2026-10-14.json']);
+		expect((await storage.list()).map((f) => f.path).sort()).toEqual(['usage/2026-10-14.json', 'usage/starter.json']);
 
 		const endless: UserStorage = {
 			...racing,

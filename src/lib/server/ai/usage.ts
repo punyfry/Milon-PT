@@ -92,11 +92,19 @@ export async function consumeAiCall(storage: UserStorage, today: string, limits:
 	throw new StorageConflictError(path);
 }
 
-/** Takes one call from the starter pot, or throws AiLimitError. */
+/**
+ * Takes one call from the starter pot, or throws AiLimitError. A missing pot (its creation
+ * failed, or the day started before this feature) starts today; createOnly keeps it to one.
+ */
 async function consumeStarterCall(storage: UserStorage, today: string, limits: AiLimits): Promise<number> {
 	const current = await storage.readJson<unknown>(STARTER_PATH);
-	const starter = parseStarter(current?.data);
-	if (!current || !starter || starterLeft(starter, today, limits.starter) === 0) throw new AiLimitError(limits.daily);
+	if (!current) {
+		if (limits.starter === 0) throw new AiLimitError(limits.daily);
+		await storage.writeJson(STARTER_PATH, { startedAt: today, used: 1 } satisfies Starter, { createOnly: true });
+		return 1;
+	}
+	const starter = parseStarter(current.data);
+	if (!starter || starterLeft(starter, today, limits.starter) === 0) throw new AiLimitError(limits.daily);
 	await storage.writeJson(STARTER_PATH, { ...starter, used: starter.used + 1 }, { ifMatch: current.version });
 	return starter.used + 1;
 }
