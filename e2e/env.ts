@@ -19,7 +19,8 @@ export const E2E_ENV: Record<string, string> = {
 	// Empty values override `.env`: no Blob, no Claude.
 	BLOB_READ_WRITE_TOKEN: '',
 	ANTHROPIC_API_KEY: '',
-	AI_DAILY_LIMIT: ''
+	AI_DAILY_LIMIT: '',
+	AI_STARTER_CALLS: ''
 };
 
 /**

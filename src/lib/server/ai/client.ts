@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
 import { coachEnabled, type Profile } from '../../model';
 import type { CreateMessage } from './models';
-import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls } from './usage';
+import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls, starterCalls, type AiLimits } from './usage';
 import type { UserStorage } from '../storage/types';
 import { todayInStockholm } from '../../time';
 
@@ -37,19 +37,24 @@ export const createMessage: CreateMessage = (params) => {
 	return client.beta.messages.create(params);
 };
 
+/** AI_DAILY_LIMIT (default 50 per user and day) and AI_STARTER_CALLS (default 100, a new user's first two weeks). */
+function aiLimits(): AiLimits {
+	return { daily: dailyLimit(env.AI_DAILY_LIMIT), starter: starterCalls(env.AI_STARTER_CALLS) };
+}
+
 /**
- * createMessage that counts every call against today's limit (AI_DAILY_LIMIT,
- * default 50 per user) and throws AiLimitError once it is reached.
+ * createMessage that counts every call against today's limit, then the starter
+ * pot, and throws AiLimitError once both are used up.
  */
 export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage = createMessage): CreateMessage {
 	return async (params) => {
-		await consumeAiCall(storage, todayInStockholm(), dailyLimit(env.AI_DAILY_LIMIT));
+		await consumeAiCall(storage, todayInStockholm(), aiLimits());
 		return inner(params);
 	};
 }
 
-/** Throws AiLimitError if today's limit is already reached. Counts nothing. */
+/** Throws AiLimitError if today's limit and the starter pot are used up. Counts nothing. */
 export async function assertAiCallsLeft(storage: UserStorage): Promise<void> {
-	const limit = dailyLimit(env.AI_DAILY_LIMIT);
-	if ((await remainingAiCalls(storage, todayInStockholm(), limit)) === 0) throw new AiLimitError(limit);
+	const limits = aiLimits();
+	if ((await remainingAiCalls(storage, todayInStockholm(), limits)) === 0) throw new AiLimitError(limits.daily);
 }

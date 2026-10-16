@@ -6,8 +6,9 @@ const CONCURRENCY = 10;
 const MAX_ROUNDS = 3;
 
 /**
- * The AI counters only hold a number per day and are pruned after 30 days. They are
- * kept so deleting the account and signing in again doesn't reset the daily limit.
+ * The AI counters (a count per day, pruned after 30 days) and the starter pot
+ * (`usage/starter.json`) are kept, so deleting the account and signing in again
+ * resets neither the daily limit nor the pot.
  */
 const KEPT = 'usage/';
 
@@ -17,7 +18,7 @@ async function accountFiles(storage: UserStorage): Promise<string[]> {
 }
 
 /**
- * Deletes every file the user has except the AI counters: profile, exercises,
+ * Deletes every file the user has except the AI counters and starter pot: profile, exercises,
  * workouts, sessions and builder conversations. Signing in again starts from
  * scratch. Returns the number of deletions made.
  */
