@@ -75,7 +75,7 @@
 		if (step === END || solo) {
 			const coach = choice === 'on' && !solo;
 			return [
-				{ label: coach ? 'Bygg mitt första pass med Milon' : 'Bygg mitt första pass', action: () => leave(coach ? '/skapa' : '/skapa/manuell') },
+				{ label: coach ? 'Bygg mitt första pass med Milon' : 'Bygg mitt första pass', action: () => leave(coach ? '/skapa?steg=1' : '/skapa/manuell') },
 				{ label: 'Jag vill kolla mer på appen först', quiet: true, action: () => leave('/') }
 			];
 		}

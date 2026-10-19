@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { goto, invalidateAll, replaceState } from '$app/navigation';
+	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { PHASE_LABEL } from '$lib/format';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import MilonMessage from '$lib/components/MilonMessage.svelte';
+	import Questionnaire from '$lib/components/Questionnaire.svelte';
+	import { QUESTIONS } from '$lib/builder/questionnaire';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
@@ -80,6 +82,34 @@
 		await goto(data.editing ? `/skapa?pass=${data.editing.slug}` : '/skapa', { replaceState: true });
 	}
 
+	/**
+	 * The questionnaire (#102), only for a new workout before the conversation
+	 * starts. Its step is in the URL (`?steg=`, from 1), like the intro: steps added
+	 * here are read from page.state, since shallow routing doesn't update page.url.
+	 */
+	const askStep = $derived.by(() => {
+		if (data.editing || view?.log.length) return 0;
+		const n = page.state.askStep ?? Number(page.url.searchParams.get('steg'));
+		return Number.isInteger(n) && n > 0 ? Math.min(n, QUESTIONS.length) : 0;
+	});
+
+	const askUrl = (n: number) => (n > 0 ? `/skapa?steg=${n}` : '/skapa');
+
+	function ask(n: number) {
+		const depth = page.state.askDepth ?? 0;
+		// Back over an entry this page added; at the first one (or after a reload) step back in place instead.
+		if (n === askStep - 1 && depth > 0) history.back();
+		else if (n < askStep) replaceState(askUrl(n), { askStep: n, askDepth: 0 });
+		else pushState(askUrl(n), { askStep: n, askDepth: depth + 1 });
+	}
+
+	async function useQuestionnaire(text: string) {
+		replaceState('/skapa', { askStep: 0 });
+		input = text;
+		await tick();
+		document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus();
+	}
+
 	/** Only for a conversation the server knows; null hides the hint. */
 	const turnsLeft = $derived(view?.conversationId ? view.turnsLeft : null);
 
@@ -137,7 +167,9 @@
 	</header>
 
 	<section class="chat" aria-live="polite">
-		{#if !view && !data.editing && data.workouts.length}
+		{#if askStep}
+			<Questionnaire step={askStep} known={data.known} ongo={ask} oncancel={() => ask(0)} onfinish={useQuestionnaire} />
+		{:else if !view && !data.editing && data.workouts.length}
 			<div class="existing">
 				<span class="label">Eller redigera ett befintligt pass</span>
 				<div class="chips">
@@ -145,10 +177,13 @@
 				</div>
 			</div>
 		{/if}
-		{#if !view?.log.length}
+		{#if !askStep && !view?.log.length}
 			<MilonMessage>
 				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
 			</MilonMessage>
+			{#if !data.editing}
+				<button type="button" class="btn small help" onclick={() => ask(1)}>Hjälp mig beskriva passet</button>
+			{/if}
 			<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
 				{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
 			</a>
@@ -170,7 +205,7 @@
 		<div class="end" bind:this={logEnd}></div>
 	</section>
 
-	<form class="composer" onsubmit={(e) => (e.preventDefault(), send(input))}>
+	<form class="composer" hidden={askStep > 0} onsubmit={(e) => (e.preventDefault(), send(input))}>
 		<textarea
 			bind:value={input}
 			onkeydown={onKeydown}
@@ -311,6 +346,9 @@
 		font-size: 14px;
 		color: var(--danger);
 	}
+	.help {
+		align-self: flex-start;
+	}
 	.manual {
 		align-self: flex-start;
 		font-size: 14px;
@@ -333,6 +371,9 @@
 		padding: 10px 20px 12px;
 		display: grid;
 		gap: 8px;
+	}
+	.composer[hidden] {
+		display: none;
 	}
 	textarea {
 		width: 100%;

@@ -1,9 +1,10 @@
-import { error, redirect } from '@sveltejs/kit';
-import { getProfile, getWorkoutHistory, listExercises, listLatestWorkouts, type VersionSummary } from '$lib/server/data';
+import { error, fail, redirect } from '@sveltejs/kit';
+import { FactError, knownFacts, withFacts, type FactsToSave } from '$lib/builder/questionnaire';
+import { getProfile, getWorkoutHistory, listExercises, listLatestWorkouts, saveProfile, type VersionSummary } from '$lib/server/data';
 import { aiAvailable, builderModel } from '$lib/server/ai/client';
 import { conversationView, loadConversation, type DraftItem } from '$lib/server/builder/conversation';
-import { storageFor } from '$lib/server/storage';
-import type { PageServerLoad } from './$types';
+import { storageFor, StorageConflictError } from '$lib/server/storage';
+import type { Actions, PageServerLoad } from './$types';
 
 /**
  * `/skapa` starts a new workout, `/skapa?pass=<slug>` edits a workout and
@@ -12,7 +13,8 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const storage = storageFor(locals);
-	if (!aiAvailable((await getProfile(storage)).data)) {
+	const profile = (await getProfile(storage)).data;
+	if (!aiAvailable(profile)) {
 		const pass = url.searchParams.get('pass');
 		redirect(307, pass ? `/skapa/manuell?${new URLSearchParams({ pass })}` : '/skapa/manuell');
 	}
@@ -56,6 +58,35 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		editing,
 		initialDraft,
 		versions,
-		workouts
+		workouts,
+		/** For the questionnaire (#102): what Milon already knows about the user. */
+		known: knownFacts(profile)
 	};
+};
+
+export const actions: Actions = {
+	/**
+	 * Saves answers from the questionnaire to the profile (#102), only those the
+	 * user chose to save: `place`, `experience` and `avoid`.
+	 */
+	profile: async ({ locals, request }) => {
+		const form = await request.formData();
+		const facts: FactsToSave = {};
+		for (const key of ['place', 'experience', 'avoid'] as const) {
+			const value = form.get(key);
+			if (value === null) continue;
+			if (typeof value !== 'string') return fail(400, { error: 'Ogiltigt svar.' });
+			if (value.trim()) facts[key] = value;
+		}
+		const storage = storageFor(locals);
+		const current = await getProfile(storage);
+		try {
+			await saveProfile(storage, withFacts(current.data, facts), current.version);
+		} catch (e) {
+			if (e instanceof FactError) return fail(400, { error: e.message });
+			if (e instanceof StorageConflictError) return fail(409, { error: 'Profilen ändrades samtidigt. Försök igen.' });
+			throw e;
+		}
+		return { saved: true };
+	}
 };
