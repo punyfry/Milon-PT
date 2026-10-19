@@ -4,6 +4,7 @@
  */
 import {
 	normalizeName,
+	targetMatchesType,
 	type ActiveSession,
 	type ActiveSet,
 	type ExerciseSet,
@@ -84,6 +85,14 @@ export function prefillSets(info: ExerciseInfo, count: number, target?: Target, 
 }
 
 /**
+ * Sets for a warm-up or stretch exercise (#100): the target as it is, without
+ * last time's values, since these are ticked off rather than adjusted.
+ */
+export function targetSets(type: ExerciseType, count: number, target?: Target): ActiveSet[] {
+	return Array.from({ length: Math.max(count, 1) }, () => ({ ...defaultSet(type, target), done: false }));
+}
+
+/**
  * New session from the template. With `preparing` it starts as the overview
  * before the workout (see `startPreparedSession`).
  */
@@ -105,7 +114,8 @@ export function createActiveSession(
 			const info = exercises.get(we.exerciseId);
 			return {
 				exerciseId: we.exerciseId,
-				sets: info ? prefillSets(info, we.sets, we.target) : []
+				sets: info ? (we.phase ? targetSets(info.type, we.sets, we.target) : prefillSets(info, we.sets, we.target)) : [],
+				...(we.phase ? { phase: we.phase } : {})
 			};
 		}),
 		deviations: []
@@ -290,8 +300,9 @@ export interface ExerciseSummary {
 
 export interface SessionSummary {
 	exercises: ExerciseSummary[];
+	/** Done sets in the main part; warm-up and stretch don't count (#100). */
 	doneSets: number;
-	/** Total volume per exercise type (kg, reps, seconds). */
+	/** Total volume per exercise type (kg, reps, seconds), main part only. */
 	volumeByType: Record<ExerciseType, number>;
 }
 
@@ -302,7 +313,7 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 		const type = info?.type ?? 'bodyweight';
 		const done = ex.sets.filter((s) => s.done);
 		const v = volume(type, done);
-		volumeByType[type] = round2(volumeByType[type] + v);
+		if (!ex.phase) volumeByType[type] = round2(volumeByType[type] + v);
 		return {
 			exerciseId: ex.exerciseId,
 			name: info?.name ?? ex.exerciseId,
@@ -312,7 +323,8 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 			volume: v
 		};
 	});
-	return { exercises, doneSets: exercises.reduce((n, e) => n + e.doneSets, 0), volumeByType };
+	const doneSets = exercises.reduce((n, e, i) => n + (session.exercises[i].phase ? 0 : e.doneSets), 0);
+	return { exercises, doneSets, volumeByType };
 }
 
 /** Default: strength ~250–350 kcal. The profile's value for the workout takes precedence. */
@@ -335,7 +347,8 @@ export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 
 /**
  * Swaps an exercise in the active session (from the helper) and records the
  * swap as a deviation; the workout template is not touched.
- * - The new exercise gets prefilled sets, as many as the old one had.
+ * - The new exercise gets prefilled sets, as many as the old one had. In a warm-up or stretch it
+ *   takes over the phase and gets the target (when it fits the type) instead of its own history.
  * - If the old exercise has done sets they are kept, and the new one is added after it.
  * - Swapping an already swapped-in exercise again updates the deviation (A→B→C becomes A→C),
  *   and swapping back to the original removes the deviation.
@@ -345,7 +358,11 @@ export function applySwap(session: ActiveSession, fromId: string, to: ExerciseIn
 	if (index < 0 || session.exercises.some((e) => e.exerciseId === to.id)) return;
 
 	const old = session.exercises[index];
-	const fresh: ActiveSession['exercises'][number] = { exerciseId: to.id, sets: prefillSets(to, Math.max(old.sets.length, 1), target, { ownHistory: true }) };
+	const count = Math.max(old.sets.length, 1);
+	// A swap stays in its part of the workout: a warm-up exercise is replaced by another warm-up exercise.
+	const fresh: ActiveSession['exercises'][number] = old.phase
+		? { exerciseId: to.id, sets: targetSets(to.type, count, target && targetMatchesType(target, to.type) ? target : undefined), phase: old.phase }
+		: { exerciseId: to.id, sets: prefillSets(to, count, target, { ownHistory: true }) };
 	const done = old.sets.filter((s) => s.done);
 	if (done.length) {
 		// The note stays with the done sets it belongs to.

@@ -66,3 +66,6 @@ export function formatDuration(ms: number): string {
 	const days = Math.floor(hours / 24);
 	return hours % 24 ? `${days} d ${hours % 24} h` : `${days} d`;
 }
+
+/** Section names for the parts of a workout (#100). */
+export const PHASE_LABEL = { warmup: 'Uppvärmning', main: 'Pass', cooldown: 'Stretch' } as const;

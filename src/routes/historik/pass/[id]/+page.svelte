@@ -2,7 +2,7 @@
 	import { goto, invalidate } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
-	import { formatDuration, formatSet } from '$lib/format';
+	import { PHASE_LABEL, formatDuration, formatSet } from '$lib/format';
 	import { NOTE_MAX, type ExerciseType } from '$lib/model';
 	import type { PageProps } from './$types';
 
@@ -152,7 +152,10 @@
 		<ul class="exlist">
 			{#each data.exercises as e (e.id)}
 				<li>
-					<a class="exname" href={`/historik/ovning/${e.id}`}>{e.name}</a>
+					<span
+						><a class="exname" href={`/historik/ovning/${e.id}`}>{e.name}</a>
+						{#if e.phase}<span class="tag quiet">{PHASE_LABEL[e.phase]}</span>{/if}</span
+					>
 					<span class="sets num">{e.sets.map((set) => formatSet(e.type, set)).join(' · ')}</span>
 					{#if e.note}<p class="note">{e.note}</p>{/if}
 				</li>

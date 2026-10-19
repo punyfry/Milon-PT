@@ -16,6 +16,7 @@ import {
 	validateSet,
 	type ExerciseSet,
 	type ExerciseType,
+	type ExtraPhase,
 	type LogEntry,
 	type SessionRecord
 } from '../../model';
@@ -36,7 +37,7 @@ export interface SessionDetail {
 	/** Version of the record, sent back with an edit or delete. */
 	version: string;
 	workoutName: string;
-	exercises: { id: string; name: string; type: ExerciseType; sets: ExerciseSet[]; note?: string }[];
+	exercises: { id: string; name: string; type: ExerciseType; sets: ExerciseSet[]; note?: string; phase?: ExtraPhase }[];
 }
 
 export async function getSessionDetail(storage: UserStorage, id: string): Promise<SessionDetail | null> {
@@ -56,7 +57,7 @@ export async function getSessionDetail(storage: UserStorage, id: string): Promis
 			const entry = e?.data.log.find((l) => l.sessionId === id);
 			if (!e || !entry) return [];
 			const { id: exId, name, type } = e.data;
-			return [{ id: exId, name, type, sets: entry.sets, ...(entry.note ? { note: entry.note } : {}) }];
+			return [{ id: exId, name, type, sets: entry.sets, ...(entry.note ? { note: entry.note } : {}), ...(entry.phase ? { phase: entry.phase } : {}) }];
 		})
 	};
 }
@@ -177,12 +178,15 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 			const note = notes.has(exerciseId) ? notes.get(exerciseId) : log[i]?.note;
 			// The start a save is recognised by, so the entry looks like one the save wrote.
 			const savedAt = i < 0 ? (record.originalStartedAt ?? record.startedAt) : log[i].startedAt;
+			// A warm-up or stretch entry stays one, so the edit doesn't bring it into the stats.
+			const phase = i < 0 ? undefined : log[i].phase;
 			const entry: LogEntry = {
 				sessionId: id,
 				...(savedAt ? { startedAt: savedAt } : {}),
 				date: i < 0 ? startDate : log[i].date,
 				sets,
-				...(note ? { note } : {})
+				...(note ? { note } : {}),
+				...(phase ? { phase } : {})
 			};
 			if (i < 0) return sortLog([entry, ...log]);
 			if (JSON.stringify(log[i]) === JSON.stringify(entry)) return null;

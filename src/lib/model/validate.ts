@@ -1,9 +1,11 @@
 import type {
 	Deviation,
 	Exercise,
+	ExtraPhase,
 	ExerciseSet,
 	ExerciseType,
 	LogEntry,
+	Phase,
 	Profile,
 	SessionRecord,
 	Target,
@@ -133,6 +135,37 @@ export function isExerciseType(v: unknown): v is ExerciseType {
 	return EXERCISE_TYPES.includes(v as ExerciseType);
 }
 
+export const PHASES: readonly Phase[] = ['warmup', 'main', 'cooldown'];
+
+export function isPhase(v: unknown): v is Phase {
+	return PHASES.includes(v as Phase);
+}
+
+/** The phase of a workout exercise or log entry; missing means the main part. */
+export function phaseOf(e: { phase?: Phase }): Phase {
+	return e.phase ?? 'main';
+}
+
+/** `{ phase }` for warm-up and stretch, `{}` for the main part, so only the extra phases are stored. */
+export function phaseField(phase: Phase | undefined): { phase?: ExtraPhase } {
+	return phase === 'warmup' || phase === 'cooldown' ? { phase } : {};
+}
+
+/** Warm-up first, then the main part, then the stretch; the order within each part is kept. */
+export function sortByPhase<T extends { phase?: Phase }>(list: readonly T[]): T[] {
+	return [...list].sort((a, b) => PHASES.indexOf(phaseOf(a)) - PHASES.indexOf(phaseOf(b)));
+}
+
+/** An optional `phase` field: one of PHASES or missing. Returns the field to store (nothing for `main`). */
+function optionalPhase(o: Obj, issues: Issues, path: string): { phase?: ExtraPhase } {
+	if (o.phase === undefined) return {};
+	if (!isPhase(o.phase)) {
+		issues.add(join(path, 'phase'), `måste vara ${PHASES.join(', ')}`);
+		return {};
+	}
+	return phaseField(o.phase);
+}
+
 /** Validates a set against the exercise type and returns it without extra fields. */
 export function validateSet(v: unknown, type: ExerciseType, issues: Issues, path: string): ExerciseSet | null {
 	if (!isObject(v)) {
@@ -168,8 +201,16 @@ export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues,
 	const sets = rawSets.map((s, i) => validateSet(s, type, issues, join(join(path, 'sets'), i)));
 	const note = str(v, 'note', issues, path, { optional: true, allowEmpty: true })?.trim();
 	if (note && note.length > NOTE_MAX) issues.add(join(path, 'note'), `får vara högst ${NOTE_MAX} tecken`);
+	const phase = optionalPhase(v, issues, path);
 	if (issues.list.length !== before || d === undefined) return null;
-	return { ...(sessionId ? { sessionId } : {}), ...(startedAt ? { startedAt } : {}), date: d, sets: sets as ExerciseSet[], ...(note ? { note } : {}) };
+	return {
+		...(sessionId ? { sessionId } : {}),
+		...(startedAt ? { startedAt } : {}),
+		date: d,
+		sets: sets as ExerciseSet[],
+		...(note ? { note } : {}),
+		...phase
+	};
 }
 
 export function validateExercise(v: unknown, issues: Issues, path: string): Exercise | null {
@@ -285,8 +326,9 @@ export function validateWorkoutExercise(v: unknown, issues: Issues, path: string
 	const exerciseId = id(v, 'exerciseId', issues, path);
 	const sets = num(v, 'sets', issues, path, { int: true, min: 1 });
 	const target = validateTarget(v.target, issues, join(path, 'target'));
+	const phase = optionalPhase(v, issues, path);
 	if (issues.list.length !== before || !target) return null;
-	return { exerciseId: exerciseId!, sets: sets!, target };
+	return { exerciseId: exerciseId!, sets: sets!, target, ...phase };
 }
 
 export function validateWorkout(v: unknown, issues: Issues, path: string): WorkoutTemplate | null {

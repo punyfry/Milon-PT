@@ -3,10 +3,14 @@ import {
 	ValidationError,
 	isExerciseType,
 	isObject,
+	isPhase,
 	normalizeName,
+	phaseField,
 	slugify,
+	sortByPhase,
 	targetMatchesType,
 	type Exercise,
+	type Phase,
 	type Target,
 	type WorkoutExercise,
 	type WorkoutTemplate
@@ -27,6 +31,13 @@ const target = {
 	additionalProperties: false
 } as const;
 
+/** The part of the workout (#100). Not nullable, so a plain enum is fine for a strict tool. */
+const phase = {
+	type: 'string',
+	enum: ['warmup', 'main', 'cooldown'],
+	description: 'warmup = uppvärmning före passet, main = själva passet, cooldown = stretch efter passet'
+} as const;
+
 export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 	{
 		name: 'propose_exercise',
@@ -44,9 +55,10 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 				type: { anyOf: [{ type: 'string', enum: ['weight', 'bodyweight', 'time'] }, { type: 'null' }] },
 				instruction: { type: ['string', 'null'], description: '2-4 korta punkter, en per rad' },
 				sets: { type: 'integer', description: 'Föreslaget antal set' },
-				target
+				target,
+				phase
 			},
-			required: ['existingId', 'name', 'type', 'instruction', 'sets', 'target'],
+			required: ['existingId', 'name', 'type', 'instruction', 'sets', 'target', 'phase'],
 			additionalProperties: false
 		}
 	},
@@ -54,7 +66,8 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 		name: 'set_workout',
 		description:
 			'Sparar passet med övningarna i ordning. Ett nytt pass blir version 1; när ett befintligt pass redigeras blir det nästa version. ' +
-			'Alla exerciseId måste finnas (från katalogen eller från propose_exercise).',
+			'Alla exerciseId måste finnas (från katalogen eller från propose_exercise). ' +
+			'Uppvärmning (warmup) och stretch (cooldown) är valfria; appen lägger dem före respektive efter passet.',
 		strict: true,
 		input_schema: {
 			type: 'object',
@@ -65,8 +78,8 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 					type: 'array',
 					items: {
 						type: 'object',
-						properties: { exerciseId: { type: 'string' }, sets: { type: 'integer' }, target },
-						required: ['exerciseId', 'sets', 'target'],
+						properties: { exerciseId: { type: 'string' }, sets: { type: 'integer' }, target, phase },
+						required: ['exerciseId', 'sets', 'target', 'phase'],
 						additionalProperties: false
 					}
 				}
@@ -104,6 +117,19 @@ function parseTarget(v: unknown): Target | null {
 	return null;
 }
 
+const PHASE_NAME = { warmup: 'uppvärmning', cooldown: 'stretch' } as const;
+const PHASE_ERROR = 'phase måste vara warmup, main eller cooldown.';
+
+/** The strict schema requires `phase`; a missing one (e.g. a conversation from before #100) means the main part. */
+function parsePhase(v: unknown): Phase | null {
+	if (v === undefined || v === null) return 'main';
+	return isPhase(v) ? v : null;
+}
+
+/** Warm-up and stretch are ticked off by time or reps (#100), so they take no weight exercises. */
+const extraWeightError = (name: string) =>
+	`${name} är en viktövning; uppvärmning och stretch ska vara övningar med tid (time) eller reps (bodyweight).`;
+
 function parseSets(v: unknown): number | null {
 	return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 20 ? v : null;
 }
@@ -115,6 +141,8 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	const tgt = parseTarget(input.target);
 	if (!sets) return fail('sets måste vara ett heltal mellan 1 och 20.');
 	if (!tgt) return fail('target ska ha antingen reps eller seconds (ett positivt heltal), och den andra null.');
+	const part = parsePhase(input.phase);
+	if (!part) return fail(PHASE_ERROR);
 
 	const catalog = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
 	let exercise: Exercise | undefined;
@@ -154,13 +182,14 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!targetMatchesType(tgt, exercise.type)) {
 		return fail(`${exercise.name} är av typen ${exercise.type}; målet ska anges i ${exercise.type === 'time' ? 'seconds' : 'reps'}.`);
 	}
+	if (part !== 'main' && exercise.type === 'weight') return fail(extraWeightError(exercise.name));
 
-	const item: WorkoutExercise = { exerciseId: exercise.id, sets, target: tgt };
+	const item: WorkoutExercise = { exerciseId: exercise.id, sets, target: tgt, ...phaseField(part) };
 	const index = state.draft.findIndex((d) => d.exerciseId === exercise!.id);
 	if (index >= 0) state.draft[index] = item;
 	else state.draft.push(item);
 
-	const summary = `${sets} set × ${formatTarget(tgt)}`;
+	const summary = `${sets} set × ${formatTarget(tgt)}${part === 'main' ? '' : ` (${PHASE_NAME[part]})`}`;
 	return {
 		isError: false,
 		content:
@@ -188,9 +217,14 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 		if (!sets) return problems.push(`exercises[${i}]: sets måste vara 1-20`);
 		if (!tgt || !targetMatchesType(tgt, ex.type))
 			return problems.push(`exercises[${i}]: målet för ${ex.name} ska anges i ${ex.type === 'time' ? 'seconds' : 'reps'}`);
-		exercises.push({ exerciseId: ex.id, sets, target: tgt });
+		const part = parsePhase(x.phase);
+		if (!part) return problems.push(`exercises[${i}]: ${PHASE_ERROR}`);
+		if (part !== 'main' && ex.type === 'weight') return problems.push(`exercises[${i}]: ${extraWeightError(ex.name)}`);
+		if (exercises.some((e) => e.exerciseId === ex.id)) return problems.push(`exercises[${i}]: ${ex.name} finns redan i passet`);
+		exercises.push({ exerciseId: ex.id, sets, target: tgt, ...phaseField(part) });
 	});
 	if (problems.length) return fail(problems.join('; '));
+	const ordered = sortByPhase(exercises);
 
 	let slug = state.editingSlug;
 	if (!slug) {
@@ -209,10 +243,10 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 		name,
 		createdAt: today,
 		...(changeNote ? { changeNote } : {}),
-		exercises
+		exercises: ordered
 	});
 	state.editingSlug = slug;
-	state.draft = exercises;
+	state.draft = ordered;
 	state.saved = { slug, version: saved.version };
 	return {
 		isError: false,

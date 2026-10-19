@@ -5,7 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import type { ExerciseType } from '$lib/model';
-	import { formatMetric, formatNumber, formatSeconds } from '$lib/format';
+	import { PHASE_LABEL, formatMetric, formatNumber, formatSeconds } from '$lib/format';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -121,13 +121,14 @@
 							<span class="date">{date(e.date)}</span>
 						{/if}
 						<span class="value num">
+							{#if e.phase}<span class="tag quiet">{PHASE_LABEL[e.phase]}</span>{/if}
 							{#if e.record.length}<span class="tag" title={recordLabel(e.record)}>PR<span class="sr-only">, {recordLabel(e.record)}</span></span>{/if}
-							{e.best === null ? '–' : fmt(e.best)}
+							{#if !e.phase}{e.best === null ? '–' : fmt(e.best)}{/if}
 						</span>
 					</div>
 					<div class="sets num">{setsText(e.sets)}</div>
 					{#if e.note}<p class="note">{e.note}</p>{/if}
-					<div class="vol num">Volym {volumeText(e.volume)}</div>
+					{#if e.volume !== null}<div class="vol num">Volym {volumeText(e.volume)}</div>{/if}
 				</li>
 			{/each}
 		</ul>
