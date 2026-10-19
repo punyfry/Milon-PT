@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import type { ExerciseType, Target } from '$lib/model';
+import type { ExerciseType, WorkoutExercise } from '$lib/model';
 import { aiAvailable } from '$lib/server/ai/client';
 import { getProfile, getWorkoutHistory, listExercises, listLatestWorkouts, type VersionSummary } from '$lib/server/data';
 import { storageFor } from '$lib/server/storage';
@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const catalog: CatalogExercise[] = exercises
 		.map(({ data: e }) => ({ id: e.id, name: e.name, type: e.type, deleted: e.deleted === true }))
 		.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-	let editing: { slug: string; name: string; version: number; items: { exerciseId: string; sets: number; target: Target }[] } | null = null;
+	let editing: { slug: string; name: string; version: number; items: WorkoutExercise[] } | null = null;
 	let versions: VersionSummary[] = [];
 	if (history) {
 		const { latest } = history;

@@ -4,6 +4,7 @@ import {
 	addDays,
 	bestEver,
 	bestSet,
+	countsInStats,
 	estimated1RM,
 	heaviestEver,
 	heaviestWeight,
@@ -168,5 +169,48 @@ describe('date check', () => {
 		for (const bad of ['2026-02-30', '2026-13-01', '0001-01-01', '9999-12-31', 'abc', '2026-1-1']) {
 			expect(isValidDate(bad), bad).toBe(false);
 		}
+	});
+});
+
+describe('warm-up and stretch never count (#100)', () => {
+	/** A heavy warm-up and a long stretch would be records if they counted. */
+	const mixed: Exercise = {
+		id: 'ex_plankan',
+		name: 'Plankan',
+		type: 'time',
+		instruction: '',
+		log: [
+			{ sessionId: 's3', date: '2026-10-08', sets: [{ seconds: 300 }], phase: 'cooldown' },
+			{ sessionId: 's2', date: '2026-10-06', sets: [{ seconds: 60 }] },
+			{ sessionId: 's1', date: '2026-10-01', sets: [{ seconds: 45 }] },
+			{ sessionId: 's0', date: '2026-09-29', sets: [{ seconds: 200 }], phase: 'warmup' }
+		]
+	};
+
+	it('leaves them out of best, records and the chart', () => {
+		expect(countsInStats(mixed.log[0])).toBe(false);
+		expect(countsInStats(mixed.log[1])).toBe(true);
+		expect(bestEver(mixed)).toBe(60);
+		expect(progressSeries(mixed).map((p) => p.date)).toEqual(['2026-10-01', '2026-10-06']);
+		expect(recordEntries(mixed)).toEqual(new Map([[1, ['best']]]));
+	});
+
+	it('leaves them out of the heaviest weight', () => {
+		const lift: Exercise = { ...deadlift, log: [{ date: '2026-10-08', sets: [{ weight: 200, reps: 1 }], phase: 'warmup' }, ...deadlift.log] };
+		expect(heaviestEver(lift)).toBe(heaviestEver(deadlift));
+		expect(bestEver(lift)).toBe(bestEver(deadlift));
+	});
+
+	it('leaves them out of the week volume', () => {
+		const week = weekSummary('2026-10-05', [mixed], []);
+		expect(week.volumeByType.time).toBe(60);
+	});
+
+	it('a milestone exercise done only as warm-up has no history there', () => {
+		const pullup: Exercise = { id: 'ex_pull_up', name: 'Pull-up', type: 'bodyweight', instruction: '', log: [{ sessionId: 's1', date: '2026-10-01', sets: [{ reps: 3 }], phase: 'warmup' }] };
+		const negative: Exercise = { id: 'ex_neg', name: 'Negativ pull-up', type: 'bodyweight', instruction: '', log: [{ sessionId: 's1', date: '2026-10-01', sets: [{ reps: 5 }] }] };
+		const [m] = milestoneExercises([pullup, negative]);
+		expect(m.exercise?.id).toBe('ex_neg');
+		expect(m.progress).toBe(true);
 	});
 });

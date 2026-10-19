@@ -442,3 +442,43 @@ describe('time', () => {
 		expect(localIsoString(new Date(2026, 9, 6, 7, 5, 9))).toMatch(/^2026-10-06T07:05:09[+-]\d{2}:\d{2}$/);
 	});
 });
+
+describe('warm-up and stretch (#100)', () => {
+	const withParts: WorkoutTemplate = {
+		...workout,
+		exercises: [
+			{ exerciseId: 'ex_pull_up', sets: 1, target: { reps: 5 }, phase: 'warmup' },
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+			{ exerciseId: 'ex_plankan', sets: 2, target: { seconds: 30 }, phase: 'cooldown' }
+		]
+	};
+	const timedHistory: ExerciseInfo = { ...plank, lastEntry: { date: '2026-10-01', sets: [{ seconds: 90 }] } };
+
+	it('takes the phase from the template and fills in the target, not last time', () => {
+		const s = createActiveSession(withParts, new Map([...infos, [plank.id, timedHistory]]), new Date());
+		expect(s.exercises.map((e) => e.phase)).toEqual(['warmup', undefined, 'cooldown']);
+		expect(s.exercises[2].sets).toEqual([
+			{ seconds: 30, done: false },
+			{ seconds: 30, done: false }
+		]);
+		// The main part still prefills from the log.
+		expect(s.exercises[1].sets[0]).toEqual({ weight: 40, reps: 8, done: false });
+	});
+
+	it('a swap keeps the phase', () => {
+		const s = createActiveSession(withParts, infos, new Date());
+		const side: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '', lastEntry: { date: '2026-10-01', sets: [{ seconds: 90 }] } };
+		applySwap(s, 'ex_plankan', side, { seconds: 30 });
+		expect(s.exercises[2]).toEqual({ exerciseId: 'ex_sidoplanka', phase: 'cooldown', sets: [{ seconds: 30, done: false }, { seconds: 30, done: false }] });
+	});
+
+	it('the summary totals leave warm-up and stretch out', () => {
+		const s = createActiveSession(withParts, infos, new Date());
+		s.exercises[0].sets[0].done = true;
+		s.exercises[1].sets[0].done = true; // 40 × 8
+		s.exercises[2].sets[0].done = true;
+		const sum = summarize(s, infos);
+		expect(sum.doneSets).toBe(1);
+		expect(sum.volumeByType).toEqual({ weight: 320, bodyweight: 0, time: 0 });
+	});
+});

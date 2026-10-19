@@ -332,3 +332,25 @@ describe('deleting a session', () => {
 		expect(await getSession(storage, 's_20261006')).not.toBeNull();
 	});
 });
+
+describe('warm-up and stretch (#100)', () => {
+	it('an edit keeps a stretch entry a stretch entry', async () => {
+		const { storage, detail } = await setup();
+		await updateLogPhase(storage);
+		const view = (await getSessionDetail(storage, 's_20261006'))!;
+		expect(view.exercises.find((e) => e.id === 'ex_plankan')).toMatchObject({ phase: 'cooldown' });
+		await editSession(storage, 's_20261006', input(view.version, { exercises: [
+			{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }] },
+			{ exerciseId: 'ex_plankan', sets: [{ seconds: 50 }] }
+		] }), now);
+		const entry = (await getExercise(storage, 'ex_plankan'))!.data.log[0];
+		expect(entry).toMatchObject({ sets: [{ seconds: 50 }], phase: 'cooldown' });
+		expect(detail.version).toBeTruthy();
+	});
+});
+
+/** Marks the session's Plankan entry as a stretch, as a save from a workout with a stretch would. */
+async function updateLogPhase(storage: MemoryUserStorage) {
+	const ex = (await getExercise(storage, 'ex_plankan'))!;
+	await saveExercise(storage, { ...ex.data, log: ex.data.log.map((l) => (l.sessionId === 's_20261006' ? { ...l, phase: 'cooldown' as const } : l)) }, ex.version);
+}

@@ -4,7 +4,19 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
-	import { Issues, findSameExercise, issueText, normalizeName, validateExerciseInput, type ExerciseType, type Target } from '$lib/model';
+	import { PHASE_LABEL } from '$lib/format';
+	import {
+		Issues,
+		findSameExercise,
+		issueText,
+		normalizeName,
+		phaseField,
+		sortByPhase,
+		validateExerciseInput,
+		type ExerciseType,
+		type Phase,
+		type Target
+	} from '$lib/model';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -19,6 +31,8 @@
 		sets: number;
 		/** Reps, or seconds for a timed exercise. */
 		amount: number;
+		/** Warm-up, the main part or the stretch after it (#100). */
+		phase: Phase;
 	}
 
 	let nextKey = 0;
@@ -33,7 +47,8 @@
 				name: ex?.name ?? e.exerciseId,
 				type: ex?.type ?? ('seconds' in e.target ? 'time' : 'weight'),
 				sets: e.sets,
-				amount: 'seconds' in e.target ? e.target.seconds : e.target.reps
+				amount: 'seconds' in e.target ? e.target.seconds : e.target.reps,
+				phase: e.phase ?? 'main'
 			};
 		});
 	}
@@ -74,9 +89,17 @@
 
 	// --- the list -----------------------------------------------------------
 
+	/** The items are kept in phase order (warm-up, main, stretch); an item moves within its own part. */
+	const sections: { phase: Phase; hint: string }[] = [
+		{ phase: 'warmup', hint: 'Valfri. Korta övningar som förbereder passet, med tid eller reps.' },
+		{ phase: 'main', hint: '' },
+		{ phase: 'cooldown', hint: 'Valfri. Stretch för det passet tränar, med tid eller reps.' }
+	];
+	const isExtra = (phase: Phase) => phase !== 'main';
+
 	function move(i: number, d: -1 | 1) {
 		const j = i + d;
-		if (j < 0 || j >= items.length) return;
+		if (j < 0 || j >= items.length || items[j].phase !== items[i].phase) return;
 		[items[i], items[j]] = [items[j], items[i]];
 	}
 
@@ -90,10 +113,14 @@
 
 	const unit = (type: ExerciseType) => (type === 'time' ? 'sekunder' : 'reps');
 	const defaultAmount = (type: ExerciseType) => (type === 'time' ? 30 : 10);
+	/** Warm-up and stretch have no weights (#100). */
+	const fitsPhase = (type: ExerciseType, phase: Phase) => !isExtra(phase) || type !== 'weight';
 
 	// --- adding -------------------------------------------------------------
 
 	let adding = $state(false);
+	/** The part of the workout the add sheet adds to. */
+	let addPhase = $state<Phase>('main');
 	let query = $state('');
 	let writing = $state(false);
 	let fresh = $state({ name: '', type: 'weight' as ExerciseType, instruction: '' });
@@ -101,23 +128,27 @@
 
 	const inList = $derived(new Set(items.map((i) => i.exerciseId).filter(Boolean)));
 	const candidates = $derived(
-		data.catalog.filter((e) => !e.deleted && !inList.has(e.id) && normalizeName(e.name).includes(normalizeName(query)))
+		data.catalog.filter(
+			(e) => !e.deleted && !inList.has(e.id) && fitsPhase(e.type, addPhase) && normalizeName(e.name).includes(normalizeName(query))
+		)
 	);
 
-	function openAdd() {
+	function openAdd(phase: Phase) {
+		addPhase = phase;
 		query = '';
 		writing = false;
 		addError = null;
 		adding = true;
 	}
 
-	function add(item: Omit<Item, 'key' | 'sets' | 'amount'>) {
-		items.push({ ...item, key: nextKey++, sets: 3, amount: defaultAmount(item.type) });
+	function add(item: Omit<Item, 'key' | 'sets' | 'amount' | 'phase'>) {
+		const phase = addPhase;
+		items = sortByPhase([...items, { ...item, key: nextKey++, sets: isExtra(phase) ? 1 : 3, amount: defaultAmount(item.type), phase }]);
 		adding = false;
 	}
 
 	function startWriting() {
-		fresh = { name: query.trim(), type: 'weight', instruction: '' };
+		fresh = { name: query.trim(), type: isExtra(addPhase) ? 'time' : 'weight', instruction: '' };
 		addError = null;
 		writing = true;
 	}
@@ -127,6 +158,7 @@
 		const issues = new Issues();
 		const input = validateExerciseInput(fresh, issues, '');
 		if (!input) return void (addError = issueText(issues.list[0] ?? 'Kontrollera övningen'));
+		if (!fitsPhase(input.type, addPhase)) return void (addError = 'Uppvärmning och stretch har tid eller reps, inte vikt.');
 		if (findSameExercise(items, input)) return void (addError = `${input.name} finns redan i passet.`);
 		// The same exercise already exists: use it rather than creating a copy.
 		const existing = findSameExercise(data.catalog.filter((c) => !c.deleted), input);
@@ -154,7 +186,8 @@
 					items: items.map((i) => ({
 						...(i.exerciseId ? { exerciseId: i.exerciseId } : { newExercise: i.newExercise }),
 						sets: i.sets,
-						target: target(i)
+						target: target(i),
+						...phaseField(i.phase)
 					}))
 				})
 			});
@@ -208,43 +241,52 @@
 			<input bind:value={name} maxlength="60" placeholder="T.ex. Pass A" autocomplete="off" />
 		</label>
 
-		<section aria-label="Övningar">
-			<span class="label">Övningar</span>
-			{#if items.length}
-				<ol class="items">
-					{#each items as item, i (item.key)}
-						<li>
-							<div class="itemhead">
-								<span class="itemname">
-									<strong>{item.name}</strong>
-									<span class="muted">{TYPE_LABEL[item.type]}{item.newExercise ? ' · ny övning' : ''}</span>
-								</span>
-								<span class="tools">
-									<button type="button" class="icon-btn" onclick={() => move(i, -1)} disabled={i === 0} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
-									<button type="button" class="icon-btn" onclick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
-									<button type="button" class="icon-btn" onclick={() => remove(i)} aria-label="Ta bort {item.name}"><Icon name="x" /></button>
-								</span>
-							</div>
-							<div class="numbers">
-								<div class="stepper" role="group" aria-label="Antal set för {item.name}">
-									<button type="button" class="step" onclick={() => stepSets(item, -1)} disabled={item.sets <= 1} aria-label="Färre set">−</button>
-									<span class="num">{item.sets}</span>
-									<button type="button" class="step" onclick={() => stepSets(item, 1)} disabled={item.sets >= 20} aria-label="Fler set">+</button>
-									<span class="muted">set ×</span>
-								</div>
-								<label class="amount">
-									<input class="num" type="number" inputmode="numeric" min="1" max={item.type === 'time' ? 3600 : 999} bind:value={item.amount} aria-label="Mål i {unit(item.type)} för {item.name}" />
-									<span class="muted">{unit(item.type)}</span>
-								</label>
-							</div>
-						</li>
-					{/each}
-				</ol>
-			{:else}
-				<p class="muted">Inga övningar än.</p>
-			{/if}
-			<button type="button" class="btn full" onclick={openAdd}><Icon name="plus" /> Lägg till övning</button>
-		</section>
+		{#each sections as { phase, hint } (phase)}
+			{@const count = items.filter((x) => x.phase === phase).length}
+			<section aria-label={isExtra(phase) ? PHASE_LABEL[phase] : 'Övningar'}>
+				<span class="label">{isExtra(phase) ? PHASE_LABEL[phase] : 'Övningar'}</span>
+				{#if hint}<p class="muted hint">{hint}</p>{/if}
+				{#if count}
+					<ol class="items">
+						{#each items as item, i (item.key)}
+							{#if item.phase === phase}
+								<li>
+									<div class="itemhead">
+										<span class="itemname">
+											<strong>{item.name}</strong>
+											<span class="muted">{TYPE_LABEL[item.type]}{item.newExercise ? ' · ny övning' : ''}</span>
+										</span>
+										<span class="tools">
+											<button type="button" class="icon-btn" onclick={() => move(i, -1)} disabled={items[i - 1]?.phase !== phase} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
+											<button type="button" class="icon-btn" onclick={() => move(i, 1)} disabled={items[i + 1]?.phase !== phase} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
+											<button type="button" class="icon-btn" onclick={() => remove(i)} aria-label="Ta bort {item.name}"><Icon name="x" /></button>
+										</span>
+									</div>
+									<div class="numbers">
+										<div class="stepper" role="group" aria-label="Antal set för {item.name}">
+											<button type="button" class="step" onclick={() => stepSets(item, -1)} disabled={item.sets <= 1} aria-label="Färre set">−</button>
+											<span class="num">{item.sets}</span>
+											<button type="button" class="step" onclick={() => stepSets(item, 1)} disabled={item.sets >= 20} aria-label="Fler set">+</button>
+											<span class="muted">set ×</span>
+										</div>
+										<label class="amount">
+											<input class="num" type="number" inputmode="numeric" min="1" max={item.type === 'time' ? 3600 : 999} bind:value={item.amount} aria-label="Mål i {unit(item.type)} för {item.name}" />
+											<span class="muted">{unit(item.type)}</span>
+										</label>
+									</div>
+								</li>
+							{/if}
+						{/each}
+					</ol>
+				{:else if !isExtra(phase)}
+					<p class="muted">Inga övningar än.</p>
+				{/if}
+				<button type="button" class="btn full" onclick={() => openAdd(phase)}>
+					<Icon name="plus" />
+					{phase === 'warmup' ? 'Lägg till uppvärmning' : phase === 'cooldown' ? 'Lägg till stretch' : 'Lägg till övning'}
+				</button>
+			</section>
+		{/each}
 
 		{#if data.coach}
 			<a class="coach" href={data.editing ? `/skapa?pass=${data.editing.slug}` : '/skapa'}>Bygg med Milon i stället</a>
@@ -263,9 +305,10 @@
 </div>
 
 {#if adding}
-	<Sheet title="Lägg till övning" onclose={() => (adding = false)}>
+	{@const sheetTitle = addPhase === 'warmup' ? 'Lägg till uppvärmning' : addPhase === 'cooldown' ? 'Lägg till stretch' : 'Lägg till övning'}
+	<Sheet title={sheetTitle} onclose={() => (adding = false)}>
 		<div class="sheethead">
-			<h2>Lägg till övning</h2>
+			<h2>{sheetTitle}</h2>
 			<button type="button" class="icon-btn" onclick={() => (adding = false)} aria-label="Stäng"><Icon name="x" /></button>
 		</div>
 		{#if writing}
@@ -442,6 +485,10 @@
 	}
 	.coach {
 		font-size: 14px;
+	}
+	.hint {
+		margin: 0;
+		font-size: 13px;
 	}
 	.bar {
 		position: sticky;

@@ -54,14 +54,32 @@ export const FAKE_CLAUDE_ERROR = '#fel';
 export const FAKE_CLAUDE_REPLY = 'Hej! Det här är ett testsvar från Milon.';
 
 /**
+ * Put in a builder message to make the fake Claude save FAKE_WORKOUT_WITH_PARTS with
+ * `set_workout` (a warm-up, the main part and a stretch, #100) before it replies.
+ */
+export const FAKE_CLAUDE_SAVE_WITH_PARTS = '#uppvarmning-och-stretch';
+/** What the fake saves; the test seeds these exercises. Given out of order: the app puts the warm-up first. */
+export const FAKE_WORKOUT_WITH_PARTS = {
+	name: 'Ben med stretch',
+	changeNote: 'Nytt pass',
+	exercises: [
+		{ exerciseId: 'ex_hoftbojare', sets: 1, target: { reps: null, seconds: 30 }, phase: 'cooldown' },
+		{ exerciseId: 'ex_knaboj', sets: 3, target: { reps: 8, seconds: null }, phase: 'main' },
+		{ exerciseId: 'ex_jumping_jacks', sets: 1, target: { reps: 20, seconds: null }, phase: 'warmup' }
+	]
+};
+
+/**
  * Answers a Messages API request with a short text reply, or with a 400 error
  * (which the SDK doesn't retry) when the request contains FAKE_CLAUDE_ERROR.
+ * With FAKE_CLAUDE_SAVE_WITH_PARTS it first calls `set_workout`, and replies once the tool result is back.
  */
 function fakeClaude(body: string): { status: number; body: unknown } {
 	if (body.includes(FAKE_CLAUDE_ERROR)) {
 		return { status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: 'Fake error for the UI tests' } } };
 	}
 	const model = (JSON.parse(body) as { model?: string }).model ?? 'fake';
+	const tool = body.includes(FAKE_CLAUDE_SAVE_WITH_PARTS) && !body.includes('"tool_result"');
 	return {
 		status: 200,
 		body: {
@@ -69,8 +87,10 @@ function fakeClaude(body: string): { status: number; body: unknown } {
 			type: 'message',
 			role: 'assistant',
 			model,
-			content: [{ type: 'text', text: FAKE_CLAUDE_REPLY }],
-			stop_reason: 'end_turn',
+			content: tool
+				? [{ type: 'tool_use', id: 'toolu_e2e', name: 'set_workout', input: FAKE_WORKOUT_WITH_PARTS }]
+				: [{ type: 'text', text: FAKE_CLAUDE_REPLY }],
+			stop_reason: tool ? 'tool_use' : 'end_turn',
 			stop_sequence: null,
 			usage: { input_tokens: 1, output_tokens: 1 }
 		}
