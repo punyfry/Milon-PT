@@ -11,7 +11,9 @@ import {
 	MAX_NEW_EXERCISES,
 	NEW_EXERCISE_ID,
 	SAFE_ID,
-	ValidationError,
+		ValidationError,
+	countsAsWorkout,
+	notAWorkoutMessage,
 	fitsPhase,
 	NOTE_MAX,
 	isObject,
@@ -192,7 +194,9 @@ export async function resolveNewExercises(storage: UserStorage, input: SaveSessi
 /**
  * What can be checked before anything is written, so a save that will fail
  * creates no exercises: written-in exercises' done sets against their type,
- * and that at least one set is done. Stored exercises are checked in saveSession,
+ * and that at least one set is done and the session counts as a workout
+ * (`countsAsWorkout`: only a warm-up or only a stretch is an abandoned
+ * workout). Stored exercises are checked in saveSession,
  * after any creating; they only fail there if changed elsewhere during the
  * workout, and a retry then reuses what was created.
  */
@@ -210,6 +214,7 @@ function precheck(session: ActiveSession): void {
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (!anyDone) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
+	if (!countsAsWorkout(session.exercises)) throw new ValidationError('sparning', [notAWorkoutMessage(session.exercises)]);
 }
 
 /** The start time a save is recognised by: the original one if the start was edited afterwards. */

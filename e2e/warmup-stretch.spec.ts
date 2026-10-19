@@ -179,3 +179,36 @@ test('"Byt" on a warm-up exercise offers no weight exercises and keeps the warm-
 	const files = await user.files();
 	expect((files['exercises/ex_hoga_knan.json'] as Exercise).log[0]).toMatchObject({ sets: [{ reps: 20 }], phase: 'warmup' });
 });
+
+test('a workout with only the warm-up done counts as abandoned and cannot be saved', async ({ page, user }) => {
+	await user.seed({
+		...profile(),
+		...exercise({ id: 'ex_jumping_jacks', name: 'Jumping jacks', type: 'bodyweight' }),
+		...exercise({ id: 'ex_knaboj', name: 'Knäböj' }),
+		...workout({
+			slug: 'ben',
+			name: 'Ben',
+			exercises: [
+				{ exerciseId: 'ex_jumping_jacks', sets: 1, target: { reps: 20 }, phase: 'warmup' },
+				{ exerciseId: 'ex_knaboj', sets: 2, target: { reps: 8 } }
+			]
+		})
+	});
+	await open(page, '/pass/ben');
+	await page.getByRole('button', { name: 'Starta passet' }).click();
+	await page.getByRole('button', { name: 'Klar: Jumping jacks' }).click();
+	await page.getByRole('button', { name: /Nästa: Knäböj/ }).click();
+	await page.getByRole('button', { name: /Sammanfattning/ }).click();
+
+	await expect(page.getByRole('heading', { name: 'Passet är inte gjort' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Avsluta pass' })).toBeDisabled();
+	await expect(page.getByText('Bara uppvärmning eller bara stretch räknas inte som ett pass.', { exact: false })).toBeVisible();
+
+	// Discarding it leaves nothing behind.
+	await page.getByRole('button', { name: 'Släng passet' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Släng passet' }).click();
+	await expect(page).toHaveURL(/\/($|\?)/);
+	const files = await user.files();
+	expect(Object.keys(files).some((p) => p.startsWith('sessions/'))).toBe(false);
+	expect((files['exercises/ex_jumping_jacks.json'] as Exercise).log).toEqual([]);
+});

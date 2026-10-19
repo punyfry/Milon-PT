@@ -160,6 +160,34 @@ export function fitsPhase(type: ExerciseType, phase: Phase | undefined): boolean
 	return phaseOf({ phase }) === 'main' || type !== 'weight';
 }
 
+/**
+ * Whether a session's done sets make it a workout that can be saved: a done set
+ * in the main part, or both a warm-up and a stretch done. Only a warm-up or only
+ * a stretch counts as an abandoned workout. A workout with no main part (e.g. a
+ * pure stretch workout) needs any done set.
+ * The finish screen and the server use the same rule.
+ */
+export function countsAsWorkout(exercises: readonly { phase?: Phase; sets: readonly unknown[] }[]): boolean {
+	const done = (phase: Phase) =>
+		exercises.some((e) => phaseOf(e) === phase && e.sets.some((s) => isObject(s) && (s as { done?: unknown }).done === true));
+	if (done('main') || (done('warmup') && done('cooldown'))) return true;
+	return !exercises.some((e) => phaseOf(e) === 'main') && (done('warmup') || done('cooldown'));
+}
+
+/**
+ * Shown when a session doesn't count as a workout but has done sets (see
+ * `countsAsWorkout`). "Both warm-up and stretch" is only offered when the
+ * workout has both parts.
+ */
+export function notAWorkoutMessage(exercises: readonly { phase?: Phase }[]): string {
+	const both = exercises.some((e) => phaseOf(e) === 'warmup') && exercises.some((e) => phaseOf(e) === 'cooldown');
+	return (
+		'Bara uppvärmning eller bara stretch räknas inte som ett pass. ' +
+		(both ? 'Bocka av minst ett set i passet, eller både uppvärmning och stretch, för att spara.' : 'Bocka av minst ett set i passet för att spara.') +
+		' Annars kan du slänga passet.'
+	);
+}
+
 /** Warm-up first, then the main part, then the stretch; the order within each part is kept. */
 export function sortByPhase<T extends { phase?: Phase }>(list: readonly T[]): T[] {
 	return [...list].sort((a, b) => PHASES.indexOf(phaseOf(a)) - PHASES.indexOf(phaseOf(b)));

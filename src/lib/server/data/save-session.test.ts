@@ -534,10 +534,29 @@ describe('warm-up and stretch (#100)', () => {
 		expect(await listSessionIds(storage)).toEqual([first.sessionId]);
 	});
 
-	it('saves a workout where only the warm-up was done', async () => {
+	it('refuses a workout where only the warm-up was done: it counts as abandoned', async () => {
 		const storage = await setup();
 		const session = withParts();
 		session.exercises = session.exercises.map((e) => (e.phase ? e : { ...e, sets: e.sets.map((s) => ({ ...s, done: false })) }));
+		await expect(saveSession(storage, { session, endedAt, saveAsNewVersion: false })).rejects.toThrow(/Bara uppvärmning eller bara stretch/);
+		expect(await listSessionIds(storage)).toEqual([]);
+		expect((await getExercise(storage, 'ex_armhavning'))!.data.log).toEqual([]);
+	});
+
+	it('saves a workout where the warm-up and the stretch were done but not the main part', async () => {
+		const storage = await setup();
+		const session = withParts();
+		session.exercises = session.exercises.map((e) =>
+			e.phase ? { ...e, sets: e.sets.map((s) => ({ ...s, done: true })) } : { ...e, sets: e.sets.map((s) => ({ ...s, done: false })) }
+		);
+		const result = await saveSession(storage, { session, endedAt, saveAsNewVersion: false });
+		expect((await getSession(storage, result.sessionId))!.data.exerciseIds).toEqual(['ex_armhavning', 'ex_sidoplanka']);
+	});
+
+	it('saves a workout that has no main part when its stretch is done', async () => {
+		const storage = await setup();
+		const session = withParts();
+		session.exercises = session.exercises.filter((e) => e.phase);
 		const result = await saveSession(storage, { session, endedAt, saveAsNewVersion: false });
 		expect((await getSession(storage, result.sessionId))!.data.exerciseIds).toEqual(['ex_armhavning']);
 	});

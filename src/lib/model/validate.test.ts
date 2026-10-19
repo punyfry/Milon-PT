@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, fitsPhase, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, countsAsWorkout, fitsPhase, notAWorkoutMessage, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -152,5 +152,37 @@ describe('phase (#100)', () => {
 	it('sorts by phase and keeps the order within each part', () => {
 		const list = [{ id: 'a', phase: 'cooldown' as const }, { id: 'b' }, { id: 'c', phase: 'warmup' as const }, { id: 'd' }];
 		expect(sortByPhase(list).map((e) => e.id)).toEqual(['c', 'b', 'd', 'a']);
+	});
+});
+
+describe('countsAsWorkout', () => {
+	const ex = (phase: 'warmup' | 'cooldown' | undefined, done: boolean) => ({ ...(phase ? { phase } : {}), sets: [{ reps: 10, done }] });
+
+	it('counts a done main part, or a warm-up and a stretch together', () => {
+		expect(countsAsWorkout([ex('warmup', false), ex(undefined, true), ex('cooldown', false)])).toBe(true);
+		expect(countsAsWorkout([ex('warmup', true), ex(undefined, false), ex('cooldown', true)])).toBe(true);
+	});
+
+	it('does not count only a warm-up, only a stretch or nothing', () => {
+		expect(countsAsWorkout([ex('warmup', true), ex(undefined, false), ex('cooldown', false)])).toBe(false);
+		expect(countsAsWorkout([ex('warmup', false), ex(undefined, false), ex('cooldown', true)])).toBe(false);
+		expect(countsAsWorkout([ex('warmup', false), ex(undefined, false)])).toBe(false);
+	});
+
+	it('needs any done set in a workout without a main part', () => {
+		expect(countsAsWorkout([ex('cooldown', true)])).toBe(true);
+		expect(countsAsWorkout([ex('cooldown', false)])).toBe(false);
+	});
+
+	it('ignores sets that are not objects', () => {
+		expect(countsAsWorkout([{ sets: [null, 'x'] }])).toBe(false);
+	});
+});
+
+describe('notAWorkoutMessage', () => {
+	it('offers "both warm-up and stretch" only when the workout has both parts', () => {
+		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}, { phase: 'cooldown' }])).toContain('både uppvärmning och stretch');
+		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}])).not.toContain('både');
+		expect(notAWorkoutMessage([{}, { phase: 'cooldown' }])).not.toContain('både');
 	});
 });
