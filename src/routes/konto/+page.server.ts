@@ -77,7 +77,7 @@ export const actions: Actions = {
 			if (!notes[kind].includes(text)) return false;
 			return withNotes(profile, { ...notes, [kind]: notes[kind].filter((x) => x !== text) });
 		});
-		if (!saved) return fail(409, { notesError: 'Listan ändrades samtidigt. Ladda om sidan och försök igen.' });
+		if (!saved) return fail(409, { notesError: 'Listan ändrades samtidigt. Försök igen.' });
 		return { notesSaved: true };
 	},
 

@@ -49,3 +49,21 @@ test('says so when Milon fails, and saves nothing', async ({ page, user }) => {
 	await expect(notes.getByRole('alert')).toContainText('Milon kunde inte svara just nu');
 	expect(((await user.files())['profile.json'] as Profile).rules).toEqual(['Ont i knät', 'Inga hopp']);
 });
+
+test('cancelling a proposal saves nothing', async ({ page, user }) => {
+	await open(page, '/konto');
+	const notes = page.getByRole('region', { name: 'Det här vet Milon om dig' });
+	await notes.getByLabel('Har något ändrats? Berätta för Milon').fill('Knät är bra nu.');
+	await notes.getByRole('button', { name: 'Fråga Milon' }).click();
+	await notes.getByRole('button', { name: 'Avbryt' }).click();
+	await expect(notes.getByRole('button', { name: 'Spara ändringarna' })).toHaveCount(0);
+	expect(((await user.files())['profile.json'] as Profile).rules).toEqual(['Ont i knät', 'Inga hopp']);
+});
+
+test('with Milon off the list can still be cleaned up, but not updated by Milon', async ({ page, user }) => {
+	await user.seed(profile({ coach: false, rules: ['Ont i knät'] }));
+	await open(page, '/konto');
+	const notes = page.getByRole('region', { name: 'Det här vet Milon om dig' });
+	await expect(notes.getByRole('button', { name: 'Ta bort: Ont i knät' })).toBeVisible();
+	await expect(notes.getByRole('button', { name: 'Fråga Milon' })).toHaveCount(0);
+});

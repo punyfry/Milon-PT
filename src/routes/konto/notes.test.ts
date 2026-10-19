@@ -45,6 +45,14 @@ describe('what Milon knows on Konto (#110)', () => {
 		expect((await getProfile(state.storage)).data).toEqual({ goals: 'Starkare', rules: ['Inga hopp'], coachContext: 'Tränar: hemma med hantlar' });
 	});
 
+	it('saves a proposal for a profile with duplicate rules', async () => {
+		await saveProfile(state.storage, { rules: ['Inga hopp', 'Inga hopp'] }, (await getProfile(state.storage)).version);
+		const data = (await konto.load({ locals } as never)) as { notes: unknown };
+		const proposal = JSON.stringify({ rules: [], context: [] });
+		expect(await post('notes', { base: JSON.stringify(data.notes), proposal })).toEqual({ notesSaved: true });
+		expect((await getProfile(state.storage)).data).toEqual({});
+	});
+
 	it('saves nothing when the notes changed since the proposal, or the proposal is invalid', async () => {
 		const proposal = JSON.stringify({ rules: [], context: [] });
 		expect(await post('notes', { base: JSON.stringify({ ...base, rules: ['Ont i knät'] }), proposal })).toMatchObject({ status: 409 });

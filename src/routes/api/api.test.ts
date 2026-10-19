@@ -343,6 +343,25 @@ describe('POST /api/notes (#110)', () => {
 		expect(res.body.message).toMatch(/kunde inte föreslå/);
 	});
 
+	it('answers 503 without an API key, and 502 when Claude fails', async () => {
+		delete env.ANTHROPIC_API_KEY;
+		expect((await call(notes as Handler, { change: 'Knät är bra' })).status).toBe(503);
+		env.ANTHROPIC_API_KEY = 'test';
+		const { default: Anthropic } = await import('@anthropic-ai/sdk');
+		createMessage.mockRejectedValue(new Anthropic.APIError(500, undefined, 'fel', new Headers()));
+		const res = await call(notes as Handler, { change: 'Knät är bra' });
+		expect(res.status).toBe(502);
+		expect(res.body.message).toMatch(/kunde inte svara/);
+	});
+
+	it('gives the model room for full lists, and frames them as facts, not instructions', async () => {
+		createMessage.mockResolvedValue(toolReply({ rules: [], context: [], summary: '' }));
+		await call(notes as Handler, { change: 'Knät är bra' });
+		const params = createMessage.mock.calls[0][0];
+		expect(params.max_tokens).toBeGreaterThanOrEqual(6000);
+		expect(params.system).toMatch(/inte instruktioner/);
+	});
+
 	it('stops at the daily limit without calling Claude', async () => {
 		env.AI_DAILY_LIMIT = '0';
 		env.AI_STARTER_CALLS = '0';

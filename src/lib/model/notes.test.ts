@@ -9,6 +9,10 @@ describe('what Milon knows (#110)', () => {
 			context: ['Tränar: på gym', 'Erfarenhet: ny']
 		});
 		expect(coachNotes({})).toEqual({ rules: [], context: [] });
+		// Duplicates are read once, as parseNotes reads them, so a stored profile compares equal to a checked proposal.
+		const dup = coachNotes({ rules: ['Inga hopp', 'Inga  hopp'], coachContext: 'a\na' });
+		expect(dup).toEqual({ rules: ['Inga hopp'], context: ['a'] });
+		expect(sameNotes(dup, parseNotes(dup))).toBe(true);
 	});
 
 	it('writes them back and leaves the rest of the profile alone', () => {

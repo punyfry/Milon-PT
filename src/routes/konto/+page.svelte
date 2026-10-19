@@ -130,15 +130,17 @@
 		}
 	}
 
-	const enhanceNotes: SubmitFunction = () => {
-		return async ({ result, update }) => {
+	/** After a change to the lists a shown proposal is out of date; after saving one, its text is done too. */
+	const enhanceNotes =
+		(saving: boolean): SubmitFunction =>
+		() =>
+		async ({ result, update }) => {
 			if (result.type === 'success') {
 				proposal = null;
-				change = '';
+				if (saving) change = '';
 			}
 			await update({ reset: false });
 		};
-	};
 
 	// --- Craft import -------------------------------------------------------
 	let importData = $state<unknown>(null);
@@ -237,10 +239,10 @@
 					{#if data.notes[kind].length}
 						<h3 class="label">{label}</h3>
 						<ul class="notelist">
-							{#each data.notes[kind] as text (text)}
+							{#each data.notes[kind] as text, i (i)}
 								<li>
 									<span>{text}</span>
-									<form method="POST" action="?/forget" use:enhance={enhanceNotes}>
+									<form method="POST" action="?/forget" use:enhance={enhanceNotes(false)}>
 										<input type="hidden" name="kind" value={kind} />
 										<input type="hidden" name="text" value={text} />
 										<button class="btn small ghost" aria-label="Ta bort: {text}">Ta bort</button>
@@ -260,16 +262,22 @@
 					</form>
 					{#if askError}<p class="error" role="alert">{askError}</p>{/if}
 					{#if proposal && diff}
-						<div class="proposal" role="status">
-							{#if proposal.summary}<p>{proposal.summary}</p>{/if}
-							{#if noChange}
-								<p class="muted">Milon föreslår ingen ändring.</p>
-							{:else}
-								<ul class="changes">
-									{#each [...diff.rules.removed, ...diff.context.removed] as text (text)}<li class="removed"><span class="sr-only">Tas bort:</span> {text}</li>{/each}
-									{#each [...diff.rules.added, ...diff.context.added] as text (text)}<li class="added"><span class="sr-only">Läggs till:</span> {text}</li>{/each}
-								</ul>
-								<form method="POST" action="?/notes" use:enhance={enhanceNotes}>
+						<div class="proposal">
+							<div role="status">
+								{#if proposal.summary}<p>{proposal.summary}</p>{/if}
+								{#if noChange}<p class="muted">Milon föreslår ingen ändring.</p>{/if}
+							</div>
+							{#if !noChange}
+								{#each [['rules', 'Regler'], ['context', 'Om dig']] as const as [kind, label] (kind)}
+									{#if diff[kind].removed.length || diff[kind].added.length}
+										<h3 class="label">{label}</h3>
+										<ul class="changes">
+											{#each diff[kind].removed as text, i (i)}<li class="removed"><span class="sr-only">Tas bort:</span> {text}</li>{/each}
+											{#each diff[kind].added as text, i (i)}<li class="added"><span class="sr-only">Läggs till:</span> {text}</li>{/each}
+										</ul>
+									{/if}
+								{/each}
+								<form method="POST" action="?/notes" use:enhance={enhanceNotes(true)}>
 									<input type="hidden" name="base" value={JSON.stringify(proposal.base)} />
 									<input type="hidden" name="proposal" value={JSON.stringify(proposal.proposal)} />
 									<button class="btn primary full">Spara ändringarna</button>
@@ -464,6 +472,12 @@
 		padding: 0;
 		display: grid;
 		gap: 6px;
+	}
+	.notelist form {
+		flex: none;
+	}
+	.notelist li span {
+		min-width: 0;
 	}
 	.notelist li {
 		display: flex;

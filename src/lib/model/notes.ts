@@ -17,11 +17,12 @@ export const MAX_CONTEXT_LINES = 30;
 
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
 
+/** One-line texts without empty ones or duplicates, in their order. */
+const lines = (items: string[]) => [...new Set(items.map(oneLine).filter(Boolean))];
+
+/** Read the same way as parseNotes, so a stored profile and a checked proposal compare equal. */
 export function coachNotes(profile: Profile): CoachNotes {
-	return {
-		rules: (profile.rules ?? []).map(oneLine).filter(Boolean),
-		context: (profile.coachContext ?? '').split('\n').map(oneLine).filter(Boolean)
-	};
+	return { rules: lines(profile.rules ?? []), context: lines((profile.coachContext ?? '').split('\n')) };
 }
 
 /** The profile with these notes; an empty list removes the field. */
@@ -50,7 +51,7 @@ export function parseNotes(raw: unknown): CoachNotes {
 			issues.push(`${label} måste vara en lista med text.`);
 			return [];
 		}
-		const items = [...new Set(v.map(oneLine).filter(Boolean))];
+		const items = lines(v);
 		if (items.length > max) issues.push(`${label}: högst ${max} rader.`);
 		if (items.some((x) => x.length > MAX_RULE)) issues.push(`${label}: en rad får vara högst ${MAX_RULE} tecken.`);
 		return items;
