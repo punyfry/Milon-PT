@@ -54,6 +54,11 @@ function count(data: { count?: unknown } | undefined): number {
 	return typeof data?.count === 'number' ? data.count : 0;
 }
 
+/** The day file's fields as an object; anything else counts as empty. */
+function dayData(data: unknown): Record<string, unknown> {
+	return typeof data === 'object' && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+}
+
 /** The pot, if the file is valid. Anything else counts as an empty pot. */
 function parseStarter(data: unknown): Starter | null {
 	const s = data as Partial<Starter> | null;
@@ -80,7 +85,8 @@ export async function consumeAiCall(storage: UserStorage, today: string, limits:
 			const current = await storage.readJson<{ count?: unknown }>(path);
 			const n = count(current?.data);
 			if (n < limits.daily) {
-				await storage.writeJson(path, { count: n + 1 }, current ? { ifMatch: current.version } : { createOnly: true });
+				// Keep the rest of the file (the token counts).
+				await storage.writeJson(path, { ...dayData(current?.data), count: n + 1 }, current ? { ifMatch: current.version } : { createOnly: true });
 				if (!current) await startDay(storage, today);
 				return n + 1;
 			}
@@ -130,6 +136,72 @@ export async function remainingAiCalls(storage: UserStorage, today: string, limi
 		storage.readJson<unknown>(STARTER_PATH)
 	]);
 	return Math.max(0, limits.daily - count(day?.data)) + starterLeft(parseStarter(starter?.data), today, limits.starter);
+}
+
+/** Tokens used per model in a day (#98), from the `usage` of each Claude response. */
+export interface TokenCounts {
+	/** Responses counted. */
+	calls: number;
+	input: number;
+	output: number;
+	/** Input tokens written to the prompt cache. */
+	cacheWrite: number;
+	/** Input tokens read from the prompt cache. */
+	cacheRead: number;
+}
+
+/** The parts of the API's `usage` that are recorded. */
+export interface ResponseUsage {
+	input_tokens?: number | null;
+	output_tokens?: number | null;
+	cache_creation_input_tokens?: number | null;
+	cache_read_input_tokens?: number | null;
+}
+
+/** A model id as a key in the file; anything unexpected is grouped as `other`. */
+const MODEL_KEY = /^[a-z0-9][a-z0-9.-]{0,63}$/;
+
+const tokens = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
+
+function tokenCounts(v: unknown): TokenCounts {
+	const o = dayData(v);
+	return { calls: tokens(o.calls), input: tokens(o.input), output: tokens(o.output), cacheWrite: tokens(o.cacheWrite), cacheRead: tokens(o.cacheRead) };
+}
+
+/**
+ * Adds a response's token usage to the day's file (`usage/<YYYY-MM-DD>.json`, under
+ * `tokens.<model>`), next to the call count. Only recorded for now, to know what Milon
+ * costs per user before the limit is based on cost (#98). Never throws: a failed
+ * write is logged and the response is still returned.
+ */
+export async function recordTokens(storage: UserStorage, today: string, model: string, usage: ResponseUsage | null | undefined): Promise<void> {
+	if (!usage) return;
+	const path = `usage/${today}.json`;
+	const key = MODEL_KEY.test(model) ? model : 'other';
+	try {
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const current = await storage.readJson<unknown>(path);
+			const data = dayData(current?.data);
+			const byModel = dayData(data.tokens);
+			const old = tokenCounts(byModel[key]);
+			const next: TokenCounts = {
+				calls: old.calls + 1,
+				input: old.input + tokens(usage.input_tokens),
+				output: old.output + tokens(usage.output_tokens),
+				cacheWrite: old.cacheWrite + tokens(usage.cache_creation_input_tokens),
+				cacheRead: old.cacheRead + tokens(usage.cache_read_input_tokens)
+			};
+			try {
+				await storage.writeJson(path, { ...data, tokens: { ...byModel, [key]: next } }, current ? { ifMatch: current.version } : { createOnly: true });
+				return;
+			} catch (e) {
+				if (!(e instanceof StorageConflictError)) throw e;
+			}
+		}
+		throw new StorageConflictError(path);
+	} catch (e) {
+		console.error('Could not record AI token usage:', e);
+	}
 }
 
 const KEEP_DAYS = 30;

@@ -120,7 +120,7 @@ Four file types per user, plus conversations and counters. Sets live on the exer
 | `workouts/<slug>.v<N>.json` | Workout template. Every change creates the next version; older ones are kept and can be restored |
 | `sessions/<sessionId>.json` | A completed workout: template and version, start and end, deviations, kcal |
 | `builder/<id>.json` | Builder conversations |
-| `usage/<YYYY-MM-DD>.json` | Number of AI calls that day (pruned after 30 days) |
+| `usage/<YYYY-MM-DD>.json` | Number of AI calls that day (`count`) and the tokens used per served model (`tokens.<model>`: `calls`, `input`, `output`, `cacheWrite`, `cacheRead`), recorded to see what Milon costs per user before the limit is based on cost (#98). Pruned after 30 days |
 | `usage/starter.json` | The starter pot: the date of the first AI call and how many of its calls are used. Lasts 14 days from that date |
 
 ```json

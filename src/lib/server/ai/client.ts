@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
 import { coachEnabled, type Profile } from '../../model';
 import type { CreateMessage } from './models';
-import { AiLimitError, consumeAiCall, dailyLimit, remainingAiCalls, starterCalls, type AiLimits } from './usage';
+import { AiLimitError, consumeAiCall, dailyLimit, recordTokens, remainingAiCalls, starterCalls, type AiLimits } from './usage';
 import type { UserStorage } from '../storage/types';
 import { todayInStockholm } from '../../time';
 
@@ -44,12 +44,17 @@ function aiLimits(): AiLimits {
 
 /**
  * createMessage that counts every call against today's limit, then the starter
- * pot, and throws AiLimitError once both are used up.
+ * pot, and throws AiLimitError once both are used up. The response's token
+ * usage is recorded per model (#98); the served model is used, which can differ
+ * from the requested one after a server-side fallback.
  */
 export function limitedCreateMessage(storage: UserStorage, inner: CreateMessage = createMessage): CreateMessage {
 	return async (params) => {
-		await consumeAiCall(storage, todayInStockholm(), aiLimits());
-		return inner(params);
+		const today = todayInStockholm();
+		await consumeAiCall(storage, today, aiLimits());
+		const response = await inner(params);
+		await recordTokens(storage, today, response?.model || params.model, response?.usage);
+		return response;
 	};
 }
 
