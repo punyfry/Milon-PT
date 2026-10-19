@@ -66,7 +66,11 @@ export interface EditSessionInput {
 	startTime: string;
 	/** End as YYYY-MM-DDTHH:MM, Stockholm time. */
 	end: string;
-	kcalEstimate: number | null;
+	/**
+	 * Left out = unchanged, null = removed. The app no longer asks for kcal (it was a fixed
+	 * guess); the field stays so older clients and stored values keep working.
+	 */
+	kcalEstimate?: number | null;
 	/**
 	 * The exercises to keep, with their sets and note (empty = none, left out =
 	 * unchanged). Exercises left out are removed from the session.
@@ -82,7 +86,7 @@ export function parseEditSessionInput(raw: unknown): EditSessionInput {
 	if (typeof raw.startTime !== 'string' || !TIME.test(raw.startTime)) issues.push('Ange en starttid.');
 	if (typeof raw.end !== 'string' || !DATE_TIME.test(raw.end)) issues.push('Ange en sluttid med datum och klockslag.');
 	const kcal = raw.kcalEstimate;
-	if (kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000)) issues.push('Kcal ska vara mellan 0 och 5000.');
+	if (kcal !== undefined && kcal !== null && (typeof kcal !== 'number' || !Number.isFinite(kcal) || kcal < 0 || kcal > 5000)) issues.push('Kcal ska vara mellan 0 och 5000.');
 	const exercises = Array.isArray(raw.exercises) ? raw.exercises : [];
 	if (!Array.isArray(raw.exercises) || exercises.length < 1 || exercises.length > 50) issues.push('Passet måste ha minst en övning.');
 	const seen = new Set<string>();
@@ -99,7 +103,8 @@ export function parseEditSessionInput(raw: unknown): EditSessionInput {
 	});
 	if (issues.length) throw new ValidationError('ändring', issues);
 	const input = raw as unknown as EditSessionInput;
-	return { ...input, kcalEstimate: input.kcalEstimate === null ? null : Math.round(input.kcalEstimate) };
+	const { kcalEstimate, ...rest } = input;
+	return { ...rest, ...(kcalEstimate === undefined ? {} : { kcalEstimate: kcalEstimate === null ? null : Math.round(kcalEstimate) }) };
 }
 
 /** Same instant as before if the wall time is unchanged, so an untouched time keeps its exact value. */
@@ -192,7 +197,7 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 	const updated: SessionRecord = { ...record, startedAt, endedAt, exerciseIds: record.exerciseIds.filter((e) => kept.has(e)) };
 	if (startedAt !== record.startedAt) updated.originalStartedAt = record.originalStartedAt ?? record.startedAt;
 	if (input.kcalEstimate === null) delete updated.kcalEstimate;
-	else updated.kcalEstimate = input.kcalEstimate;
+	else if (input.kcalEstimate !== undefined) updated.kcalEstimate = input.kcalEstimate;
 	return (await saveSessionRecord(storage, updated, current.version)).data;
 }
 

@@ -6,7 +6,7 @@ import type { RequestHandler } from './$types';
 
 const CONFLICT = 'Passet ändrades någon annanstans. Ladda om sidan och försök igen.';
 
-/** Corrects a saved session: times, sets, kcal, or removing an exercise from it. */
+/** Corrects a saved session: times, sets, or removing an exercise from it. */
 export const PUT: RequestHandler = async ({ locals, params, request }) => {
 	const storage = storageFor(locals);
 	const body = await request.json().catch(() => error(400, 'Ogiltig JSON'));

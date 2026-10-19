@@ -201,6 +201,21 @@ describe('editing a session', () => {
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets[0]).toEqual({ weight: 600, reps: 8 });
 	});
 
+	it('keeps the kcal estimate when the edit leaves it out', async () => {
+		const { storage, detail } = await setup();
+		const withoutKcal = parseEditSessionInput({
+			version: detail.version,
+			startTime: '17:10',
+			end: '2026-10-06T18:05',
+			exercises: [
+				{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }] },
+				{ exerciseId: 'ex_plankan', sets: [{ seconds: 45 }] }
+			]
+		});
+		expect(withoutKcal).not.toHaveProperty('kcalEstimate');
+		expect(await editSession(storage, 's_20261006', withoutKcal, now)).toMatchObject({ kcalEstimate: 300 });
+	});
+
 	it('can clear the kcal estimate', async () => {
 		const { storage, detail } = await setup();
 		const updated = await editSession(storage, 's_20261006', input(detail.version, { kcalEstimate: null }), now);

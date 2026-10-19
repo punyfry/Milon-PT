@@ -3,7 +3,7 @@ import { getLatestWorkout, getProfile, getWorkout, listExercises } from '$lib/se
 import { aiAvailable } from '$lib/server/ai/client';
 import { toInfo } from '$lib/server/helper/swap';
 import { storageFor } from '$lib/server/storage';
-import { kcalSuggestion, type ExerciseInfo } from '$lib/session/active';
+import type { ExerciseInfo } from '$lib/session/active';
 import type { PageServerLoad } from './$types';
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -43,7 +43,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		workout,
 		exercises,
 		catalog,
-		kcalSuggestion: kcalSuggestion(profile, workout),
 		helperAvailable: aiAvailable(profile)
 	};
 };

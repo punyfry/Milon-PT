@@ -84,13 +84,11 @@
 	let undoTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Finish view
-	let kcal = $state(0);
 	let saveAsNewVersion = $state(false);
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 
 	onMount(() => {
-		kcal = data.kcalSuggestion;
 		let stored = loadActiveSession(page.data.userId);
 		if (stored && stored.workoutSlug !== data.workout.slug) {
 			// A workout that is only prepared gives way; one in progress is kept.
@@ -573,7 +571,6 @@
 		const body = {
 			session: $state.snapshot(session),
 			endedAt: localIsoString(new Date()),
-			kcalEstimate: Number.isFinite(kcal) && kcal >= 0 ? kcal : undefined,
 			saveAsNewVersion: session.deviations.length > 0 && saveAsNewVersion
 		};
 		try {
@@ -894,11 +891,6 @@
 				</div>
 			</div>
 		{/if}
-
-		<label class="kcal">
-			<span>Uppskattad förbränning</span>
-			<span><input class="num" type="number" inputmode="numeric" min="0" step="10" bind:value={kcal} /> <span class="muted">kcal</span></span>
-		</label>
 
 		{#if saveError}<p class="error" role="alert">{saveError}</p>{/if}
 		<div class="final">
@@ -1418,23 +1410,6 @@
 	.seg2 [aria-pressed='true'] {
 		background: var(--text);
 		color: var(--bg);
-	}
-	.kcal {
-		margin-top: 20px;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 12px;
-	}
-	.kcal input {
-		width: 96px;
-		min-height: 48px;
-		border-radius: 14px;
-		border: 0;
-		background: var(--surface-2);
-		text-align: right;
-		padding: 0 14px;
-		font-size: 18px;
 	}
 	.final {
 		margin-top: 24px;

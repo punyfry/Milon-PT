@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { MAX_GOALS, MAX_RULE, MAX_RULES, ValidationError } from '../../model';
 import { createExercise, createSession, deleteExercise, getExercise, listExercises, getProfile, listLatestWorkouts, listSessions, saveProfile, saveWorkoutVersion } from '../data';
-import { kcalSuggestion } from '../../session/active';
 import { MemoryUserStorage } from '../storage/memory';
 import { applyImport, countWrites, parseImportFile, planImportFor } from './craft';
 
@@ -331,11 +330,4 @@ describe('import with profile, notes and sessions', () => {
 		await expect(planImportFor(storage, input, TODAY)).rejects.toThrow(/Pass X/);
 	});
 
-	it('suggests kcal per workout, per workout type, otherwise the default', () => {
-		const profile = { kcalEstimates: { strength: { min: 250, max: 350 }, hiit: { min: 300, max: 450 } }, kcalPerWorkout: { 'pass-b': 280 } };
-		expect(kcalSuggestion(profile, { slug: 'pass-b', name: 'Pass B' })).toBe(280);
-		expect(kcalSuggestion(profile, { slug: 'pass-a', name: 'Pass A' })).toBe(300);
-		expect(kcalSuggestion(profile, { slug: 'pass-c-hiit', name: 'Pass C – HIIT' })).toBe(380);
-		expect(kcalSuggestion({}, { slug: 'pass-a', name: 'Pass A' })).toBe(300);
-	});
 });
