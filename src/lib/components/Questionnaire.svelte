@@ -233,7 +233,7 @@
 	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 
 	<div class="nav">
-		<button type="button" class="btn" onclick={back} disabled={busy}>{step > 1 ? 'Tillbaka' : 'Skriv själv i stället'}</button>
+		<button type="button" class="btn" onclick={back} disabled={busy}>{step > 1 ? 'Tillbaka' : 'Skriv själv'}</button>
 		<button type="button" class="btn ghost" onclick={skip} disabled={busy}>Hoppa över</button>
 		<button type="submit" class="btn primary" disabled={busy}>{last ? 'Klart' : 'Nästa'}</button>
 	</div>

@@ -87,7 +87,7 @@ test('the step and the answers survive back and a reload, and the first step lea
 	await expect(page.getByRole('radio', { name: '30 min' })).toBeChecked();
 	await page.getByRole('button', { name: 'Tillbaka' }).click();
 	await expect(page.getByRole('checkbox', { name: 'Rygg' })).toBeChecked();
-	await page.getByRole('button', { name: 'Skriv själv i stället' }).click();
+	await page.getByRole('button', { name: 'Skriv själv' }).click();
 	await expect(page.getByText('Hej! Vad ska passet fokusera på, och hur lång tid har du?')).toBeVisible();
 	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('');
 });
