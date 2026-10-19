@@ -160,14 +160,43 @@ export type SetField = 'weight' | 'reps' | 'seconds';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** A field's value as stored: weight to two decimals, reps and seconds whole. */
+const roundField = (field: SetField, n: number) => (field === 'weight' ? round2(n) : Math.round(n));
+
+function fieldValue(set: ActiveSet, field: SetField): number | undefined {
+	return (set as unknown as Partial<Record<SetField, number>>)[field];
+}
+
 /** Sets a field to a typed value. Invalid values are ignored. */
 export function setField(set: ActiveSet, field: SetField, value: number): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
 	if (values[field] === undefined || !Number.isFinite(value) || value < 0) return;
-	const next = field === 'weight' ? round2(value) : Math.round(value);
+	const next = roundField(field, value);
 	// A time changed by hand replaces the plan from an earlier timer run.
 	if (field === 'seconds' && next !== values[field]) delete set.plannedSeconds;
 	values[field] = next;
+}
+
+/**
+ * Changes a field on `sets[index]` (see `setField`) and carries the change over
+ * to the later sets that still had the same value as the changed set had
+ * before (#103), so correcting the weight once fixes the rest of the exercise.
+ * Done sets, sets with a running timer and earlier sets are never changed, and
+ * sets with other values are left alone so a planned pyramid or drop stays.
+ */
+export function changeSetField(sets: ActiveSet[], index: number, field: SetField, value: number): void {
+	const set = sets[index];
+	if (!set) return;
+	const before = fieldValue(set, field);
+	setField(set, field, value);
+	const after = fieldValue(set, field);
+	if (before === undefined || after === undefined || after === before) return;
+	const old = roundField(field, before);
+	for (const later of sets.slice(index + 1)) {
+		if (later.done || isTimerRunning(later)) continue;
+		const current = fieldValue(later, field);
+		if (current !== undefined && roundField(field, current) === old) setField(later, field, after);
+	}
 }
 
 /** New set with the same values as the last one, not marked as done. A timed set copies its plan (see `timerStartSeconds`). */

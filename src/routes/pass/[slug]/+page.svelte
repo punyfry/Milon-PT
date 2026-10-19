@@ -16,6 +16,7 @@
 		applySwap,
 		anyTimerRunning,
 		cancelTimer,
+		changeSetField,
 		remainingMs,
 		completeExpiredTimers,
 		EXPIRED_TIMER_GRACE_MS,
@@ -23,7 +24,6 @@
 		isTimerRunning,
 		localIsoString,
 		removeSet,
-		setField,
 		startPreparedSession,
 		startTimer,
 		stopTimer,
@@ -308,7 +308,7 @@
 		const set = ex!.sets[setIndex] as unknown as Partial<Record<SetField, number>>;
 		const value = set[field];
 		if (value === undefined) return;
-		change((s) => setField(s.exercises[cur].sets[setIndex], field, Math.max(field === 'seconds' ? 5 : 0, value + delta)));
+		change((s) => changeSetField(s.exercises[cur].sets, setIndex, field, Math.max(field === 'seconds' ? 5 : 0, value + delta)));
 	}
 
 	function remove(setIndex: number) {
@@ -731,7 +731,7 @@
 							onfocus={() => guard(() => (focus[cur] = setIndex))}
 							oncheck={() => check(setIndex)}
 							onstep={(field, delta) => step(setIndex, field, delta)}
-							onset={(field, value) => change((s) => setField(s.exercises[cur].sets[setIndex], field, value))}
+							onset={(field, value) => change((s) => changeSetField(s.exercises[cur].sets, setIndex, field, value))}
 							onremove={() => remove(setIndex)}
 							onstarttimer={() => {
 								unlockAudio();
