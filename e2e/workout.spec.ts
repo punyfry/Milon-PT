@@ -29,6 +29,8 @@ test('logs a workout from the start page to a saved session', async ({ page, use
 
 	await page.getByRole('button', { name: /Sammanfattning/ }).click();
 	await expect(page.getByRole('button', { name: 'Knäböj: ändra' })).toContainText('40×8 · 40×8');
+	// No kcal guess to fill in any more.
+	await expect(page.getByText(/kcal/i)).toHaveCount(0);
 	await page.getByRole('button', { name: 'Avsluta pass' }).click();
 	await expect(page).toHaveURL(/\/($|\?)/);
 
@@ -37,6 +39,7 @@ test('logs a workout from the start page to a saved session', async ({ page, use
 	expect(sessions).toHaveLength(1);
 	const record = sessions[0][1] as SessionRecord;
 	expect(record).toMatchObject({ workoutSlug: 'ben', workoutVersion: 1, exerciseIds: ['ex_knaboj'], deviations: [] });
+	expect(record).not.toHaveProperty('kcalEstimate');
 	const knaboj = files['exercises/ex_knaboj.json'] as Exercise;
 	expect(knaboj.log[0]).toMatchObject({ sessionId: record.id, sets: [{ weight: 40, reps: 8 }, { weight: 40, reps: 8 }] });
 });

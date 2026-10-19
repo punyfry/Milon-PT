@@ -31,12 +31,15 @@ test('the session view shows times, kcal and sets', async ({ page }) => {
 test('editing a set is saved to the exercise log', async ({ page, user }) => {
 	await open(page, `/historik/pass/${ID}`);
 	await page.getByRole('button', { name: 'Redigera' }).click();
+	await expect(page.getByLabel('Kcal')).toHaveCount(0);
 	await page.getByLabel('Vikt i kg, set 2').fill('62.5');
 	await page.getByRole('button', { name: 'Spara ändringar' }).click();
 	await expect(page.getByRole('button', { name: 'Redigera' })).toBeVisible();
 
 	const log = ((await user.files())['exercises/ex_marklyft.json'] as Exercise).log;
 	expect(log[0].sets).toEqual([{ weight: 60, reps: 5 }, { weight: 62.5, reps: 5 }]);
+	// The editor has no kcal field any more, and an older value survives the edit.
+	expect(((await user.files())[`sessions/${ID}.json`] as { kcalEstimate?: number }).kcalEstimate).toBe(300);
 });
 
 test('a set above the upper bounds is not saved (#89)', async ({ page, user }) => {

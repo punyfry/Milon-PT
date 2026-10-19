@@ -135,9 +135,9 @@ export interface Profile {
 	weeklySessionGoal?: number;
 	/** Training rules the coach should know about. */
 	rules?: string[];
-	/** kcal estimate per workout, keyed by workout slug. Takes precedence over kcalEstimates. */
+	/** kcal estimate per workout, keyed by workout slug. No longer used (the app doesn't ask for kcal); kept so older profiles stay valid. */
 	kcalPerWorkout?: Record<string, number>;
-	/** kcal estimate per workout type (default: strength ~250–350, HIIT ~300–450). */
+	/** kcal estimate per workout type. No longer used, like kcalPerWorkout; the Craft import may still write it. */
 	kcalEstimates?: Partial<Record<KcalWorkoutType, KcalRange>>;
 	/** Other context for the coach. */
 	coachContext?: string;

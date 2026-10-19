@@ -28,7 +28,6 @@
 	interface Draft {
 		startTime: string;
 		end: string;
-		kcal: string;
 		exercises: { id: string; name: string; type: ExerciseType; removed: boolean; sets: DraftSet[]; note: string }[];
 	}
 	let draft = $state<Draft | null>(null);
@@ -53,7 +52,6 @@
 		draft = {
 			startTime: s.startedAt.slice(11, 16),
 			end: s.endedAt.slice(0, 16),
-			kcal: s.kcalEstimate === undefined ? '' : String(s.kcalEstimate),
 			exercises: data.exercises.map((e) => ({ id: e.id, name: e.name, type: e.type, removed: false, sets: e.sets.map(toDraft), note: e.note ?? '' }))
 		};
 	}
@@ -84,8 +82,6 @@
 			if (!sets) return void (error = `Kontrollera värdena för ${e.name} (${LIMITS}).`);
 			exercises.push({ exerciseId: e.id, sets, note: e.note.trim() });
 		}
-		const kcal = draft.kcal.trim();
-		if (kcal && !(/^\d{1,4}$/.test(kcal) && Number(kcal) <= 5000)) return void (error = 'Ange kcal som ett heltal mellan 0 och 5000.');
 		saving = true;
 		error = null;
 		try {
@@ -96,7 +92,6 @@
 					version: data.version,
 					startTime: draft.startTime,
 					end: draft.end,
-					kcalEstimate: kcal ? Number(kcal) : null,
 					exercises
 				})
 			});
@@ -183,10 +178,6 @@
 			<label>
 				<span class="label">Slut</span>
 				<input type="datetime-local" bind:value={draft.end} min={`${startDate}T00:00`} required />
-			</label>
-			<label>
-				<span class="label">Kcal</span>
-				<input type="text" inputmode="numeric" bind:value={draft.kcal} placeholder="–" />
 			</label>
 		</section>
 

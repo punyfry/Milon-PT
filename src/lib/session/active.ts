@@ -13,7 +13,6 @@ import {
 	type ExerciseType,
 	type ExtraPhase,
 	type LogEntry,
-	type Profile,
 	type Target,
 	type WorkoutTemplate
 } from '$lib/model';
@@ -366,21 +365,6 @@ export function summarize(session: ActiveSession, infos: ReadonlyMap<string, Exe
 	});
 	const doneSets = exercises.reduce((n, e, i) => n + (session.exercises[i].phase ? 0 : e.doneSets), 0);
 	return { exercises, doneSets, volumeByType };
-}
-
-/** Default: strength ~250–350 kcal. The profile's value for the workout takes precedence. */
-export const DEFAULT_KCAL = 300;
-
-/**
- * Suggested kcal when finishing: the profile's value for this workout, else
- * the middle of the profile's range for the workout type (HIIT if the name
- * says so, otherwise strength), else DEFAULT_KCAL.
- */
-export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 'slug' | 'name'>): number {
-	const perWorkout = profile.kcalPerWorkout?.[workout.slug];
-	if (perWorkout !== undefined) return perWorkout;
-	const range = profile.kcalEstimates?.[/hiit/i.test(workout.name) ? 'hiit' : 'strength'];
-	return range ? Math.round((range.min + range.max) / 2 / 10) * 10 : DEFAULT_KCAL;
 }
 
 // --- exercise swap ------------------------------------------------------
