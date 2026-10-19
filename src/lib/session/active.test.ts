@@ -4,6 +4,7 @@ import {
 	addSet,
 	applySwap,
 	cancelTimer,
+	changeSetField,
 	completeExpiredTimers,
 	EXPIRED_TIMER_GRACE_MS,
 	createActiveSession,
@@ -79,6 +80,87 @@ describe('active session', () => {
 		setField(set, 'reps', -3);
 		setField(set, 'seconds', 30);
 		expect(set).toEqual({ weight: 41.26, reps: 8, done: false });
+	});
+
+	describe('carrying a change over to later sets (#103)', () => {
+		const weights = (sets: ActiveSet[]) => sets.map((s) => ('weight' in s ? s.weight : undefined));
+		const w = (...kg: number[]): ActiveSet[] => kg.map((weight) => ({ weight, reps: 8, done: false }));
+
+		it('follows the examples in the issue', () => {
+			const equal = w(40, 40, 40);
+			changeSetField(equal, 0, 'weight', 42.5);
+			expect(weights(equal)).toEqual([42.5, 42.5, 42.5]);
+
+			const firstDone = w(40, 40, 40);
+			firstDone[0].done = true;
+			changeSetField(firstDone, 1, 'weight', 42.5);
+			expect(weights(firstDone)).toEqual([40, 42.5, 42.5]);
+
+			const pyramid = w(40, 45, 50);
+			changeSetField(pyramid, 0, 'weight', 42.5);
+			expect(weights(pyramid)).toEqual([42.5, 45, 50]);
+
+			const reps: ActiveSet[] = [10, 10, 8].map((r) => ({ reps: r, done: false }));
+			changeSetField(reps, 0, 'reps', 12);
+			expect(reps.map((s) => ('reps' in s ? s.reps : 0))).toEqual([12, 12, 8]);
+
+			const time: ActiveSet[] = [
+				{ seconds: 60, done: false },
+				{ seconds: 60, done: false }
+			];
+			changeSetField(time, 0, 'seconds', 45);
+			expect(time).toEqual([
+				{ seconds: 45, done: false },
+				{ seconds: 45, done: false }
+			]);
+		});
+
+		it('changes only the touched field, and never earlier or done sets', () => {
+			const sets = w(40, 40, 40, 40);
+			sets[2].done = true;
+			changeSetField(sets, 1, 'weight', 50);
+			expect(weights(sets)).toEqual([40, 50, 40, 50]);
+			expect(sets.map((s) => ('reps' in s ? s.reps : 0))).toEqual([8, 8, 8, 8]);
+		});
+
+		it('carries over past a set with another value', () => {
+			const sets = w(40, 45, 40);
+			changeSetField(sets, 0, 'weight', 42.5);
+			expect(weights(sets)).toEqual([42.5, 45, 42.5]);
+		});
+
+		it('compares after rounding', () => {
+			const sets = w(40, 40.001, 39.996);
+			changeSetField(sets, 0, 'weight', 42.504);
+			expect(weights(sets)).toEqual([42.5, 42.5, 42.5]);
+		});
+
+		it('carries nothing over for invalid values or a change that changes nothing', () => {
+			const sets = w(40, 40);
+			changeSetField(sets, 0, 'weight', -1);
+			changeSetField(sets, 0, 'weight', NaN);
+			changeSetField(sets, 0, 'weight', Infinity);
+			changeSetField(sets, 0, 'seconds', 30);
+			changeSetField(sets, 5, 'weight', 50);
+			expect(sets).toEqual(w(40, 40));
+
+			const same = w(40, 40);
+			changeSetField(same, 0, 'weight', 40.001);
+			expect(same).toEqual(w(40, 40));
+		});
+
+		it('leaves a set with a running timer alone and drops the plan on the sets that follow', () => {
+			const sets: ActiveSet[] = [
+				{ seconds: 30, done: false },
+				{ seconds: 30, done: false },
+				{ seconds: 30, done: false, plannedSeconds: 45 }
+			];
+			startTimer(sets[1], new Date(0));
+			changeSetField(sets, 0, 'seconds', 40);
+			expect(sets[0]).toEqual({ seconds: 40, done: false });
+			expect(sets[1]).toMatchObject({ seconds: 30, timerDuration: 30 });
+			expect(sets[2]).toEqual({ seconds: 40, done: false });
+		});
 	});
 
 	it('adds and removes sets', () => {
