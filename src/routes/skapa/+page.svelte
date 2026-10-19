@@ -104,6 +104,14 @@
 	}
 
 	async function useQuestionnaire(text: string) {
+		// Leave the questionnaire's own history entries, so back doesn't return to a question.
+		const depth = page.state.askDepth ?? 0;
+		if (depth > 0) {
+			const popped = new Promise((resolve) => addEventListener('popstate', resolve, { once: true }));
+			history.go(-depth);
+			await popped;
+			await tick();
+		}
 		replaceState('/skapa', { askStep: 0 });
 		input = text;
 		await tick();
@@ -166,44 +174,49 @@
 		{/if}
 	</header>
 
-	<section class="chat" aria-live="polite">
-		{#if askStep}
+	{#if askStep}
+		<!-- Outside the chat's live region: each question is read once, when its heading takes focus. -->
+		<section class="chat">
 			<Questionnaire step={askStep} known={data.known} ongo={ask} oncancel={() => ask(0)} onfinish={useQuestionnaire} />
-		{:else if !view && !data.editing && data.workouts.length}
-			<div class="existing">
-				<span class="label">Eller redigera ett befintligt pass</span>
-				<div class="chips">
-					{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
+		</section>
+	{:else}
+		<section class="chat" aria-live="polite">
+			{#if !view && !data.editing && data.workouts.length}
+				<div class="existing">
+					<span class="label">Eller redigera ett befintligt pass</span>
+					<div class="chips">
+						{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
+					</div>
 				</div>
-			</div>
-		{/if}
-		{#if !askStep && !view?.log.length}
-			<MilonMessage>
-				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
-			</MilonMessage>
-			{#if !data.editing}
-				<button type="button" class="btn small help" onclick={() => ask(1)}>Hjälp mig beskriva passet</button>
 			{/if}
-			<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
-				{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
-			</a>
-		{/if}
-		{#each view?.log ?? [] as item, i (i)}
-			{#if item.role === 'assistant'}
-				<MilonMessage><Markdown text={item.text} /></MilonMessage>
-			{:else}
-				<p class="bubble {item.role}">{item.text}</p>
+			{#if !view?.log.length}
+				<MilonMessage>
+					{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
+				</MilonMessage>
+				{#if !data.editing}
+					<button type="button" class="btn small help" onclick={() => ask(1)}>Hjälp mig beskriva passet</button>
+				{/if}
+				<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
+					{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
+				</a>
 			{/if}
-		{/each}
-		{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
-		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
-		{#if turnsLeft === 0}
-			<p class="limit">Samtalet är fullt. Spara passet, eller <button type="button" class="link" onclick={newConversation}>börja ett nytt samtal</button>.</p>
-		{:else if turnsLeft !== null && turnsLeft <= 5}
-			<p class="limit">{turnsLeft === 1 ? '1 meddelande' : `${turnsLeft} meddelanden`} kvar i samtalet. Spara passet innan dess.</p>
-		{/if}
-		<div class="end" bind:this={logEnd}></div>
-	</section>
+			{#each view?.log ?? [] as item, i (i)}
+				{#if item.role === 'assistant'}
+					<MilonMessage><Markdown text={item.text} /></MilonMessage>
+				{:else}
+					<p class="bubble {item.role}">{item.text}</p>
+				{/if}
+			{/each}
+			{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
+			{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
+			{#if turnsLeft === 0}
+				<p class="limit">Samtalet är fullt. Spara passet, eller <button type="button" class="link" onclick={newConversation}>börja ett nytt samtal</button>.</p>
+			{:else if turnsLeft !== null && turnsLeft <= 5}
+				<p class="limit">{turnsLeft === 1 ? '1 meddelande' : `${turnsLeft} meddelanden`} kvar i samtalet. Spara passet innan dess.</p>
+			{/if}
+			<div class="end" bind:this={logEnd}></div>
+		</section>
+	{/if}
 
 	<form class="composer" hidden={askStep > 0} onsubmit={(e) => (e.preventDefault(), send(input))}>
 		<textarea

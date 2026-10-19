@@ -14,6 +14,8 @@
 		answerFromFact,
 		composeMessage,
 		factValue,
+		isKnown,
+		parseAnswers,
 		type Answer,
 		type Answers,
 		type KnownFacts,
@@ -59,16 +61,17 @@
 	const answer = $derived<Answer>(answers[question.id] ?? { selected: [], other: '' });
 	/** The answer to a profile question, and whether the profile already has it. */
 	const fact = $derived(question.fact ? factValue(question, answers[question.id]) : undefined);
-	const knownValue = $derived(question.fact === 'place' ? known.place : question.fact === 'experience' ? known.experience : undefined);
-	const alreadyKnown = $derived(fact !== undefined && (fact === knownValue || (question.fact === 'avoid' && known.rules.includes(fact))));
+	const alreadyKnown = $derived(isKnown(question, fact, known));
 
 	onMount(() => {
 		try {
 			const raw = sessionStorage.getItem(STORE);
-			const saved = raw ? (JSON.parse(raw) as Saved) : null;
-			if (saved && typeof saved.answers === 'object' && saved.answers) {
-				answers = saved.answers;
-				save = saved.save ?? {};
+			const saved = raw ? (JSON.parse(raw) as Partial<Saved>) : null;
+			const restored = saved && parseAnswers(saved.answers);
+			if (restored) {
+				answers = restored;
+				const s = saved.save ?? {};
+				save = { place: s.place === true, experience: s.experience === true, avoid: s.avoid === true };
 			}
 		} catch {
 			// No storage (private mode): the answers just aren't kept over a reload.
@@ -91,12 +94,10 @@
 		}
 	}
 
-	let previous = 0;
 	$effect(() => {
-		const at = step;
-		// The new question takes focus, so a screen reader reads it.
-		if (previous && previous !== at) void tick().then(() => heading?.focus());
-		previous = at;
+		// Each question takes focus when shown (also the first, as the button that opened it is gone), so a screen reader reads it.
+		void step;
+		void tick().then(() => heading?.focus());
 	});
 
 	function setAnswer(next: Answer) {
@@ -120,8 +121,7 @@
 		for (const q of QUESTIONS) {
 			if (!q.fact || !save[q.fact]) continue;
 			const value = factValue(q, answers[q.id]);
-			const knownAlready = q.fact === 'avoid' ? value !== undefined && known.rules.includes(value) : value === (q.fact === 'place' ? known.place : known.experience);
-			if (value && !knownAlready) body.set(q.fact, value);
+			if (value && !isKnown(q, value, known)) body.set(q.fact, value);
 		}
 		if ([...body.keys()].length === 0) return true;
 		try {

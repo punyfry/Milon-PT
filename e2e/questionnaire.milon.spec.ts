@@ -17,6 +17,8 @@ test('the answers become an editable first message, and chosen answers are saved
 	await open(page, '/skapa');
 	await page.getByRole('button', { name: 'Hjälp mig beskriva passet' }).click();
 	await expect(page).toHaveURL(/\/skapa\?steg=1$/);
+	// The question takes focus, for a screen reader.
+	await expect(page.getByRole('heading', { name: 'Vad ska passet fokusera på?' })).toBeFocused();
 	const next = page.getByRole('button', { name: 'Nästa' });
 
 	await expect(page.getByRole('group', { name: 'Vad ska passet fokusera på?' })).toBeVisible();
@@ -54,6 +56,8 @@ test('the answers become an editable first message, and chosen answers are saved
 	);
 	expect((await user.files())['profile.json']).toMatchObject({ coachContext: 'Tränar: på gym', rules: ['Inga hopp', 'Ont i knät'] });
 
+	// The questionnaire's step is gone from the URL.
+	await expect(page).toHaveURL(/\/skapa$/);
 	await message.fill(`${await message.inputValue()}\nMax 40 minuter.`);
 	await page.getByRole('button', { name: 'Skicka' }).click();
 	await expect(page.getByText(FAKE_CLAUDE_REPLY)).toBeVisible();
@@ -105,4 +109,17 @@ test("the intro's first workout with Milon starts with the questionnaire", async
 	await page.getByRole('button', { name: 'Bygg mitt första pass med Milon' }).click();
 	await expect(page).toHaveURL(/\/skapa\?steg=1$/);
 	await expect(page.getByText('Fråga 1 av 8')).toBeVisible();
+});
+
+test('back after the questionnaire leaves Skapa instead of returning to a question', async ({ page }) => {
+	await open(page, '/');
+	await page.getByRole('link', { name: 'Skapa' }).click();
+	await page.getByRole('button', { name: 'Hjälp mig beskriva passet' }).click();
+	await page.getByRole('button', { name: 'Nästa' }).click();
+	await expect(page.getByText('Fråga 2 av 8')).toBeVisible();
+	for (let i = 2; i < 8; i++) await page.getByRole('button', { name: 'Nästa' }).click();
+	await page.getByRole('button', { name: 'Klart' }).click();
+	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('Hej! Hjälp mig bygga ett nytt pass.');
+	await page.goBack();
+	await expect(page).toHaveURL(/\/$/);
 });

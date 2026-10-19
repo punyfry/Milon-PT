@@ -46,8 +46,21 @@ describe('the questionnaire in Skapa', () => {
 		expect((await getProfile(state.storage)).data).toEqual({ coachContext: 'Erfarenhet: ny på styrketräning' });
 	});
 
-	it('refuses answers past the limits and a profile changed at the same time', async () => {
+	it('adds a rule once', async () => {
+		await saveFacts({ avoid: 'Ont i knät' });
+		await saveFacts({ avoid: 'Ont i knät' });
+		expect((await getProfile(state.storage)).data.rules).toEqual(['Ont i knät']);
+	});
+
+	it('refuses answers past the limits, a file instead of text, and a profile changed at the same time', async () => {
 		expect(((await saveFacts({ avoid: 'x'.repeat(301) })) as { status: number }).status).toBe(400);
+		await saveProfile(state.storage, { rules: Array.from({ length: 30 }, (_, i) => `r${i}`) });
+		expect(await saveFacts({ avoid: 'en till' })).toMatchObject({ status: 400, data: { error: expect.stringMatching(/30 regler/) } });
+		const body = new FormData();
+		body.set('place', new File(['x'], 'x.txt'));
+		const request = new Request('https://milon.test/skapa?/profile', { method: 'POST', body });
+		expect(((await skapa.actions.profile({ locals, request } as never)) as { status: number }).status).toBe(400);
+		state.storage = new MemoryUserStorage('u1');
 		await saveProfile(state.storage, {});
 		const write = state.storage.writeJson.bind(state.storage);
 		state.storage.writeJson = async () => {

@@ -173,7 +173,8 @@ export function knownFacts(profile: Profile): KnownFacts {
 export function answerPhrases(question: Question, answer: Answer | undefined): string[] {
 	if (!answer) return [];
 	if (question.kind === 'text') {
-		const text = answer.other.trim();
+		// A saved answer is one line, like the rule it becomes; "Något mer?" keeps its lines.
+		const text = question.fact ? oneLine(answer.other) : answer.other.trim();
 		return text ? [text] : [];
 	}
 	const phrases = question.options.filter((o) => answer.selected.includes(o.value)).map((o) => o.phrase ?? o.label.toLowerCase());
@@ -184,8 +185,27 @@ export function answerPhrases(question: Question, answer: Answer | undefined): s
 
 /** The answer to a profile question, as one line to save; undefined when there is none. */
 export function factValue(question: Question, answer: Answer | undefined): string | undefined {
-	const text = answerPhrases(question, answer).join(', ');
-	return question.fact === 'avoid' ? text.trim() || undefined : oneLine(text) || undefined;
+	return oneLine(answerPhrases(question, answer).join(', ')) || undefined;
+}
+
+/** Whether the profile already has this answer: the same `Tränar:`/`Erfarenhet:` line, or the same rule. */
+export function isKnown(question: Question, value: string | undefined, known: KnownFacts): boolean {
+	if (value === undefined) return false;
+	if (question.fact === 'avoid') return known.rules.includes(value);
+	return (question.fact === 'place' && value === known.place) || (question.fact === 'experience' && value === known.experience);
+}
+
+/** Answers read back from sessionStorage, or null if they don't have the expected shape. */
+export function parseAnswers(v: unknown): Answers | null {
+	if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+	const answers: Answers = {};
+	for (const q of QUESTIONS) {
+		const a = (v as Record<string, unknown>)[q.id] as Partial<Answer> | undefined;
+		if (a === undefined) continue;
+		if (!Array.isArray(a?.selected) || !a.selected.every((x) => typeof x === 'string') || typeof a.other !== 'string') return null;
+		answers[q.id] = { selected: a.selected, other: a.other };
+	}
+	return answers;
 }
 
 /** An answer that preselects what the profile already says, or nothing. */
@@ -253,7 +273,7 @@ export function withFacts(profile: Profile, facts: FactsToSave): Profile {
 	if (context.length > MAX_GOALS) throw new FactError('Profilens text till Milon är full. Den kan inte ta fler svar.');
 	if (context) next.coachContext = context;
 
-	const avoid = facts.avoid?.trim();
+	const avoid = facts.avoid && oneLine(facts.avoid);
 	if (avoid) {
 		if (avoid.length > MAX_RULE) throw new FactError(`Svaret om skador får vara högst ${MAX_RULE} tecken.`);
 		const rules = profile.rules ?? [];
