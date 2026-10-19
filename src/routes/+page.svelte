@@ -81,7 +81,7 @@
 			<strong>{activeName}</strong>
 			<span class="meta">
 				{#if active.preparing}
-					{active.exercises.length} övningar · inte startat
+					{active.exercises.length} {active.exercises.length === 1 ? 'övning' : 'övningar'} · inte startat
 				{:else}
 					Övning {(active.current ?? 0) + 1} av {active.exercises.length} ·
 					<span class="num">{formatSeconds((now.getTime() - Date.parse(active.startedAt)) / 1000)}</span>

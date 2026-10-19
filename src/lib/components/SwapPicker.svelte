@@ -5,7 +5,18 @@
 	 * in (`onnew`), and Milon can suggest variants or new exercises (`onaskmilon`).
 	 */
 	import { formatSet } from '$lib/format';
-	import { Issues, MAX_NEW_EXERCISES, findSameExercise, issueText, validateExerciseInput, type ActiveSession, type ExerciseType, type NewSessionExercise } from '$lib/model';
+	import {
+		Issues,
+		MAX_NEW_EXERCISES,
+		findSameExercise,
+		fitsPhase,
+		issueText,
+		validateExerciseInput,
+		type ActiveSession,
+		type ExerciseType,
+		type ExtraPhase,
+		type NewSessionExercise
+	} from '$lib/model';
 	import { swapCandidates, type ExerciseInfo } from '$lib/session/active';
 	import ExerciseFields, { TYPE_LABEL } from './ExerciseFields.svelte';
 	import Icon from './Icon.svelte';
@@ -15,6 +26,8 @@
 		/** The exercise being swapped out. */
 		name: string;
 		type: ExerciseType | undefined;
+		/** A warm-up or stretch exercise is only swapped for one with time or reps (#100). */
+		phase?: ExtraPhase;
 		catalog: readonly ExerciseInfo[];
 		session: ActiveSession;
 		/** Shown when the helper is available. */
@@ -25,9 +38,9 @@
 		onclose: () => void;
 	}
 
-	let { name, type, catalog, session, onaskmilon, onpick, onnew, onclose }: Props = $props();
+	let { name, type, phase, catalog, session, onaskmilon, onpick, onnew, onclose }: Props = $props();
 	let query = $state('');
-	const candidates = $derived(swapCandidates(catalog, session, type, query));
+	const candidates = $derived(swapCandidates(catalog, session, type, query, phase));
 
 	// --- writing in a new exercise --------------------------------------------
 	let writing = $state(false);
@@ -45,6 +58,7 @@
 		const issues = new Issues();
 		const input = validateExerciseInput(fresh, issues, '');
 		if (!input) return void (newError = issueText(issues.list[0] ?? 'Kontrollera övningen'));
+		if (!fitsPhase(input.type, phase)) return void (newError = 'Uppvärmning och stretch har tid eller reps, inte vikt.');
 		const inSession = new Set(session.exercises.map((x) => x.exerciseId));
 		const known = findSameExercise([...catalog, ...(session.newExercises ?? [])], input);
 		if (known && inSession.has(known.id)) return void (newError = `${known.name} finns redan i passet.`);

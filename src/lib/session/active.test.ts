@@ -465,6 +465,17 @@ describe('warm-up and stretch (#100)', () => {
 		expect(s.exercises[1].sets[0]).toEqual({ weight: 40, reps: 8, done: false });
 	});
 
+	it('a warm-up or stretch is never swapped for a weight exercise', () => {
+		const s = createActiveSession(withParts, infos, new Date());
+		const press: ExerciseInfo = { id: 'ex_press', name: 'Press', type: 'weight', instruction: '' };
+		const side: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '' };
+		expect(swapCandidates([press, side], s, 'time', '', 'cooldown').map((e) => e.id)).toEqual(['ex_sidoplanka']);
+		expect(swapCandidates([press, side], s, 'time').map((e) => e.id)).toEqual(['ex_sidoplanka', 'ex_press']);
+		applySwap(s, 'ex_plankan', press, { seconds: 30 });
+		expect(s.exercises[2].exerciseId).toBe('ex_plankan');
+		expect(s.deviations).toEqual([]);
+	});
+
 	it('a swap keeps the phase', () => {
 		const s = createActiveSession(withParts, infos, new Date());
 		const side: ExerciseInfo = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time', instruction: '', lastEntry: { date: '2026-10-01', sets: [{ seconds: 90 }] } };

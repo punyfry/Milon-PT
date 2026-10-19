@@ -636,7 +636,7 @@
 			<p class="error warning">Kunde inte spara i telefonen. Byten kan försvinna om du stänger sidan.</p>
 		{/if}
 		<div class="pagehead">
-			<span class="label">{main.length} övningar · {totalSets} set</span>
+			<span class="label">{main.length} {main.length === 1 ? 'övning' : 'övningar'} · {totalSets} set</span>
 			<h1>{data.workout.name}</h1>
 		</div>
 		<ol class="ovlist">
@@ -938,6 +938,7 @@
 		<SwapPicker
 			name={infos.get(id)?.name ?? id}
 			type={infos.get(id)?.type}
+			phase={session.exercises.find((e) => e.exerciseId === id)?.phase}
 			catalog={data.catalog}
 			{session}
 			onaskmilon={data.helperAvailable ? () => askMilonToSwap(id) : undefined}

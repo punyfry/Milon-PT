@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import {
 	ValidationError,
+	fitsPhase,
 	isExerciseType,
 	isObject,
 	isPhase,
@@ -182,12 +183,14 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!targetMatchesType(tgt, exercise.type)) {
 		return fail(`${exercise.name} är av typen ${exercise.type}; målet ska anges i ${exercise.type === 'time' ? 'seconds' : 'reps'}.`);
 	}
-	if (part !== 'main' && exercise.type === 'weight') return fail(extraWeightError(exercise.name));
+	if (!fitsPhase(exercise.type, part)) return fail(extraWeightError(exercise.name));
 
 	const item: WorkoutExercise = { exerciseId: exercise.id, sets, target: tgt, ...phaseField(part) };
 	const index = state.draft.findIndex((d) => d.exerciseId === exercise!.id);
 	if (index >= 0) state.draft[index] = item;
 	else state.draft.push(item);
+	// The live list is shown as the workout will run: warm-up first, stretch last.
+	state.draft = sortByPhase(state.draft);
 
 	const summary = `${sets} set × ${formatTarget(tgt)}${part === 'main' ? '' : ` (${PHASE_NAME[part]})`}`;
 	return {
@@ -219,7 +222,7 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 			return problems.push(`exercises[${i}]: målet för ${ex.name} ska anges i ${ex.type === 'time' ? 'seconds' : 'reps'}`);
 		const part = parsePhase(x.phase);
 		if (!part) return problems.push(`exercises[${i}]: ${PHASE_ERROR}`);
-		if (part !== 'main' && ex.type === 'weight') return problems.push(`exercises[${i}]: ${extraWeightError(ex.name)}`);
+		if (!fitsPhase(ex.type, part)) return problems.push(`exercises[${i}]: ${extraWeightError(ex.name)}`);
 		if (exercises.some((e) => e.exerciseId === ex.id)) return problems.push(`exercises[${i}]: ${ex.name} finns redan i passet`);
 		exercises.push({ exerciseId: ex.id, sets, target: tgt, ...phaseField(part) });
 	});

@@ -8,6 +8,7 @@
 	import {
 		Issues,
 		findSameExercise,
+		fitsPhase,
 		issueText,
 		normalizeName,
 		phaseField,
@@ -113,8 +114,6 @@
 
 	const unit = (type: ExerciseType) => (type === 'time' ? 'sekunder' : 'reps');
 	const defaultAmount = (type: ExerciseType) => (type === 'time' ? 30 : 10);
-	/** Warm-up and stretch have no weights (#100). */
-	const fitsPhase = (type: ExerciseType, phase: Phase) => !isExtra(phase) || type !== 'weight';
 
 	// --- adding -------------------------------------------------------------
 

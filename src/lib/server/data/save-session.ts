@@ -12,6 +12,7 @@ import {
 	NEW_EXERCISE_ID,
 	SAFE_ID,
 	ValidationError,
+	fitsPhase,
 	NOTE_MAX,
 	isObject,
 	sessionIdFor,
@@ -148,7 +149,10 @@ export function applyDeviations(
 					? { seconds: first && 'seconds' in first && first.seconds > 0 ? first.seconds : 30 }
 					: { reps: first && 'reps' in first && first.reps > 0 ? first.reps : 8 };
 		}
-		return { exerciseId: to, sets: we.sets, target, ...(we.phase ? { phase: we.phase } : {}) };
+		// The rule of fitsPhase holds here too (a swap can't break it, but an older client could): a weight
+		// exercise swapped into a warm-up or stretch becomes part of the main workout.
+		const phase = type && !fitsPhase(type, we.phase) ? undefined : we.phase;
+		return { exerciseId: to, sets: we.sets, target, ...(phase ? { phase } : {}) };
 	});
 }
 

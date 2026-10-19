@@ -1,5 +1,5 @@
 import type { Exercise, SessionRecord, WorkoutTemplate } from '../src/lib/model/types';
-import { exercise, profile, workout } from './data';
+import { exercise, profile, session, workout } from './data';
 import { open, test, expect } from './fixtures';
 
 // Warm-up and stretch as optional parts of a workout (#100).
@@ -65,7 +65,7 @@ test('runs a workout: skips the warm-up, ticks off the stretches, and the totals
 	await open(page, '/pass/ben');
 	// The overview is split into the three parts and counts the main part.
 	for (const part of ['Uppvärmning', 'Pass', 'Stretch']) await expect(page.getByRole('heading', { name: part, exact: true })).toBeVisible();
-	await expect(page.getByText('1 övningar · 2 set')).toBeVisible();
+	await expect(page.getByText('1 övning · 2 set')).toBeVisible();
 	await page.getByRole('button', { name: 'Starta passet' }).click();
 
 	await expect(page.getByText('Uppvärmning 1 av 1')).toBeVisible();
@@ -106,4 +106,76 @@ test('runs a workout: skips the warm-up, ticks off the stretches, and the totals
 	const latest = page.getByRole('listitem').filter({ hasText: 'Stretch' });
 	await expect(latest).toHaveCount(1);
 	await expect(latest).not.toContainText('PR');
+});
+
+test('editing a saved session keeps a stretch a stretch', async ({ page, user }) => {
+	const id = 's_20261006';
+	const startedAt = '2026-10-06T17:00:00+02:00';
+	await user.seed({
+		...profile(),
+		...exercise({ id: 'ex_knaboj', name: 'Knäböj', log: [{ sessionId: id, startedAt, date: '2026-10-06', sets: [{ weight: 60, reps: 5 }] }] }),
+		...exercise({
+			id: 'ex_hoftbojare',
+			name: 'Höftböjarstretch',
+			type: 'time',
+			log: [{ sessionId: id, startedAt, date: '2026-10-06', sets: [{ seconds: 30 }], phase: 'cooldown' }]
+		}),
+		...workout({
+			slug: 'ben',
+			name: 'Ben',
+			exercises: [
+				{ exerciseId: 'ex_knaboj', sets: 1, target: { reps: 5 } },
+				{ exerciseId: 'ex_hoftbojare', sets: 1, target: { seconds: 30 }, phase: 'cooldown' }
+			]
+		}),
+		...session({ id, workoutSlug: 'ben', startedAt, endedAt: '2026-10-06T17:45:00+02:00', exerciseIds: ['ex_knaboj', 'ex_hoftbojare'] })
+	});
+	await open(page, `/historik/pass/${id}`);
+	await expect(page.getByRole('listitem').filter({ hasText: 'Höftböjarstretch' })).toContainText('Stretch');
+	await page.getByRole('button', { name: 'Redigera' }).click();
+	await page.getByRole('region', { name: 'Höftböjarstretch' }).getByLabel('Sekunder, set 1').fill('45');
+	await page.getByRole('button', { name: 'Spara ändringar' }).click();
+	await expect(page.getByRole('button', { name: 'Redigera' })).toBeVisible();
+
+	const entry = ((await user.files())['exercises/ex_hoftbojare.json'] as Exercise).log[0];
+	expect(entry).toMatchObject({ sessionId: id, sets: [{ seconds: 45 }], phase: 'cooldown' });
+});
+
+test('"Byt" on a warm-up exercise offers no weight exercises and keeps the warm-up', async ({ page, user }) => {
+	await user.seed({
+		...profile(),
+		...exercise({ id: 'ex_jumping_jacks', name: 'Jumping jacks', type: 'bodyweight' }),
+		...exercise({ id: 'ex_hoga_knan', name: 'Höga knän', type: 'bodyweight' }),
+		...exercise({ id: 'ex_knaboj', name: 'Knäböj' }),
+		...exercise({ id: 'ex_marklyft', name: 'Marklyft' }),
+		...workout({
+			slug: 'ben',
+			name: 'Ben',
+			exercises: [
+				{ exerciseId: 'ex_jumping_jacks', sets: 1, target: { reps: 20 }, phase: 'warmup' },
+				{ exerciseId: 'ex_knaboj', sets: 1, target: { reps: 8 } }
+			]
+		})
+	});
+	await open(page, '/pass/ben');
+	await page.getByRole('button', { name: 'Byt Jumping jacks' }).click();
+	const picker = page.getByRole('dialog');
+	await expect(picker.getByRole('button', { name: /Höga knän/ })).toBeVisible();
+	await expect(picker.getByRole('button', { name: /Marklyft/ })).toHaveCount(0);
+	await picker.getByRole('button', { name: /Höga knän/ }).click();
+
+	// Still the warm-up: first under its heading, ticked off without −/+.
+	await expect(page.getByRole('listitem').filter({ hasText: 'Höga knän' })).toContainText('Inbytt');
+	await page.getByRole('button', { name: 'Starta passet' }).click();
+	await expect(page.getByText('Uppvärmning 1 av 1')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Höga knän' })).toBeVisible();
+	await page.getByRole('button', { name: 'Klar: Höga knän' }).click();
+	await page.getByRole('button', { name: /Nästa: Knäböj/ }).click();
+	await page.getByRole('button', { name: 'Klarmarkera set 1' }).click();
+	await page.getByRole('button', { name: /Sammanfattning/ }).click();
+	await page.getByRole('button', { name: 'Avsluta pass' }).click();
+	await expect(page).toHaveURL(/\/($|\?)/);
+
+	const files = await user.files();
+	expect((files['exercises/ex_hoga_knan.json'] as Exercise).log[0]).toMatchObject({ sets: [{ reps: 20 }], phase: 'warmup' });
 });

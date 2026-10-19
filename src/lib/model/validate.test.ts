@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, fitsPhase, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -138,6 +138,15 @@ describe('phase (#100)', () => {
 		expect(assertValid('övning', entry('cooldown'), validateExercise).log[0].phase).toBe('cooldown');
 		expect(assertValid('övning', entry('main'), validateExercise).log[0]).not.toHaveProperty('phase');
 		expect(() => assertValid('övning', entry('x'), validateExercise)).toThrow(/log\[0\]\.phase/);
+	});
+
+	it('warm-up and stretch take time or reps, never weights', () => {
+		expect(fitsPhase('weight', 'warmup')).toBe(false);
+		expect(fitsPhase('weight', 'cooldown')).toBe(false);
+		expect(fitsPhase('time', 'cooldown')).toBe(true);
+		expect(fitsPhase('bodyweight', 'warmup')).toBe(true);
+		expect(fitsPhase('weight', 'main')).toBe(true);
+		expect(fitsPhase('weight', undefined)).toBe(true);
 	});
 
 	it('sorts by phase and keeps the order within each part', () => {

@@ -1,5 +1,5 @@
 import { formatSet as formatSetForDisplay } from '../../format';
-import type { ActiveSession, Exercise, LogEntry } from '../../model';
+import type { ActiveSession, Exercise, ExtraPhase, LogEntry } from '../../model';
 import { SCOPE_RULES, formatCatalog, formatNote } from '../builder/prompt';
 
 /** System prompt for the helper, with the context filled in. The prompt lives here, not in the docs. */
@@ -16,6 +16,7 @@ Regler:
 - Vill användaren byta övning: ge direkt två konkreta alternativ i första svaret, utan motfrågor. Båda måste träna samma muskelgrupp som övningen som byts ut, och gå att göra mitt i passet med ungefär samma utrustning. Föreslå aldrig en katalogövning som tränar en annan muskelgrupp, bara för att den finns i katalogen; föreslå hellre två nya. Fråga sedan vilket användaren väljer, och anropa swap_exercise direkt när hen svarar.
 - Användarens anteckning om en övning är hens egen. Ta hänsyn till den, särskilt vid byten: har något gjort ont eller varit för lätt, föreslå en annan variant, utan att ge råd om själva smärtan.
 - En ny övning får ett svenskt namn när det finns ett vedertaget (Hantelrodd, inte Dumbbell rows).
+- Uppvärmning och stretch är markerade. De räknas inte som prestation, och de byts bara mot övningar med tid eller reps, inte vikt.
 - Ändra aldrig vikter eller antal set själv. Förslag på justering ges i text och användaren avgör.
 - Skriv ren text utan markdown (ingen fetstil eller rubriker); radbrytningar går bra.
 
@@ -26,13 +27,16 @@ export function formatSet(...args: Parameters<typeof formatSetForDisplay>): stri
 	return formatSetForDisplay(...args).replace(/\u00a0/g, ' ');
 }
 
+/** ", uppvärmning" or ", stretch" for an exercise or log entry outside the main part (#100), so Milon doesn't read it as a drop. */
+const partText = (phase: ExtraPhase | undefined) => (phase === 'warmup' ? ', uppvärmning' : phase === 'cooldown' ? ', stretch' : '');
+
 /** "Marklyft (ex_marklyft, weight): 40 kg × 8 klart, 45 kg × 6", one line per exercise. */
 export function formatSessionState(session: ActiveSession, exercises: ReadonlyMap<string, Exercise>): string {
 	const lines = session.exercises.map((ex) => {
 		const info = exercises.get(ex.exerciseId);
 		const type = info?.type ?? 'bodyweight';
 		const sets = ex.sets.map((s) => `${formatSet(type, s)}${s.done ? ' klart' : ''}`).join(', ');
-		return `- ${info?.name ?? ex.exerciseId} (${ex.exerciseId}, ${type}): ${sets || 'inga set'}`;
+		return `- ${info?.name ?? ex.exerciseId} (${ex.exerciseId}, ${type}${partText(ex.phase)}): ${sets || 'inga set'}`;
 	});
 	return '\n' + lines.join('\n');
 }
@@ -48,7 +52,10 @@ export function formatHistory(exercise: Exercise | undefined): string {
 		noteLine +
 		`${exercise.name}:\n` +
 		entries
-			.map((e) => `- ${e.date}: ${e.sets.map((s) => formatSet(exercise.type, s)).join(', ')}${e.note ? ` (anteckning: ${e.note})` : ''}`)
+			.map(
+				(e) =>
+					`- ${e.date}${partText(e.phase)}: ${e.sets.map((s) => formatSet(exercise.type, s)).join(', ')}${e.note ? ` (anteckning: ${e.note})` : ''}`
+			)
 			.join('\n')
 	);
 }

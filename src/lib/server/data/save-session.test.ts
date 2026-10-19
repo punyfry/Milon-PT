@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveSession } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
+import { applyDeviations } from './save-session';
 import {
 	createExercise,
 	deleteExercise,
@@ -539,6 +540,22 @@ describe('warm-up and stretch (#100)', () => {
 		session.exercises = session.exercises.map((e) => (e.phase ? e : { ...e, sets: e.sets.map((s) => ({ ...s, done: false })) }));
 		const result = await saveSession(storage, { session, endedAt, saveAsNewVersion: false });
 		expect((await getSession(storage, result.sessionId))!.data.exerciseIds).toEqual(['ex_armhavning']);
+	});
+
+	it('a weight exercise swapped into a stretch by an older client becomes part of the main workout', () => {
+		const base = {
+			slug: 'pass-b',
+			name: 'Pass B',
+			version: 1,
+			createdAt: '2026-10-01',
+			exercises: [{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'cooldown' as const }]
+		};
+		const press = { id: 'ex_hantelpress', name: 'Hantelpress', type: 'weight' as const, instruction: '', log: [] };
+		const side = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time' as const, instruction: '', log: [] };
+		const exercises = new Map([press, side].map((e) => [e.id, e]));
+		const swapTo = (to: string) => applyDeviations(base, [{ type: 'swap', from: 'ex_plankan', to }], exercises, new Map());
+		expect(swapTo('ex_hantelpress')).toEqual([{ exerciseId: 'ex_hantelpress', sets: 1, target: { reps: 8 } }]);
+		expect(swapTo('ex_sidoplanka')).toEqual([{ exerciseId: 'ex_sidoplanka', sets: 1, target: { seconds: 30 }, phase: 'cooldown' }]);
 	});
 
 	it('rejects an unknown phase', () => {

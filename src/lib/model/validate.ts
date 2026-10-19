@@ -151,6 +151,15 @@ export function phaseField(phase: Phase | undefined): { phase?: ExtraPhase } {
 	return phase === 'warmup' || phase === 'cooldown' ? { phase } : {};
 }
 
+/**
+ * Warm-up and stretch are ticked off by time or reps (#100), so they never hold
+ * a weight exercise. Every way into a warm-up or stretch checks this: the
+ * builders, a swap during the workout and a swap saved as a new version.
+ */
+export function fitsPhase(type: ExerciseType, phase: Phase | undefined): boolean {
+	return phaseOf({ phase }) === 'main' || type !== 'weight';
+}
+
 /** Warm-up first, then the main part, then the stretch; the order within each part is kept. */
 export function sortByPhase<T extends { phase?: Phase }>(list: readonly T[]): T[] {
 	return [...list].sort((a, b) => PHASES.indexOf(phaseOf(a)) - PHASES.indexOf(phaseOf(b)));

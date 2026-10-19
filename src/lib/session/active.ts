@@ -3,12 +3,14 @@
  * get, so they work directly on Svelte state and can be tested without a DOM.
  */
 import {
+	fitsPhase,
 	normalizeName,
 	targetMatchesType,
 	type ActiveSession,
 	type ActiveSet,
 	type ExerciseSet,
 	type ExerciseType,
+	type ExtraPhase,
 	type LogEntry,
 	type Profile,
 	type Target,
@@ -139,18 +141,20 @@ export function startPreparedSession(session: ActiveSession, now: Date): void {
 /**
  * Exercises to offer in a swap: the catalog minus those already in the
  * session, matching `query` (case-insensitive, anywhere in the name), the
- * same type as the exercise swapped out first, then by name.
+ * same type as the exercise swapped out first, then by name. In a warm-up
+ * or stretch (`phase`) weight exercises are left out (see `fitsPhase`).
  */
 export function swapCandidates(
 	catalog: readonly ExerciseInfo[],
 	session: ActiveSession,
 	type: ExerciseType | undefined,
-	query = ''
+	query = '',
+	phase?: ExtraPhase
 ): ExerciseInfo[] {
 	const inSession = new Set(session.exercises.map((e) => e.exerciseId));
 	const q = normalizeName(query);
 	return catalog
-		.filter((e) => !inSession.has(e.id) && (!q || normalizeName(e.name).includes(q)))
+		.filter((e) => !inSession.has(e.id) && fitsPhase(e.type, phase) && (!q || normalizeName(e.name).includes(q)))
 		.sort((a, b) => Number(b.type === type) - Number(a.type === type) || a.name.localeCompare(b.name, 'sv'));
 }
 
@@ -377,7 +381,8 @@ export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 
  * Swaps an exercise in the active session (from the helper) and records the
  * swap as a deviation; the workout template is not touched.
  * - The new exercise gets prefilled sets, as many as the old one had. In a warm-up or stretch it
- *   takes over the phase and gets the target (when it fits the type) instead of its own history.
+ *   takes over the phase and gets the target (when it fits the type) instead of its own history;
+ *   a weight exercise can't go there (`fitsPhase`), so such a swap does nothing.
  * - If the old exercise has done sets they are kept, and the new one is added after it.
  * - Swapping an already swapped-in exercise again updates the deviation (A→B→C becomes A→C),
  *   and swapping back to the original removes the deviation.
@@ -385,6 +390,7 @@ export function kcalSuggestion(profile: Profile, workout: Pick<WorkoutTemplate, 
 export function applySwap(session: ActiveSession, fromId: string, to: ExerciseInfo, target?: Target): void {
 	const index = session.exercises.findIndex((e) => e.exerciseId === fromId);
 	if (index < 0 || session.exercises.some((e) => e.exerciseId === to.id)) return;
+	if (!fitsPhase(to.type, session.exercises[index].phase)) return;
 
 	const old = session.exercises[index];
 	const count = Math.max(old.sets.length, 1);

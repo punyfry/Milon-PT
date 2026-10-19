@@ -9,6 +9,7 @@ import {
 	ValidationError,
 	SAFE_ID,
 	findSameExercise,
+	fitsPhase,
 	isObject,
 	isPhase,
 	issueText,
@@ -156,7 +157,7 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	for (const item of input.items) {
 		const type = 'exerciseId' in item ? byId.get(item.exerciseId)?.type : item.newExercise.type;
 		const name = 'exerciseId' in item ? byId.get(item.exerciseId)?.name : item.newExercise.name;
-		if (item.phase && type === 'weight')
+		if (type && !fitsPhase(type, item.phase))
 			problems.push(`${name}: uppvärmning och stretch kan bara ha övningar med tid eller reps, inte vikt.`);
 	}
 	// The same exercise twice is caught before anything is created. A new one

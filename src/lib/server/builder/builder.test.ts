@@ -458,6 +458,14 @@ describe('warm-up and stretch in the builder (#100)', () => {
 		);
 		expect(out.event).toBe('Lade till Plankan: 1 set × 30 s (uppvärmning)');
 		expect(state.draft).toEqual([{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'warmup' }]);
+		// A main exercise proposed later still comes after the warm-up in the live list, and a new warm-up goes before it.
+		await executeTool(storage, state, 'propose_exercise', { ...newExercise, existingId: 'ex_marklyft', name: null, phase: 'main' }, TODAY);
+		await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'Höftcirklar', type: 'bodyweight', phase: 'warmup' }, TODAY);
+		expect(state.draft.map((d) => [d.exerciseId, d.phase])).toEqual([
+			['ex_plankan', 'warmup'],
+			['ex_hoftcirklar', 'warmup'],
+			['ex_marklyft', undefined]
+		]);
 		expect((await executeTool(storage, state, 'propose_exercise', { ...newExercise, phase: 'cooldown' }, TODAY)).content).toMatch(/viktövning/);
 	});
 });
