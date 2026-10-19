@@ -69,16 +69,39 @@ export const FAKE_WORKOUT_WITH_PARTS = {
 	]
 };
 
+/** What the fake proposes when asked to change what Milon knows (#110), whatever the request says. */
+export const FAKE_NOTES_PROPOSAL = {
+	rules: ['Inga hopp'],
+	context: ['Tränar: hemma med hantlar'],
+	summary: 'Jag tog bort knät och skrev att du tränar hemma.'
+};
+
 /**
  * Answers a Messages API request with a short text reply, or with a 400 error
  * (which the SDK doesn't retry) when the request contains FAKE_CLAUDE_ERROR.
  * With FAKE_CLAUDE_SAVE_WITH_PARTS it first calls `set_workout`, and replies once the tool result is back.
+ * A request offering `propose_notes` gets FAKE_NOTES_PROPOSAL.
  */
 function fakeClaude(body: string): { status: number; body: unknown } {
 	if (body.includes(FAKE_CLAUDE_ERROR)) {
 		return { status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: 'Fake error for the UI tests' } } };
 	}
 	const model = (JSON.parse(body) as { model?: string }).model ?? 'fake';
+	if (body.includes('"propose_notes"')) {
+		return {
+			status: 200,
+			body: {
+				id: 'msg_e2e',
+				type: 'message',
+				role: 'assistant',
+				model,
+				content: [{ type: 'tool_use', id: 'toolu_e2e', name: 'propose_notes', input: FAKE_NOTES_PROPOSAL }],
+				stop_reason: 'tool_use',
+				stop_sequence: null,
+				usage: { input_tokens: 1, output_tokens: 1 }
+			}
+		};
+	}
 	const tool = body.includes(FAKE_CLAUDE_SAVE_WITH_PARTS) && !body.includes('"tool_result"');
 	return {
 		status: 200,

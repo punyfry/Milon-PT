@@ -21,6 +21,7 @@ vi.mock('$lib/server/ai/client', async (original) => {
 
 const { POST: builder } = await import('./builder/+server');
 const { POST: helper } = await import('./helper/+server');
+const { POST: notes } = await import('./notes/+server');
 const { POST: importer } = await import('./import/+server');
 const { POST: sessions } = await import('./sessions/+server');
 const { POST: workouts } = await import('./workouts/+server');
@@ -299,5 +300,54 @@ describe('POST /api/workouts/[slug]/restore', () => {
 		expect((await call(restore as Handler, { version: 1, skipConflicts: 'ja' }, {}, paramsC)).status).toBe(400);
 		expect((await call(restore as Handler, 'inte json', {}, paramsC)).status).toBe(400);
 		expect(await call(restore as Handler, { version: 1, skipConflicts: true }, {}, paramsC)).toEqual({ status: 200, body: { version: 3 } });
+	});
+});
+
+describe('POST /api/notes (#110)', () => {
+	const toolReply = (input: unknown) => ({ model: 'claude-haiku-4-5', content: [{ type: 'tool_use', id: 't', name: 'propose_notes', input }], stop_reason: 'tool_use' });
+
+	it('validates the request before anything is counted or sent, and needs Milon on', async () => {
+		expect((await call(notes as Handler, { change: '  ' })).status).toBe(400);
+		expect((await call(notes as Handler, { change: 'x'.repeat(501) })).status).toBe(400);
+		await saveProfile(state.storage, { coach: false });
+		expect((await call(notes as Handler, { change: 'Knät är bra' })).status).toBe(403);
+		expect(await state.storage.list('usage/')).toEqual([]);
+		expect(createMessage).not.toHaveBeenCalled();
+	});
+
+	it("returns Milon's proposal with what it was made from, counts the call and saves nothing", async () => {
+		await saveProfile(state.storage, { rules: ['Ont i knät', 'Inga hopp'], coachContext: 'Tränar: på gym' });
+		createMessage.mockResolvedValue(toolReply({ rules: ['Inga hopp'], context: ['Tränar: på gym'], summary: 'Tog bort knät.' }));
+		const res = await call(notes as Handler, { change: 'Knät är bra nu' });
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual({
+			base: { rules: ['Ont i knät', 'Inga hopp'], context: ['Tränar: på gym'] },
+			proposal: { rules: ['Inga hopp'], context: ['Tränar: på gym'] },
+			summary: 'Tog bort knät.'
+		});
+		const params = createMessage.mock.calls[0][0];
+		expect(params.tools[0].name).toBe('propose_notes');
+		expect(params.system).toContain('- Ont i knät');
+		expect(params.messages).toEqual([{ role: 'user', content: 'Knät är bra nu' }]);
+		expect(await state.storage.list('usage/')).toHaveLength(2);
+		const { getProfile } = await import('$lib/server/data');
+		expect((await getProfile(state.storage)).data.rules).toEqual(['Ont i knät', 'Inga hopp']);
+	});
+
+	it('answers 502 when Milon gives no usable proposal', async () => {
+		createMessage.mockResolvedValue({ model: 'claude-haiku-4-5', content: [{ type: 'text', text: 'Hej' }], stop_reason: 'end_turn' });
+		expect((await call(notes as Handler, { change: 'Knät är bra' })).status).toBe(502);
+		createMessage.mockResolvedValue(toolReply({ rules: ['x'.repeat(400)], context: [], summary: '' }));
+		const res = await call(notes as Handler, { change: 'Knät är bra' });
+		expect(res.status).toBe(502);
+		expect(res.body.message).toMatch(/kunde inte föreslå/);
+	});
+
+	it('stops at the daily limit without calling Claude', async () => {
+		env.AI_DAILY_LIMIT = '0';
+		env.AI_STARTER_CALLS = '0';
+		expect((await call(notes as Handler, { change: 'Knät är bra' })).status).toBe(429);
+		expect(createMessage).not.toHaveBeenCalled();
+		delete env.AI_STARTER_CALLS;
 	});
 });
