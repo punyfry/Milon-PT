@@ -329,5 +329,4 @@ describe('import with profile, notes and sessions', () => {
 		const input = parseImportFile({ sessions: [{ date: '2026-09-29', workout: 'Pass X' }] });
 		await expect(planImportFor(storage, input, TODAY)).rejects.toThrow(/Pass X/);
 	});
-
 });

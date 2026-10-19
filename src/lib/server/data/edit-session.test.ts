@@ -311,6 +311,8 @@ describe('edge cases', () => {
 		expect(() => parseEditSessionInput({ ...ok, exercises: [ok.exercises[0], ok.exercises[0]] })).toThrow(/exercises\[1\]/);
 		expect(() => parseEditSessionInput({ ...ok, exercises: [{ exerciseId: '../x', sets: [{ reps: 1 }] }] })).toThrow(/exercises\[0\]/);
 		expect(parseEditSessionInput({ ...ok, kcalEstimate: 312.6 }).kcalEstimate).toBe(313);
+		expect(() => parseEditSessionInput({ ...ok, kcalEstimate: 6000 })).toThrow(/Kcal/);
+		expect(() => parseEditSessionInput({ ...ok, kcalEstimate: 'x' })).toThrow(/Kcal/);
 	});
 
 	it('returns null or false for invalid ids', async () => {
