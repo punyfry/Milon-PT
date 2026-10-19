@@ -14,6 +14,9 @@ declare global {
 			introChoice?: 'on' | 'off' | null;
 			/** How many intro entries were pushed up to this one, so its back arrow never leaves the intro. */
 			introDepth?: number;
+			/** The questionnaire's step in Skapa (#102), 0 when closed, and how many of its entries were pushed. */
+			askStep?: number;
+			askDepth?: number;
 		}
 		// interface Platform {}
 	}

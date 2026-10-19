@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { goto, invalidateAll, replaceState } from '$app/navigation';
+	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { PHASE_LABEL } from '$lib/format';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import MilonMessage from '$lib/components/MilonMessage.svelte';
+	import Questionnaire from '$lib/components/Questionnaire.svelte';
+	import { QUESTIONS } from '$lib/builder/questionnaire';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import type { ConversationView } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
@@ -80,6 +82,42 @@
 		await goto(data.editing ? `/skapa?pass=${data.editing.slug}` : '/skapa', { replaceState: true });
 	}
 
+	/**
+	 * The questionnaire (#102), only for a new workout before the conversation
+	 * starts. Its step is in the URL (`?steg=`, from 1), like the intro: steps added
+	 * here are read from page.state, since shallow routing doesn't update page.url.
+	 */
+	const askStep = $derived.by(() => {
+		if (data.editing || view?.log.length) return 0;
+		const n = page.state.askStep ?? Number(page.url.searchParams.get('steg'));
+		return Number.isInteger(n) && n > 0 ? Math.min(n, QUESTIONS.length) : 0;
+	});
+
+	const askUrl = (n: number) => (n > 0 ? `/skapa?steg=${n}` : '/skapa');
+
+	function ask(n: number) {
+		const depth = page.state.askDepth ?? 0;
+		// Back over an entry this page added; at the first one (or after a reload) step back in place instead.
+		if (n === askStep - 1 && depth > 0) history.back();
+		else if (n < askStep) replaceState(askUrl(n), { askStep: n, askDepth: 0 });
+		else pushState(askUrl(n), { askStep: n, askDepth: depth + 1 });
+	}
+
+	async function useQuestionnaire(text: string) {
+		// Leave the questionnaire's own history entries, so back doesn't return to a question.
+		const depth = page.state.askDepth ?? 0;
+		if (depth > 0) {
+			const popped = new Promise((resolve) => addEventListener('popstate', resolve, { once: true }));
+			history.go(-depth);
+			await popped;
+			await tick();
+		}
+		replaceState('/skapa', { askStep: 0 });
+		input = text;
+		await tick();
+		document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus();
+	}
+
 	/** Only for a conversation the server knows; null hides the hint. */
 	const turnsLeft = $derived(view?.conversationId ? view.turnsLeft : null);
 
@@ -136,41 +174,51 @@
 		{/if}
 	</header>
 
-	<section class="chat" aria-live="polite">
-		{#if !view && !data.editing && data.workouts.length}
-			<div class="existing">
-				<span class="label">Eller redigera ett befintligt pass</span>
-				<div class="chips">
-					{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
+	{#if askStep}
+		<!-- Outside the chat's live region: each question is read once, when its heading takes focus. -->
+		<section class="chat">
+			<Questionnaire step={askStep} known={data.known} ongo={ask} oncancel={() => ask(0)} onfinish={useQuestionnaire} />
+		</section>
+	{:else}
+		<section class="chat" aria-live="polite">
+			{#if !view && !data.editing && data.workouts.length}
+				<div class="existing">
+					<span class="label">Eller redigera ett befintligt pass</span>
+					<div class="chips">
+						{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
+					</div>
 				</div>
-			</div>
-		{/if}
-		{#if !view?.log.length}
-			<MilonMessage>
-				{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
-			</MilonMessage>
-			<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
-				{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
-			</a>
-		{/if}
-		{#each view?.log ?? [] as item, i (i)}
-			{#if item.role === 'assistant'}
-				<MilonMessage><Markdown text={item.text} /></MilonMessage>
-			{:else}
-				<p class="bubble {item.role}">{item.text}</p>
 			{/if}
-		{/each}
-		{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
-		{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
-		{#if turnsLeft === 0}
-			<p class="limit">Samtalet är fullt. Spara passet, eller <button type="button" class="link" onclick={newConversation}>börja ett nytt samtal</button>.</p>
-		{:else if turnsLeft !== null && turnsLeft <= 5}
-			<p class="limit">{turnsLeft === 1 ? '1 meddelande' : `${turnsLeft} meddelanden`} kvar i samtalet. Spara passet innan dess.</p>
-		{/if}
-		<div class="end" bind:this={logEnd}></div>
-	</section>
+			{#if !view?.log.length}
+				<MilonMessage>
+					{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
+				</MilonMessage>
+				{#if !data.editing}
+					<button type="button" class="btn small help" onclick={() => ask(1)}>Hjälp mig beskriva passet</button>
+				{/if}
+				<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
+					{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
+				</a>
+			{/if}
+			{#each view?.log ?? [] as item, i (i)}
+				{#if item.role === 'assistant'}
+					<MilonMessage><Markdown text={item.text} /></MilonMessage>
+				{:else}
+					<p class="bubble {item.role}">{item.text}</p>
+				{/if}
+			{/each}
+			{#if sending}<MilonMessage thinking>Milon skriver…</MilonMessage>{/if}
+			{#if failure}<p class="bubble error" role="alert">{failure}</p>{/if}
+			{#if turnsLeft === 0}
+				<p class="limit">Samtalet är fullt. Spara passet, eller <button type="button" class="link" onclick={newConversation}>börja ett nytt samtal</button>.</p>
+			{:else if turnsLeft !== null && turnsLeft <= 5}
+				<p class="limit">{turnsLeft === 1 ? '1 meddelande' : `${turnsLeft} meddelanden`} kvar i samtalet. Spara passet innan dess.</p>
+			{/if}
+			<div class="end" bind:this={logEnd}></div>
+		</section>
+	{/if}
 
-	<form class="composer" onsubmit={(e) => (e.preventDefault(), send(input))}>
+	<form class="composer" hidden={askStep > 0} onsubmit={(e) => (e.preventDefault(), send(input))}>
 		<textarea
 			bind:value={input}
 			onkeydown={onKeydown}
@@ -311,6 +359,9 @@
 		font-size: 14px;
 		color: var(--danger);
 	}
+	.help {
+		align-self: flex-start;
+	}
 	.manual {
 		align-self: flex-start;
 		font-size: 14px;
@@ -333,6 +384,9 @@
 		padding: 10px 20px 12px;
 		display: grid;
 		gap: 8px;
+	}
+	.composer[hidden] {
+		display: none;
 	}
 	textarea {
 		width: 100%;
