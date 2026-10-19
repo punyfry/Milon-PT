@@ -13,7 +13,7 @@ import {
 	NOTE_MAX,
 	ValidationError,
 	isObject,
-	validateSet,
+	validateLoggedSet,
 	type ExerciseSet,
 	type ExerciseType,
 	type ExtraPhase,
@@ -29,8 +29,6 @@ import { getWorkout } from './workouts';
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_TIME = /^(\d{4}-\d{2}-\d{2})T(([01]\d|2[0-3]):[0-5]\d)$/;
-/** Upper bounds for typed values, so a typo like 6000 kg is caught. */
-const MAX = { weight: 1000, reps: 1000, seconds: 6 * 3600 };
 
 export interface SessionDetail {
 	session: SessionRecord;
@@ -161,9 +159,7 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 		}
 		const sets = e.sets.map((s, j) => {
 			const path = `exercises[${i}].sets[${j}]`;
-			const set = validateSet(s, stored.data.type, issues, path);
-			if (set && Object.entries(set).some(([k, v]) => v > MAX[k as keyof typeof MAX])) issues.add(path, 'Orimligt högt värde.');
-			return set;
+			return validateLoggedSet(s, stored.data.type, issues, path);
 		});
 		kept.set(e.exerciseId, sets.filter((s) => s !== null));
 	}

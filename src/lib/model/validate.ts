@@ -12,7 +12,7 @@ import type {
 	WorkoutExercise,
 	WorkoutTemplate
 } from './types';
-import { NOTE_MAX } from './types';
+import { NOTE_MAX, SET_MAX } from './types';
 
 /**
  * Hand-written validators for the data model. Each validator collects issues
@@ -223,6 +223,23 @@ export function validateSet(v: unknown, type: ExerciseType, issues: Issues, path
 		if (seconds !== undefined) set = { seconds };
 	}
 	return issues.list.length === before ? set : null;
+}
+
+/**
+ * `validateSet` plus the upper bounds in SET_MAX. For sets that are being
+ * saved or edited; files already stored are read with `validateSet`.
+ */
+export function validateLoggedSet(v: unknown, type: ExerciseType, issues: Issues, path: string): ExerciseSet | null {
+	const set = validateSet(v, type, issues, path);
+	if (!set) return null;
+	let ok = true;
+	for (const [key, value] of Object.entries(set) as [keyof typeof SET_MAX, number][]) {
+		if (value > SET_MAX[key]) {
+			issues.add(join(path, key), `får vara högst ${SET_MAX[key]}`);
+			ok = false;
+		}
+	}
+	return ok ? set : null;
 }
 
 export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues, path: string): LogEntry | null {

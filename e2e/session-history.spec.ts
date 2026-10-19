@@ -39,6 +39,15 @@ test('editing a set is saved to the exercise log', async ({ page, user }) => {
 	expect(log[0].sets).toEqual([{ weight: 60, reps: 5 }, { weight: 62.5, reps: 5 }]);
 });
 
+test('a set above the upper bounds is not saved (#89)', async ({ page, user }) => {
+	await open(page, `/historik/pass/${ID}`);
+	await page.getByRole('button', { name: 'Redigera' }).click();
+	await page.getByLabel('Vikt i kg, set 2').fill('1000');
+	await page.getByRole('button', { name: 'Spara ändringar' }).click();
+	await expect(page.getByText(/Kontrollera värdena för Marklyft \(högst 500 kg/)).toBeVisible();
+	expect(((await user.files())['exercises/ex_marklyft.json'] as Exercise).log[0].sets[1]).toEqual({ weight: 60, reps: 5 });
+});
+
 test('an edit made in another tab since the page was loaded is not overwritten', async ({ page, context, user }) => {
 	const other = await context.newPage();
 	await open(page, `/historik/pass/${ID}`);

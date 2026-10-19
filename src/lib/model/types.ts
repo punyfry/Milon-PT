@@ -22,6 +22,13 @@ export interface TimeSet {
 }
 export type ExerciseSet = WeightSet | RepsSet | TimeSet;
 
+/**
+ * Upper bounds for a logged set (#89), so a typo such as 1000 kg doesn't skew
+ * records, 1RM and volume. Checked when a set is saved or edited, not when
+ * files are read, so older data stays readable.
+ */
+export const SET_MAX = { weight: 500, reps: 200, seconds: 3 * 3600 } as const;
+
 export interface LogEntry {
 	/** Missing for entries imported without a session. */
 	sessionId?: string;

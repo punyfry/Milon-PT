@@ -203,7 +203,7 @@ describe('editing a session', () => {
 		).rejects.toBeInstanceOf(ValidationError);
 		await expect(
 			editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 4000, reps: 5 }] }] }), now)
-		).rejects.toThrow(/Orimligt/);
+		).rejects.toThrow(/weight: får vara högst 500/);
 		// Nothing was written by the refused edits.
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets).toEqual([{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }]);
 		expect((await getSession(storage, 's_20261006'))!.version).toBe(detail.version);

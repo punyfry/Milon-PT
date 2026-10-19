@@ -74,6 +74,19 @@ describe('active session', () => {
 		expect(prefillSets(odd, 1)).toEqual([{ reps: 7, done: false }]);
 	});
 
+	it('ignores values above the upper bounds and caps prefilled ones (#89)', () => {
+		const set = { weight: 40, reps: 200, done: false };
+		setField(set, 'weight', 500.01);
+		setField(set, 'reps', 201);
+		expect(set).toEqual({ weight: 40, reps: 200, done: false });
+		setField(set, 'weight', 500);
+		expect(set.weight).toBe(500);
+
+		const heavy: ExerciseInfo = { ...deadlift, lastEntry: { date: '2026-10-01', sets: [{ weight: 1000, reps: 300 }] } };
+		expect(prefillSets(heavy, 1)).toEqual([{ weight: 500, reps: 200, done: false }]);
+		expect(prefillSets({ ...deadlift, lastEntry: undefined }, 1, { reps: 999 })).toEqual([{ weight: 0, reps: 200, done: false }]);
+	});
+
 	it('sets typed values and ignores invalid ones', () => {
 		const set = { weight: 40, reps: 8, done: false };
 		setField(set, 'weight', 41.255);

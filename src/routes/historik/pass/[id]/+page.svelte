@@ -3,7 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import { PHASE_LABEL, formatDuration, formatSet } from '$lib/format';
-	import { NOTE_MAX, type ExerciseType } from '$lib/model';
+	import { NOTE_MAX, SET_MAX, type ExerciseType } from '$lib/model';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -68,7 +68,9 @@
 			}
 			return type === 'time' ? { seconds: int(d.seconds) } : { reps: int(d.reps) };
 		});
-		return out.every((set) => Object.values(set).every(Number.isFinite)) ? out : null;
+		const ok = (set: (typeof out)[number]) =>
+			Object.entries(set).every(([key, value]) => Number.isFinite(value) && value <= SET_MAX[key as keyof typeof SET_MAX]);
+		return out.every(ok) ? out : null;
 	}
 
 	async function save() {
@@ -76,7 +78,7 @@
 		const exercises = [];
 		for (const e of draft.exercises.filter((x) => !x.removed)) {
 			const sets = toSets(e.type, e.sets);
-			if (!sets) return void (error = `Kontrollera värdena för ${e.name}.`);
+			if (!sets) return void (error = `Kontrollera värdena för ${e.name} (högst ${SET_MAX.weight} kg, ${SET_MAX.reps} reps och ${SET_MAX.seconds} sekunder per set).`);
 			exercises.push({ exerciseId: e.id, sets, note: e.note.trim() });
 		}
 		const kcal = draft.kcal.trim();
