@@ -266,8 +266,8 @@
 								<p class="muted">Milon föreslår ingen ändring.</p>
 							{:else}
 								<ul class="changes">
-									{#each [...diff.rules.removed, ...diff.context.removed] as text (text)}<li class="removed"><span class="sr-only">Tas bort: </span>{text}</li>{/each}
-									{#each [...diff.rules.added, ...diff.context.added] as text (text)}<li class="added"><span class="sr-only">Läggs till: </span>{text}</li>{/each}
+									{#each [...diff.rules.removed, ...diff.context.removed] as text (text)}<li class="removed"><span class="sr-only">Tas bort:</span> {text}</li>{/each}
+									{#each [...diff.rules.added, ...diff.context.added] as text (text)}<li class="added"><span class="sr-only">Läggs till:</span> {text}</li>{/each}
 								</ul>
 								<form method="POST" action="?/notes" use:enhance={enhanceNotes}>
 									<input type="hidden" name="base" value={JSON.stringify(proposal.base)} />
