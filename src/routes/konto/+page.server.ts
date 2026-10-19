@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { coachEnabled, type Profile } from '$lib/model';
+import { ValidationError, coachEnabled, coachNotes, parseNotes, sameNotes, withNotes, type Profile } from '$lib/model';
 import { isAiConfigured } from '$lib/server/ai/client';
 import { canImport } from '$lib/server/allowlist';
 import { deleteAccount, getProfile, saveProfile } from '$lib/server/data';
@@ -13,16 +13,23 @@ export const load: PageServerLoad = async ({ locals }) => {
 		user: locals.user,
 		weeklySessionGoal: profile.data.weeklySessionGoal ?? null,
 		coach: coachEnabled(profile.data),
+		/** What Milon knows about the user (#110). */
+		notes: coachNotes(profile.data),
 		aiConfigured: isAiConfigured(),
 		canImport: canImport(locals.user?.email)
 	};
 };
 
-/** Reads the profile, applies `change` and saves it. False if it was changed at the same time. */
-async function updateProfile(storage: UserStorage, change: (profile: Profile) => void): Promise<boolean> {
+/**
+ * Reads the profile, applies `change` and saves it. False if it was changed at the same time,
+ * or if `change` returns false (what it was to change is no longer there).
+ */
+async function updateProfile(storage: UserStorage, change: (profile: Profile) => Profile | void | false): Promise<boolean> {
 	const current = await getProfile(storage);
-	const profile = { ...current.data };
-	change(profile);
+	let profile: Profile = { ...current.data };
+	const result = change(profile);
+	if (result === false) return false;
+	if (result) profile = result;
 	try {
 		await saveProfile(storage, profile, current.version);
 		return true;
@@ -57,6 +64,41 @@ export const actions: Actions = {
 		});
 		if (!saved) return fail(409, { coachError: 'Profilen ändrades samtidigt. Försök igen.' });
 		return { coachSaved: true };
+	},
+
+	/** Removes one rule or line from what Milon knows (#110). The text is sent, so a changed list removes nothing else. */
+	forget: async ({ locals, request }) => {
+		const form = await request.formData();
+		const kind = form.get('kind');
+		const text = form.get('text');
+		if ((kind !== 'rules' && kind !== 'context') || typeof text !== 'string') return fail(400, { notesError: 'Ogiltig rad.' });
+		const saved = await updateProfile(storageFor(locals), (profile) => {
+			const notes = coachNotes(profile);
+			if (!notes[kind].includes(text)) return false;
+			return withNotes(profile, { ...notes, [kind]: notes[kind].filter((x) => x !== text) });
+		});
+		if (!saved) return fail(409, { notesError: 'Listan ändrades samtidigt. Försök igen.' });
+		return { notesSaved: true };
+	},
+
+	/**
+	 * Saves Milon's proposal (from /api/notes) once the user approves it. `base` is what the
+	 * proposal was made from; if the notes changed since, nothing is saved.
+	 */
+	notes: async ({ locals, request }) => {
+		const form = await request.formData();
+		let base, proposal;
+		try {
+			base = parseNotes(JSON.parse(String(form.get('base') ?? '')));
+			proposal = parseNotes(JSON.parse(String(form.get('proposal') ?? '')));
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { notesError: e.issues.join(' ') });
+			if (e instanceof SyntaxError) return fail(400, { notesError: 'Ogiltigt förslag.' });
+			throw e;
+		}
+		const saved = await updateProfile(storageFor(locals), (profile) => sameNotes(coachNotes(profile), base) && withNotes(profile, proposal));
+		if (!saved) return fail(409, { notesError: 'Listan ändrades samtidigt. Fråga Milon igen.' });
+		return { notesSaved: true };
 	},
 
 	/**
