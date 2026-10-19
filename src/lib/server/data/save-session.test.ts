@@ -122,6 +122,19 @@ describe('save session', () => {
 		expect((await getExercise(storage, 'ex_plankan'))!.data.log[0]).not.toHaveProperty('note');
 	});
 
+	it('refuses a done set above the upper bounds and writes nothing (#89)', async () => {
+		const storage = await setup();
+		const session = active();
+		session.exercises[0].sets[1] = { weight: 1000, reps: 6, done: true };
+		await expect(saveSession(storage, input(session))).rejects.toThrow(/weight: får vara högst 500/);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log).toEqual([]);
+		expect(await getSession(storage, 's_20261006')).toBeNull();
+		// A set that is not done is not saved, so it is not checked either.
+		session.exercises[0].sets[1] = { weight: 45, reps: 6, done: true };
+		session.exercises[0].sets[2] = { weight: 1000, reps: 6, done: false };
+		await expect(saveSession(storage, input(session))).resolves.toEqual({ sessionId: 's_20261006', alreadySaved: false });
+	});
+
 	it('refuses a note that is too long or not text', () => {
 		const session = active();
 		session.exercises[0].note = 'x'.repeat(1001);
@@ -433,6 +446,14 @@ describe('exercises written in during the session', () => {
 		expect(again.alreadySaved).toBe(true);
 		expect((await listExercises(storage)).map((e) => e.data.id).filter((id) => id.startsWith('ex_hantelrodd'))).toEqual(['ex_hantelrodd']);
 		expect((await getExercise(storage, 'ex_hantelrodd'))!.data.log).toHaveLength(1);
+	});
+
+	it('creates no exercise when a stored exercise has a done set above the bounds (#89)', async () => {
+		const storage = await setup();
+		const session = withNew();
+		session.exercises[0].sets[0] = { weight: 1000, reps: 8, done: true };
+		await expect(saveSession(storage, input(session))).rejects.toThrow(/exercises\[0\]\.sets\[0\]\.weight: får vara högst 500/);
+		expect(await getExercise(storage, 'ex_hantelrodd')).toBeNull();
 	});
 
 	it('saves the note of a written-in exercise with its log entry', async () => {

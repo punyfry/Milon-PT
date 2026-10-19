@@ -49,3 +49,15 @@ test('a change to a set carries over to the following open sets with the same va
 		{ weight: 45, reps: 9 }
 	]);
 });
+
+test('a typed weight above the upper bound is ignored (#89)', async ({ page }) => {
+	await open(page, '/pass/ben');
+	await page.getByRole('button', { name: 'Starta passet' }).click();
+	const weight = page.getByRole('textbox', { name: 'Vikt i kg, set 1' });
+	await weight.fill('1000');
+	await weight.press('Enter');
+	await expect(weight).toHaveValue('40');
+	await weight.fill('500');
+	await weight.press('Enter');
+	await expect(weight).toHaveValue('500');
+});

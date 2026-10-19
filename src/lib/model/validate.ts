@@ -12,7 +12,7 @@ import type {
 	WorkoutExercise,
 	WorkoutTemplate
 } from './types';
-import { NOTE_MAX } from './types';
+import { NOTE_MAX, SET_MAX } from './types';
 
 /**
  * Hand-written validators for the data model. Each validator collects issues
@@ -223,6 +223,34 @@ export function validateSet(v: unknown, type: ExerciseType, issues: Issues, path
 		if (seconds !== undefined) set = { seconds };
 	}
 	return issues.list.length === before ? set : null;
+}
+
+/** The fields of a set (any shape) that are above SET_MAX. */
+export function fieldsAboveSetMax(set: object): (keyof typeof SET_MAX)[] {
+	const values = set as Partial<Record<keyof typeof SET_MAX, unknown>>;
+	return (Object.keys(SET_MAX) as (keyof typeof SET_MAX)[]).filter((key) => typeof values[key] === 'number' && values[key] > SET_MAX[key]);
+}
+
+/** Same weight, reps and seconds. */
+export function sameSetValues(a: ExerciseSet, b: ExerciseSet): boolean {
+	const x = a as Partial<Record<keyof typeof SET_MAX, number>>;
+	const y = b as Partial<Record<keyof typeof SET_MAX, number>>;
+	return x.weight === y.weight && x.reps === y.reps && x.seconds === y.seconds;
+}
+
+/**
+ * `validateSet` plus the upper bounds in SET_MAX. For sets that are being
+ * saved or edited; files already stored are read with `validateSet`.
+ * A set equal to one in `stored` (the same session's sets as saved before)
+ * is accepted as it is, so older data above the bounds can still be edited
+ * around without changing it.
+ */
+export function validateLoggedSet(v: unknown, type: ExerciseType, issues: Issues, path: string, stored: readonly ExerciseSet[] = []): ExerciseSet | null {
+	const set = validateSet(v, type, issues, path);
+	if (!set) return null;
+	const above = stored.some((s) => sameSetValues(s, set)) ? [] : fieldsAboveSetMax(set);
+	for (const key of above) issues.add(join(path, key), `får vara högst ${SET_MAX[key]}`);
+	return above.length ? null : set;
 }
 
 export function validateLogEntry(v: unknown, type: ExerciseType, issues: Issues, path: string): LogEntry | null {

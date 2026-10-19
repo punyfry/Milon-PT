@@ -13,7 +13,7 @@ import {
 	NOTE_MAX,
 	ValidationError,
 	isObject,
-	validateSet,
+	validateLoggedSet,
 	type ExerciseSet,
 	type ExerciseType,
 	type ExtraPhase,
@@ -29,8 +29,6 @@ import { getWorkout } from './workouts';
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_TIME = /^(\d{4}-\d{2}-\d{2})T(([01]\d|2[0-3]):[0-5]\d)$/;
-/** Upper bounds for typed values, so a typo like 6000 kg is caught. */
-const MAX = { weight: 1000, reps: 1000, seconds: 6 * 3600 };
 
 export interface SessionDetail {
 	session: SessionRecord;
@@ -159,12 +157,9 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 			issues.add(`exercises[${i}]`, `övningen ${e.exerciseId} finns inte`);
 			continue;
 		}
-		const sets = e.sets.map((s, j) => {
-			const path = `exercises[${i}].sets[${j}]`;
-			const set = validateSet(s, stored.data.type, issues, path);
-			if (set && Object.entries(set).some(([k, v]) => v > MAX[k as keyof typeof MAX])) issues.add(path, 'Orimligt högt värde.');
-			return set;
-		});
+		// Sets already saved for this session are kept as they are, even above the bounds.
+		const before = stored.data.log.find((l) => l.sessionId === id)?.sets ?? [];
+		const sets = e.sets.map((s, j) => validateLoggedSet(s, stored.data.type, issues, `exercises[${i}].sets[${j}]`, before));
 		kept.set(e.exerciseId, sets.filter((s) => s !== null));
 	}
 	if (!issues.ok) throw new ValidationError('ändring', issues.list);

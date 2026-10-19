@@ -7,6 +7,7 @@
 	import { PHASE_LABEL } from '$lib/format';
 	import {
 		Issues,
+		SET_MAX,
 		findSameExercise,
 		fitsPhase,
 		issueText,
@@ -269,7 +270,7 @@
 											<span class="muted">set ×</span>
 										</div>
 										<label class="amount">
-											<input class="num" type="number" inputmode="numeric" min="1" max={item.type === 'time' ? 3600 : 999} bind:value={item.amount} aria-label="Mål i {unit(item.type)} för {item.name}" />
+											<input class="num" type="number" inputmode="numeric" min="1" max={item.type === 'time' ? 3600 : SET_MAX.reps} bind:value={item.amount} aria-label="Mål i {unit(item.type)} för {item.name}" />
 											<span class="muted">{unit(item.type)}</span>
 										</label>
 									</div>

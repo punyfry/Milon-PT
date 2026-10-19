@@ -3,7 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import { PHASE_LABEL, formatDuration, formatSet } from '$lib/format';
-	import { NOTE_MAX, type ExerciseType } from '$lib/model';
+	import { NOTE_MAX, SET_MAX, fieldsAboveSetMax, sameSetValues, type ExerciseSet, type ExerciseType } from '$lib/model';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -36,6 +36,8 @@
 	let error = $state<string | null>(null);
 	let confirmDelete = $state(false);
 
+	const LIMITS = `högst ${SET_MAX.weight} kg, ${SET_MAX.reps} reps och ${SET_MAX.seconds / 3600} timmar per set`;
+
 	/** Exact values (no rounding or thousands separator), with a decimal comma. */
 	function toDraft(set: { weight?: number; reps?: number; seconds?: number }): DraftSet {
 		return { weight: String(set.weight ?? 0).replace('.', ','), reps: String(set.reps ?? 0), seconds: String(set.seconds ?? 0) };
@@ -58,8 +60,8 @@
 
 	const kept = $derived(draft ? draft.exercises.filter((e) => !e.removed).length : 0);
 
-	/** Typed values to sets; null if something is not a number. */
-	function toSets(type: ExerciseType, sets: DraftSet[]) {
+	/** Typed values to sets; null if something is not a number, or a changed set is above the bounds. */
+	function toSets(type: ExerciseType, sets: DraftSet[], saved: ExerciseSet[]) {
 		const int = (v: string) => (/^\d{1,5}$/.test(v.trim()) ? Number(v.trim()) : NaN);
 		const out = sets.map((d) => {
 			if (type === 'weight') {
@@ -68,15 +70,18 @@
 			}
 			return type === 'time' ? { seconds: int(d.seconds) } : { reps: int(d.reps) };
 		});
-		return out.every((set) => Object.values(set).every(Number.isFinite)) ? out : null;
+		// A set as it was saved is kept even above the bounds (older data); a changed one must be within them.
+		const ok = (set: ExerciseSet) =>
+			Object.values(set).every(Number.isFinite) && (!fieldsAboveSetMax(set).length || saved.some((s) => sameSetValues(s, set)));
+		return out.every(ok) ? out : null;
 	}
 
 	async function save() {
 		if (!draft || saving) return;
 		const exercises = [];
 		for (const e of draft.exercises.filter((x) => !x.removed)) {
-			const sets = toSets(e.type, e.sets);
-			if (!sets) return void (error = `Kontrollera värdena för ${e.name}.`);
+			const sets = toSets(e.type, e.sets, data.exercises.find((x) => x.id === e.id)?.sets ?? []);
+			if (!sets) return void (error = `Kontrollera värdena för ${e.name} (${LIMITS}).`);
 			exercises.push({ exerciseId: e.id, sets, note: e.note.trim() });
 		}
 		const kcal = draft.kcal.trim();

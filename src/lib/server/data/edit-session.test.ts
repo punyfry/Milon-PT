@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ValidationError } from '../../model';
+import { ValidationError, type Exercise, type ExerciseSet } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
 import { StorageConflictError } from '../storage/types';
 import {
@@ -184,6 +184,23 @@ describe('editing a session', () => {
 		expect((await getSessionDetail(storage, 's_20261006'))!.exercises.map((e) => e.id)).toEqual(['ex_marklyft']);
 	});
 
+	it('keeps a saved set above the bounds when it is unchanged, but refuses a changed one (#89)', async () => {
+		const { storage } = await setup();
+		// Older data, saved before the bounds.
+		const stored = (await storage.readJson<Exercise>('exercises/ex_marklyft.json'))!;
+		const log = stored.data.log.map((l) => (l.sessionId === 's_20261006' ? { ...l, sets: [{ weight: 600, reps: 8 }, l.sets[1]] } : l));
+		await storage.writeJson('exercises/ex_marklyft.json', { ...stored.data, log }, { ifMatch: stored.version });
+		const { version } = (await getSessionDetail(storage, 's_20261006'))!;
+		const sets = (first: ExerciseSet) => ({ exercises: [{ exerciseId: 'ex_marklyft', sets: [first, { weight: 45, reps: 6 }] }, { exerciseId: 'ex_plankan', sets: [{ seconds: 45 }] }] });
+
+		await expect(editSession(storage, 's_20261006', input(version, { kcalEstimate: 280, ...sets({ weight: 600, reps: 8 }) }), now)).resolves.toMatchObject({
+			kcalEstimate: 280
+		});
+		const next = (await getSessionDetail(storage, 's_20261006'))!.version;
+		await expect(editSession(storage, 's_20261006', input(next, sets({ weight: 600, reps: 9 })), now)).rejects.toThrow(/weight: får vara högst 500/);
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets[0]).toEqual({ weight: 600, reps: 8 });
+	});
+
 	it('can clear the kcal estimate', async () => {
 		const { storage, detail } = await setup();
 		const updated = await editSession(storage, 's_20261006', input(detail.version, { kcalEstimate: null }), now);
@@ -203,7 +220,7 @@ describe('editing a session', () => {
 		).rejects.toBeInstanceOf(ValidationError);
 		await expect(
 			editSession(storage, 's_20261006', input(detail.version, { exercises: [{ exerciseId: 'ex_marklyft', sets: [{ weight: 4000, reps: 5 }] }] }), now)
-		).rejects.toThrow(/Orimligt/);
+		).rejects.toThrow(/weight: får vara högst 500/);
 		// Nothing was written by the refused edits.
 		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0].sets).toEqual([{ weight: 40, reps: 8 }, { weight: 45, reps: 6 }]);
 		expect((await getSession(storage, 's_20261006'))!.version).toBe(detail.version);

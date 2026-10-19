@@ -5,6 +5,7 @@
 import {
 	fitsPhase,
 	normalizeName,
+	SET_MAX,
 	targetMatchesType,
 	type ActiveSession,
 	type ActiveSet,
@@ -53,17 +54,24 @@ export function localDateOf(iso: string): string {
 
 // --- start --------------------------------------------------------------
 
+/** Caps each value at SET_MAX, so a prefilled set can always be saved (#89). */
+function capSet<T extends ExerciseSet>(set: T): T {
+	const values = set as unknown as Record<SetField, number>;
+	for (const key of Object.keys(values) as SetField[]) values[key] = Math.min(values[key], SET_MAX[key]);
+	return set;
+}
+
 function defaultSet(type: ExerciseType, target?: Target): ExerciseSet {
-	if (type === 'time') return { seconds: target && 'seconds' in target ? target.seconds : 30 };
-	const reps = target && 'reps' in target ? target.reps : 8;
+	if (type === 'time') return capSet({ seconds: target && 'seconds' in target ? target.seconds : 30 });
+	const reps = Math.min(target && 'reps' in target ? target.reps : 8, SET_MAX.reps);
 	return type === 'weight' ? { weight: 0, reps } : { reps };
 }
 
-/** Picks out the set values without extra fields (such as `done` or timer fields). */
+/** Picks out the set values without extra fields (such as `done` or timer fields), capped at SET_MAX. */
 function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
-	if (type === 'weight' && 'weight' in set) return { weight: set.weight, reps: set.reps };
-	if (type === 'time' && 'seconds' in set) return { seconds: set.seconds };
-	if (type === 'bodyweight' && 'reps' in set) return { reps: set.reps };
+	if (type === 'weight' && 'weight' in set) return capSet({ weight: set.weight, reps: set.reps });
+	if (type === 'time' && 'seconds' in set) return capSet({ seconds: set.seconds });
+	if (type === 'bodyweight' && 'reps' in set) return capSet({ reps: set.reps });
 	return defaultSet(type);
 }
 
@@ -77,7 +85,7 @@ function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
  */
 export function prefillSets(info: ExerciseInfo, count: number, target?: Target, options: { ownHistory?: boolean } = {}): ActiveSet[] {
 	const previous = info.lastEntry?.sets ?? [];
-	const planned = !options.ownHistory && target && 'seconds' in target ? target.seconds : 0;
+	const planned = !options.ownHistory && target && 'seconds' in target ? Math.min(target.seconds, SET_MAX.seconds) : 0;
 	return Array.from({ length: Math.max(count, 1) }, (_, i) => {
 		const from = previous[Math.min(i, previous.length - 1)];
 		const values = from ? setValues(info.type, from) : defaultSet(info.type, target);
@@ -171,10 +179,10 @@ function fieldValue(set: ActiveSet, field: SetField): number | undefined {
 	return (set as unknown as Partial<Record<SetField, number>>)[field];
 }
 
-/** Sets a field to a typed value. Invalid values are ignored. */
+/** Sets a field to a typed value. Invalid values, and values above SET_MAX (#89), are ignored. */
 export function setField(set: ActiveSet, field: SetField, value: number): void {
 	const values = set as unknown as Partial<Record<SetField, number>>;
-	if (values[field] === undefined || !Number.isFinite(value) || value < 0) return;
+	if (values[field] === undefined || !Number.isFinite(value) || value < 0 || roundField(field, value) > SET_MAX[field]) return;
 	const next = roundField(field, value);
 	// A time changed by hand replaces the plan from an earlier timer run.
 	if (field === 'seconds' && next !== values[field]) delete set.plannedSeconds;

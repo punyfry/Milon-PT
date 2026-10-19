@@ -20,7 +20,9 @@ import {
 	sessionIdFor,
 	targetMatchesType,
 	validateExerciseInput,
-	validateSet,
+	validateLoggedSet,
+	fieldsAboveSetMax,
+	SET_MAX,
 	type ActiveSession,
 	type Deviation,
 	type Exercise,
@@ -209,7 +211,10 @@ function precheck(session: ActiveSession): void {
 			if (!isObject(set) || set.done !== true) return;
 			anyDone = true;
 			const n = written.get(ex.exerciseId);
-			if (n) validateSet(set, n.type, issues, `session.exercises[${i}].sets[${j}]`);
+			const path = `session.exercises[${i}].sets[${j}]`;
+			if (n) validateLoggedSet(set, n.type, issues, path);
+			// The bounds for stored exercises too, before any exercise is created (#89).
+			else for (const key of fieldsAboveSetMax(set)) issues.add(`${path}.${key}`, `får vara högst ${SET_MAX[key]}`);
 		});
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
@@ -277,7 +282,7 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 		const sets = ex.sets
 			.map((set, j) => ({ set, j }))
 			.filter(({ set }) => isObject(set) && set.done === true)
-			.map(({ set, j }) => validateSet(set, stored.data.type, issues, `session.exercises[${i}].sets[${j}]`))
+			.map(({ set, j }) => validateLoggedSet(set, stored.data.type, issues, `session.exercises[${i}].sets[${j}]`))
 			.filter((s) => s !== null);
 		if (sets.length) doneSets.set(ex.exerciseId, [...(doneSets.get(ex.exerciseId) ?? []), ...sets]);
 		const note = typeof ex.note === 'string' ? ex.note.trim() : '';

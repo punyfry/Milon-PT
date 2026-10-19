@@ -8,6 +8,7 @@ import {
 	Issues,
 	ValidationError,
 	SAFE_ID,
+	SET_MAX,
 	findSameExercise,
 	fitsPhase,
 	isObject,
@@ -56,11 +57,11 @@ export class WorkoutChangedError extends Error {
 	}
 }
 
-/** A target in reps (1–999) or seconds (1–3600). */
+/** A target in reps (1–SET_MAX.reps) or seconds (1–3600). */
 function parseTarget(v: unknown): Target | null {
 	const target = validateTarget(v, new Issues(), '');
 	if (!target) return null;
-	return ('reps' in target ? target.reps <= 999 : target.seconds <= 3600) ? target : null;
+	return ('reps' in target ? target.reps <= SET_MAX.reps : target.seconds <= 3600) ? target : null;
 }
 
 /** Checks the input before anything is read from storage. Messages are shown to the user. */
@@ -86,7 +87,7 @@ export function parseManualWorkoutInput(raw: unknown): ManualWorkoutInput {
 			const sets = x.sets;
 			if (typeof sets !== 'number' || !Number.isInteger(sets) || sets < 1 || sets > 20) issues.add('', `${label}: antal set ska vara 1–20.`);
 			const target = parseTarget(x.target);
-			if (!target) issues.add('', `${label}: ange mål i reps (1–999) eller sekunder (1–3600).`);
+			if (!target) issues.add('', `${label}: ange mål i reps (1–${SET_MAX.reps}) eller sekunder (1–3600).`);
 			if (x.phase !== undefined && !isPhase(x.phase)) issues.add('', `${label}: ogiltig del av passet.`);
 			const phase = phaseField(isPhase(x.phase) ? x.phase : undefined);
 			let item: ManualItem | null = null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, countsAsWorkout, fitsPhase, notAWorkoutMessage, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, countsAsWorkout, Issues, validateLoggedSet, fitsPhase, notAWorkoutMessage, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -184,5 +184,25 @@ describe('notAWorkoutMessage', () => {
 		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}, { phase: 'cooldown' }])).toContain('både uppvärmning och stretch');
 		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}])).not.toContain('både');
 		expect(notAWorkoutMessage([{}, { phase: 'cooldown' }])).not.toContain('både');
+	});
+});
+
+describe('upper bounds for a logged set (#89)', () => {
+	it('accepts values up to the bounds and refuses values above them', () => {
+		const check = (set: unknown, type: 'weight' | 'bodyweight' | 'time') => {
+			const issues = new Issues();
+			return { set: validateLoggedSet(set, type, issues, 's'), issues: issues.list };
+		};
+		expect(check({ weight: 500, reps: 200 }, 'weight')).toEqual({ set: { weight: 500, reps: 200 }, issues: [] });
+		expect(check({ seconds: 10800 }, 'time').set).toEqual({ seconds: 10800 });
+		expect(check({ weight: 500.5, reps: 201 }, 'weight')).toEqual({ set: null, issues: ['s.weight: får vara högst 500', 's.reps: får vara högst 200'] });
+		expect(check({ reps: 201 }, 'bodyweight').set).toBeNull();
+		expect(check({ seconds: 10801 }, 'time').issues).toEqual(['s.seconds: får vara högst 10800']);
+		expect(check({ weight: -1, reps: 5 }, 'weight').issues).toEqual(['s.weight: måste vara minst 0']);
+	});
+
+	it('does not apply the bounds when stored files are read', () => {
+		const heavy = { ...deadlift, log: [{ ...deadlift.log[0], sets: [{ weight: 1000, reps: 300 }] }] };
+		expect(assertValid('övning', heavy, validateExercise).log[0].sets).toEqual([{ weight: 1000, reps: 300 }]);
 	});
 });
