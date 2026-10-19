@@ -202,7 +202,7 @@ test('a workout with only the warm-up done counts as abandoned and cannot be sav
 
 	await expect(page.getByRole('heading', { name: 'Passet är inte gjort' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Avsluta pass' })).toBeDisabled();
-	await expect(page.getByText('Bara uppvärmning eller stretch är avbockat.', { exact: false })).toBeVisible();
+	await expect(page.getByText('Bara uppvärmning eller bara stretch räknas inte som ett pass.', { exact: false })).toBeVisible();
 
 	// Discarding it leaves nothing behind.
 	await page.getByRole('button', { name: 'Släng passet' }).click();

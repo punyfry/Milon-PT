@@ -13,6 +13,8 @@
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
 	import {
 		NOTE_MAX,
+		NOT_A_WORKOUT_MESSAGE,
+		countsAsWorkout,
 		findSameExercise,
 		newExerciseId,
 		phaseOf,
@@ -557,12 +559,8 @@
 	const doneSets = $derived(main.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0));
 	const totalSets = $derived(main.reduce((n, e) => n + e.sets.length, 0));
 	const anyDone = $derived(session ? session.exercises.some((e) => e.sets.some((s) => s.done)) : false);
-	/**
-	 * A done set in the main part is needed to save; with only the warm-up or
-	 * stretch done the workout counts as abandoned. A workout without a main
-	 * part needs any done set. The server checks the same rule.
-	 */
-	const canSave = $derived(main.length ? main.some((e) => e.sets.some((s) => s.done)) : anyDone);
+	/** Only a warm-up or only a stretch is an abandoned workout; the server checks the same rule. */
+	const canSave = $derived(session ? countsAsWorkout(session.exercises) : false);
 	const recordCount = $derived(
 		session ? session.exercises.filter((e) => e.sets.some((s) => isRecord(infos.get(e.exerciseId), s, e.phase))).length : 0
 	);
@@ -907,9 +905,7 @@
 			<button class="btn primary full" onclick={save} disabled={saving || !canSave}>{saving ? 'Sparar…' : 'Avsluta pass'}</button>
 			{#if !canSave}
 				<p class="muted center">
-					{anyDone
-						? 'Bara uppvärmning eller stretch är avbockat. Bocka av minst ett set i passet för att spara, eller släng passet.'
-						: 'Bocka av minst ett set för att kunna spara.'}
+					{anyDone ? NOT_A_WORKOUT_MESSAGE : 'Bocka av minst ett set för att kunna spara.'}
 				</p>
 			{/if}
 			<button class="btn ghost full" onclick={() => (sheet = { kind: 'discard' })}>Släng passet</button>
