@@ -192,7 +192,9 @@ export async function resolveNewExercises(storage: UserStorage, input: SaveSessi
 /**
  * What can be checked before anything is written, so a save that will fail
  * creates no exercises: written-in exercises' done sets against their type,
- * and that at least one set is done. Stored exercises are checked in saveSession,
+ * and that at least one set is done, in the main part when the workout has one
+ * (a session with only the warm-up or stretch done counts as abandoned, not as
+ * a workout). Stored exercises are checked in saveSession,
  * after any creating; they only fail there if changed elsewhere during the
  * workout, and a retry then reuses what was created.
  */
@@ -200,17 +202,24 @@ function precheck(session: ActiveSession): void {
 	const issues = new Issues();
 	const written = new Map((session.newExercises ?? []).map((n) => [n.id, n]));
 	let anyDone = false;
+	let mainDone = false;
 	for (const [i, ex] of session.exercises.entries()) {
 		ex.sets.forEach((set, j) => {
 			if (!isObject(set) || set.done !== true) return;
 			anyDone = true;
+			if (!ex.phase) mainDone = true;
 			const n = written.get(ex.exerciseId);
 			if (n) validateSet(set, n.type, issues, `session.exercises[${i}].sets[${j}]`);
 		});
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (!anyDone) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
+	const hasMain = session.exercises.some((ex) => !ex.phase);
+	if (hasMain && !mainDone) throw new ValidationError('sparning', [ONLY_WARMUP_MESSAGE]);
 }
+
+/** Shown when only the warm-up or stretch is done; the client shows the same rule before saving. */
+export const ONLY_WARMUP_MESSAGE = 'Bara uppvärmning eller stretch är avbockat. Bocka av minst ett set i passet för att spara, eller släng passet.';
 
 /** The start time a save is recognised by: the original one if the start was edited afterwards. */
 const savedStart = (record: SessionRecord) => record.originalStartedAt ?? record.startedAt;
