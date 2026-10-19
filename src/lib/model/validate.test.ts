@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, countsAsWorkout, fitsPhase, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, countsAsWorkout, fitsPhase, notAWorkoutMessage, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -176,5 +176,13 @@ describe('countsAsWorkout', () => {
 
 	it('ignores sets that are not objects', () => {
 		expect(countsAsWorkout([{ sets: [null, 'x'] }])).toBe(false);
+	});
+});
+
+describe('notAWorkoutMessage', () => {
+	it('offers "both warm-up and stretch" only when the workout has both parts', () => {
+		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}, { phase: 'cooldown' }])).toContain('både uppvärmning och stretch');
+		expect(notAWorkoutMessage([{ phase: 'warmup' }, {}])).not.toContain('både');
+		expect(notAWorkoutMessage([{}, { phase: 'cooldown' }])).not.toContain('både');
 	});
 });

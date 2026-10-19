@@ -174,9 +174,19 @@ export function countsAsWorkout(exercises: readonly { phase?: Phase; sets: reado
 	return !exercises.some((e) => phaseOf(e) === 'main') && (done('warmup') || done('cooldown'));
 }
 
-/** Shown when a session doesn't count as a workout but has done sets (see `countsAsWorkout`). */
-export const NOT_A_WORKOUT_MESSAGE =
-	'Bara uppvärmning eller bara stretch räknas inte som ett pass. Bocka av minst ett set i passet, eller både uppvärmning och stretch, för att spara. Annars kan du slänga passet.';
+/**
+ * Shown when a session doesn't count as a workout but has done sets (see
+ * `countsAsWorkout`). "Both warm-up and stretch" is only offered when the
+ * workout has both parts.
+ */
+export function notAWorkoutMessage(exercises: readonly { phase?: Phase }[]): string {
+	const both = exercises.some((e) => phaseOf(e) === 'warmup') && exercises.some((e) => phaseOf(e) === 'cooldown');
+	return (
+		'Bara uppvärmning eller bara stretch räknas inte som ett pass. ' +
+		(both ? 'Bocka av minst ett set i passet, eller både uppvärmning och stretch, för att spara.' : 'Bocka av minst ett set i passet för att spara.') +
+		' Annars kan du slänga passet.'
+	);
+}
 
 /** Warm-up first, then the main part, then the stretch; the order within each part is kept. */
 export function sortByPhase<T extends { phase?: Phase }>(list: readonly T[]): T[] {

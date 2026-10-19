@@ -13,8 +13,8 @@
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
 	import {
 		NOTE_MAX,
-		NOT_A_WORKOUT_MESSAGE,
-		countsAsWorkout,
+				countsAsWorkout,
+		notAWorkoutMessage,
 		findSameExercise,
 		newExerciseId,
 		phaseOf,
@@ -905,7 +905,7 @@
 			<button class="btn primary full" onclick={save} disabled={saving || !canSave}>{saving ? 'Sparar…' : 'Avsluta pass'}</button>
 			{#if !canSave}
 				<p class="muted center">
-					{anyDone ? NOT_A_WORKOUT_MESSAGE : 'Bocka av minst ett set för att kunna spara.'}
+					{anyDone ? notAWorkoutMessage(session.exercises) : 'Bocka av minst ett set för att kunna spara.'}
 				</p>
 			{/if}
 			<button class="btn ghost full" onclick={() => (sheet = { kind: 'discard' })}>Släng passet</button>

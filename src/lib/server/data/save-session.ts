@@ -11,9 +11,9 @@ import {
 	MAX_NEW_EXERCISES,
 	NEW_EXERCISE_ID,
 	SAFE_ID,
-	NOT_A_WORKOUT_MESSAGE,
-	ValidationError,
+		ValidationError,
 	countsAsWorkout,
+	notAWorkoutMessage,
 	fitsPhase,
 	NOTE_MAX,
 	isObject,
@@ -214,7 +214,7 @@ function precheck(session: ActiveSession): void {
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (!anyDone) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
-	if (!countsAsWorkout(session.exercises)) throw new ValidationError('sparning', [NOT_A_WORKOUT_MESSAGE]);
+	if (!countsAsWorkout(session.exercises)) throw new ValidationError('sparning', [notAWorkoutMessage(session.exercises)]);
 }
 
 /** The start time a save is recognised by: the original one if the start was edited afterwards. */
