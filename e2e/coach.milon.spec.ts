@@ -25,10 +25,13 @@ async function askAboutWorkout(page: Page, question: string) {
 }
 
 test.describe('the helper', () => {
-	test('answers a question and counts the call', async ({ page, user }) => {
+	test('answers a question, counts the call and records its tokens (#98)', async ({ page, user }) => {
 		await askAboutWorkout(page, 'Hur många set ska jag köra?');
 		await expect(page.getByText(FAKE_CLAUDE_REPLY)).toBeVisible();
-		expect((await user.files())[usagePath()]).toEqual({ count: 1 });
+		const usage = (await user.files())[usagePath()] as { count: number; tokens: Record<string, unknown> };
+		expect(usage.count).toBe(1);
+		// The fake Claude answers with the requested model and one input and one output token.
+		expect(Object.values(usage.tokens)).toEqual([{ calls: 1, input: 1, output: 1, cacheWrite: 0, cacheRead: 0 }]);
 	});
 
 	test('says so when Claude fails', async ({ page }) => {
