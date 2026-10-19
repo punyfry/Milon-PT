@@ -208,6 +208,27 @@ describe('token usage (#98)', () => {
 		error.mockRestore();
 	});
 
+	it('gives up quietly after repeated conflicts', async () => {
+		const storage = new MemoryUserStorage('u1');
+		storage.writeJson = async (path) => {
+			throw new StorageConflictError(path);
+		};
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await expect(recordTokens(storage, '2026-10-07', 'claude-haiku-4-5', usage)).resolves.toBeUndefined();
+		expect(error).toHaveBeenCalledWith('Could not record AI token usage:', expect.any(StorageConflictError));
+		error.mockRestore();
+	});
+
+	it('records nothing when the call fails, but still counts it', async () => {
+		const storage = new MemoryUserStorage('u1');
+		const inner = vi.fn(async () => {
+			throw new Error('overloaded');
+		}) as unknown as CreateMessage;
+		await expect(limitedCreateMessage(storage, inner)({ model: 'claude-sonnet-5-5' } as never)).rejects.toThrow('overloaded');
+		const dayFile = (await storage.list('usage/')).find((f) => /\d{4}-\d{2}-\d{2}\.json$/.test(f.path))!;
+		expect((await storage.readJson(dayFile.path))!.data).toEqual({ count: 1 });
+	});
+
 	it('records the served model of each limited call', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const inner = vi.fn(async () => ({ model: 'claude-haiku-4-5', usage })) as unknown as CreateMessage;
