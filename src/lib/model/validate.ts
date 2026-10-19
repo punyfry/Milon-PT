@@ -163,8 +163,8 @@ export function fitsPhase(type: ExerciseType, phase: Phase | undefined): boolean
 /**
  * Whether a session's done sets make it a workout that can be saved: a done set
  * in the main part, or both a warm-up and a stretch done. Only a warm-up or only
- * a stretch counts as an abandoned workout. A workout with no main part (only
- * possible with an unusual template) needs any done set, so it can always be saved.
+ * a stretch counts as an abandoned workout. A workout with no main part (e.g. a
+ * pure stretch workout) needs any done set.
  * The finish screen and the server use the same rule.
  */
 export function countsAsWorkout(exercises: readonly { phase?: Phase; sets: readonly unknown[] }[]): boolean {
