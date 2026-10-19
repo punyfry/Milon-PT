@@ -39,7 +39,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		slug: w.slug,
 		name: w.name,
 		version: w.version,
-		exerciseNames: w.exercises.map((e) => names.get(e.exerciseId) ?? e.exerciseId),
+		// The card shows the main part; warm-up and stretch would only push it out of view (#100).
+		exerciseNames: w.exercises.filter((e) => !e.phase).map((e) => names.get(e.exerciseId) ?? e.exerciseId),
 		lastTrainedAt: lastBySlug.get(w.slug) ?? null
 	}));
 	// Most recently trained first, then other trained ones, then never trained in name order.

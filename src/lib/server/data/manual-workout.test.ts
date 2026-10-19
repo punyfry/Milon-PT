@@ -108,3 +108,35 @@ describe('manual workout', () => {
 		await expect(save(storage, { ...input, items: [rows] })).rejects.toThrow(/redan ett pass/);
 	});
 });
+
+describe('warm-up and stretch in a manual workout (#100)', () => {
+	const plank = { exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 } };
+	const deadlift = { exerciseId: 'ex_marklyft', sets: 3, target: { reps: 5 } };
+
+	it('saves the phases in order, and a repeat changes nothing', async () => {
+		const storage = await setup();
+		const raw = { name: 'Pass D', items: [{ ...plank, phase: 'cooldown' }, { ...deadlift, phase: 'main' }] };
+		expect(await save(storage, raw)).toEqual({ slug: 'pass-d', version: 1, saved: true });
+		expect((await getLatestWorkout(storage, 'pass-d'))!.exercises).toEqual([deadlift, { ...plank, phase: 'cooldown' }]);
+		expect(await save(storage, raw)).toEqual({ slug: 'pass-d', version: 1, saved: false });
+	});
+
+	it('moving an exercise to the warm-up is a new version with a change note', async () => {
+		const storage = await setup();
+		await save(storage, { name: 'Pass D', items: [deadlift, plank] });
+		const result = await save(storage, { editSlug: 'pass-d', baseVersion: 1, name: 'Pass D', items: [{ ...plank, phase: 'warmup' }, deadlift] });
+		expect(result).toEqual({ slug: 'pass-d', version: 2, saved: true });
+		const latest = (await getLatestWorkout(storage, 'pass-d'))!;
+		expect(latest.exercises[0]).toEqual({ ...plank, phase: 'warmup' });
+		expect(latest.changeNote).toMatch(/^Flyttade övningar mellan uppvärmning, pass och stretch/);
+		expect(latest.changeNote).not.toMatch(/ändrade set eller mål/);
+	});
+
+	it('refuses a weight exercise or an unknown phase in a warm-up or stretch', async () => {
+		const storage = await setup();
+		expect(await issues(() => parseManualWorkoutInput({ name: 'Pass D', items: [{ ...plank, phase: 'stretch' }] }))).toMatch(/ogiltig del av passet/);
+		await expect(save(storage, { name: 'Pass D', items: [{ ...deadlift, phase: 'warmup' }] })).rejects.toThrow(/inte vikt/);
+		await expect(save(storage, { name: 'Pass D', items: [{ ...rows, phase: 'cooldown' }] })).rejects.toThrow(/inte vikt/);
+		expect(await listExercises(storage)).toHaveLength(2);
+	});
+});

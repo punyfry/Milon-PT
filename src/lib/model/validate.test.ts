@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coachEnabled } from './profile';
-import { assertValid, issueText, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
+import { assertValid, fitsPhase, issueText, sortByPhase, validateExercise, validateProfile, validateSession, validateWorkout, ValidationError } from './validate';
 
 const deadlift = {
 	id: 'ex_marklyft',
@@ -109,5 +109,48 @@ describe('issue text for the user', () => {
 		expect(issueText('name: övningen behöver ett namn')).toBe('Övningen behöver ett namn.');
 		expect(issueText('exercises[2].log[0].sets[1].reps: måste vara ett heltal')).toBe('Måste vara ett heltal.');
 		expect(issueText('Passet finns inte längre.')).toBe('Passet finns inte längre.');
+	});
+});
+
+describe('phase (#100)', () => {
+	const workout = (phase: unknown) => ({
+		slug: 'pass-a',
+		name: 'Pass A',
+		version: 1,
+		createdAt: '2026-10-01',
+		exercises: [{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase }]
+	});
+
+	it('keeps warm-up and stretch on a workout exercise and drops main', () => {
+		expect(assertValid('pass', workout('warmup'), validateWorkout).exercises[0].phase).toBe('warmup');
+		expect(assertValid('pass', workout('cooldown'), validateWorkout).exercises[0].phase).toBe('cooldown');
+		expect(assertValid('pass', workout('main'), validateWorkout).exercises[0]).not.toHaveProperty('phase');
+		expect(assertValid('pass', workout(undefined), validateWorkout).exercises[0]).not.toHaveProperty('phase');
+	});
+
+	it('rejects an unknown phase', () => {
+		expect(() => assertValid('pass', workout('stretch'), validateWorkout)).toThrow(/exercises\[0\]\.phase/);
+		expect(() => assertValid('pass', workout(null), validateWorkout)).toThrow(/phase/);
+	});
+
+	it('validates the phase on a log entry', () => {
+		const entry = (phase: unknown) => ({ ...deadlift, log: [{ ...deadlift.log[0], phase }] });
+		expect(assertValid('övning', entry('cooldown'), validateExercise).log[0].phase).toBe('cooldown');
+		expect(assertValid('övning', entry('main'), validateExercise).log[0]).not.toHaveProperty('phase');
+		expect(() => assertValid('övning', entry('x'), validateExercise)).toThrow(/log\[0\]\.phase/);
+	});
+
+	it('warm-up and stretch take time or reps, never weights', () => {
+		expect(fitsPhase('weight', 'warmup')).toBe(false);
+		expect(fitsPhase('weight', 'cooldown')).toBe(false);
+		expect(fitsPhase('time', 'cooldown')).toBe(true);
+		expect(fitsPhase('bodyweight', 'warmup')).toBe(true);
+		expect(fitsPhase('weight', 'main')).toBe(true);
+		expect(fitsPhase('weight', undefined)).toBe(true);
+	});
+
+	it('sorts by phase and keeps the order within each part', () => {
+		const list = [{ id: 'a', phase: 'cooldown' as const }, { id: 'b' }, { id: 'c', phase: 'warmup' as const }, { id: 'd' }];
+		expect(sortByPhase(list).map((e) => e.id)).toEqual(['c', 'b', 'd', 'a']);
 	});
 });

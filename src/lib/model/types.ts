@@ -36,6 +36,12 @@ export interface LogEntry {
 	sets: ExerciseSet[];
 	/** Free-text note, e.g. "Nästa gång: prova 25 kg". */
 	note?: string;
+	/**
+	 * Set when the exercise was done as warm-up or stretch (#100). Such entries
+	 * are shown in the history but count for nothing in records, 1RM, volume,
+	 * the weekly summary or milestones. Missing means the main part.
+	 */
+	phase?: ExtraPhase;
 }
 
 export interface Exercise {
@@ -57,10 +63,17 @@ export interface Exercise {
 
 export type Target = { reps: number } | { seconds: number };
 
+/** The part of a workout an exercise belongs to (#100): warm-up, the main part or the stretch after it. */
+export type Phase = 'warmup' | 'main' | 'cooldown';
+/** A phase other than the main part: ticked off, skippable and never counted in the stats. */
+export type ExtraPhase = Exclude<Phase, 'main'>;
+
 export interface WorkoutExercise {
 	exerciseId: string;
 	sets: number;
 	target: Target;
+	/** Only stored for warm-up and stretch; missing means `main`, so older templates need no migration. */
+	phase?: ExtraPhase;
 }
 
 export interface WorkoutTemplate {
@@ -163,8 +176,12 @@ export interface ActiveSession {
 	workoutVersion: number;
 	startedAt: string;
 	lastActivityAt: string;
-	/** `note` is the user's note for the exercise today, saved with its log entry. */
-	exercises: { exerciseId: string; sets: ActiveSet[]; note?: string }[];
+	/**
+	 * `note` is the user's note for the exercise today, saved with its log entry.
+	 * `phase` comes from the template (a swapped-in exercise takes the one it
+	 * replaced) and is saved on the log entry, so the stats can leave it out.
+	 */
+	exercises: { exerciseId: string; sets: ActiveSet[]; note?: string; phase?: ExtraPhase }[];
 	deviations: Deviation[];
 	/** Exercises written in during the session; see `NewSessionExercise`. */
 	newExercises?: NewSessionExercise[];

@@ -1,6 +1,7 @@
 import {
 	assertValid,
 	parseWorkoutFileName,
+	sortByPhase,
 	validateWorkout,
 	workoutFileName,
 	type WorkoutTemplate
@@ -74,6 +75,7 @@ export async function listLatestWorkouts(storage: UserStorage): Promise<WorkoutT
  * Saves a new version of a workout; older versions are left untouched.
  * The version number is computed here and the file is written with
  * `createOnly`, so two concurrent saves can't overwrite each other.
+ * The exercises are put in phase order (warm-up, main, stretch).
  */
 export async function saveWorkoutVersion(
 	storage: UserStorage,
@@ -83,6 +85,7 @@ export async function saveWorkoutVersion(
 		const versions = (await listWorkoutVersions(storage)).get(workout.slug) ?? [];
 		const next = (versions[versions.length - 1] ?? 0) + 1;
 		const template = assertValid('pass', { ...workout, version: next }, validateWorkout);
+		template.exercises = sortByPhase(template.exercises);
 		try {
 			await storage.writeJson(DIR + workoutFileName(template.slug, next), template, { createOnly: true });
 			return template;

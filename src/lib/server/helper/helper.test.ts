@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import type { ActiveSession } from '../../model';
 import { applySwap, type ExerciseInfo } from '../../session/active';
 import type { CreateMessage } from '../ai/models';
-import { createExercise, getExercise, prependLogEntry, saveWorkoutVersion } from '../data';
+import { createExercise, getExercise, listExercises, prependLogEntry, saveWorkoutVersion } from '../data';
 import { MemoryUserStorage } from '../storage/memory';
 import { env } from '../../../test/env-private';
 import { askHelper, parseHelperInput } from './ask';
 import { formatCatalog } from '../builder/prompt';
 import { signHistory, verifyHistory } from './history';
 import { buildHelperPrompt } from './prompt';
+import { executeSwap, lastEntry, toInfo } from './swap';
 
 env.AUTH_SECRET = 'test-secret';
 
@@ -362,5 +363,72 @@ describe('swap in the session', () => {
 		const s = session();
 		applySwap(s, 'ex_hantelpress', { id: 'ex_plankan', name: 'Plankan', type: 'time', instruction: '' });
 		expect(s).toEqual(session());
+	});
+});
+
+describe('warm-up and stretch (#100)', () => {
+	/** Plankan as the stretch of the session. */
+	const withStretch = (): ActiveSession => {
+		const s = session();
+		s.exercises[1].phase = 'cooldown';
+		return s;
+	};
+
+	it('refuses to swap a warm-up or stretch exercise for a weight exercise, and creates nothing', async () => {
+		const storage = await setup();
+		const catalog = (await listExercises(storage)).map((e) => e.data);
+		const refused = [
+			{ fromExerciseId: 'ex_plankan', toExerciseId: 'ex_axelpress', newExercise: null },
+			{ fromExerciseId: 'ex_plankan', toExerciseId: null, newExercise: { name: 'Axelpress', type: 'time', instruction: '' } },
+			{ fromExerciseId: 'ex_plankan', toExerciseId: null, newExercise: { name: 'Kettlebellsving', type: 'weight', instruction: '' } }
+		];
+		for (const input of refused) {
+			expect(await executeSwap(storage, withStretch(), catalog, input)).toMatchObject({ ok: false, error: expect.stringMatching(/inte vikt/) });
+		}
+		expect(await listExercises(storage)).toHaveLength(3);
+		// A timed exercise is fine, and a main exercise can still become a weight exercise.
+		const ok = await executeSwap(storage, withStretch(), catalog, {
+			fromExerciseId: 'ex_plankan',
+			toExerciseId: null,
+			newExercise: { name: 'Sidoplanka', type: 'time', instruction: '' }
+		});
+		expect(ok).toMatchObject({ ok: true, created: true });
+		expect(await executeSwap(storage, withStretch(), catalog, { fromExerciseId: 'ex_hantelpress', toExerciseId: 'ex_axelpress', newExercise: null })).toMatchObject({
+			ok: true
+		});
+	});
+
+	it('"last time" is the newest entry from a main part', () => {
+		const armhavning = {
+			id: 'ex_armhavning',
+			name: 'Armhävning',
+			type: 'bodyweight' as const,
+			instruction: '',
+			log: [
+				{ sessionId: 's2', date: '2026-10-02', sets: [{ reps: 10 }], phase: 'warmup' as const },
+				{ sessionId: 's1', date: '2026-10-01', sets: [{ reps: 20 }, { reps: 20 }] }
+			]
+		};
+		expect(toInfo(armhavning).lastEntry?.sets).toEqual([{ reps: 20 }, { reps: 20 }]);
+		// Only ever a warm-up: the newest entry is still "last time".
+		expect(lastEntry({ ...armhavning, log: [armhavning.log[0]] })).toBe(armhavning.log[0]);
+	});
+
+	it('marks warm-up and stretch in the session and the history for Milon', () => {
+		const plankan = {
+			id: 'ex_plankan',
+			name: 'Plankan',
+			type: 'time' as const,
+			instruction: '',
+			log: [
+				{ date: '2026-10-02', sets: [{ seconds: 30 }], phase: 'cooldown' as const },
+				{ date: '2026-10-01', sets: [{ seconds: 90 }] }
+			]
+		};
+		const system = buildHelperPrompt('Pass B', withStretch(), new Map([[plankan.id, plankan]]), plankan, [plankan]);
+		expect(system).toContain('- Plankan (ex_plankan, time, stretch): 45 s');
+		expect(system).toContain('- 2026-10-02, stretch: 30 s');
+		expect(system).toContain('- 2026-10-01: 90 s');
+		expect(system).toContain('Uppvärmning och stretch är markerade');
 	});
 });

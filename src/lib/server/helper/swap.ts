@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { isExerciseType, isObject, normalizeName, type ActiveSession, type Exercise } from '../../model';
-import { bestEver, heaviestEver } from '../../history/stats';
+import { fitsPhase, isExerciseType, isObject, normalizeName, type ActiveSession, type Exercise, type LogEntry } from '../../model';
+import { bestEver, countsInStats, heaviestEver } from '../../history/stats';
 import type { ExerciseInfo } from '../../session/active';
 import { createExercise } from '../data/exercises';
 import type { UserStorage } from '../storage/types';
@@ -37,6 +37,15 @@ export const SWAP_TOOL: Anthropic.Beta.BetaTool = {
 	}
 };
 
+/**
+ * "Last time" for prefill and notes: the newest entry from a main part, so a
+ * main exercise isn't prefilled from a warm-up (#100). An exercise only ever
+ * done as warm-up or stretch falls back to its newest entry.
+ */
+export function lastEntry(e: Exercise): LogEntry | undefined {
+	return e.log.find(countsInStats) ?? e.log[0];
+}
+
 export function toInfo(e: Exercise): ExerciseInfo {
 	const best = bestEver(e);
 	const heaviest = heaviestEver(e);
@@ -45,7 +54,7 @@ export function toInfo(e: Exercise): ExerciseInfo {
 		name: e.name,
 		type: e.type,
 		instruction: e.instruction,
-		...(e.log[0] ? { lastEntry: e.log[0] } : {}),
+		...(e.log.length ? { lastEntry: lastEntry(e) } : {}),
 		...(best !== null ? { best } : {}),
 		...(heaviest !== null ? { heaviest } : {})
 	};
@@ -67,19 +76,25 @@ export async function executeSwap(
 	const inSession = new Set(session.exercises.map((e) => e.exerciseId));
 	const from = typeof input.fromExerciseId === 'string' ? input.fromExerciseId : '';
 	if (!inSession.has(from)) return { ok: false, error: `${from || 'fromExerciseId'} finns inte i passet.` };
+	const phase = session.exercises.find((e) => e.exerciseId === from)?.phase;
+	// Checked before a new exercise is created, so a refused swap leaves nothing behind.
+	const misfit: SwapOutcome = { ok: false, error: 'Uppvärmning och stretch ska bytas mot en övning med tid (time) eller reps (bodyweight), inte vikt.' };
 
 	let to: Exercise | undefined;
 	let created = false;
 	if (typeof input.toExerciseId === 'string' && input.toExerciseId) {
 		to = catalog.find((e) => e.id === input.toExerciseId && !e.deleted);
 		if (!to) return { ok: false, error: `Det finns ingen övning med id ${input.toExerciseId} i katalogen.` };
+		if (!fitsPhase(to.type, phase)) return misfit;
 	} else if (isObject(input.newExercise)) {
 		const n = input.newExercise;
 		const name = typeof n.name === 'string' ? n.name.trim() : '';
 		if (!name) return { ok: false, error: 'newExercise.name saknas.' };
 		to = catalog.find((e) => normalizeName(e.name) === normalizeName(name) && !e.deleted);
+		if (to && !fitsPhase(to.type, phase)) return misfit;
 		if (!to) {
 			if (!isExerciseType(n.type)) return { ok: false, error: 'newExercise.type måste vara weight, bodyweight eller time.' };
+			if (!fitsPhase(n.type, phase)) return misfit;
 			to = (
 				await createExercise(
 					storage,

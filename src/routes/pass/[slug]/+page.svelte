@@ -2,15 +2,26 @@
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
+	import CheckRow from '$lib/components/CheckRow.svelte';
 	import HelpPanel, { swapQuestion } from '$lib/components/HelpPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import MilonAvatar from '$lib/components/MilonAvatar.svelte';
 	import SetRow from '$lib/components/SetRow.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import SwapPicker from '$lib/components/SwapPicker.svelte';
-	import { formatNumber, formatSeconds } from '$lib/format';
+	import { PHASE_LABEL, formatNumber, formatSeconds } from '$lib/format';
 	import { bestSet, heaviestWeight } from '$lib/history/stats';
-	import { NOTE_MAX, findSameExercise, newExerciseId, type ActiveSession, type ActiveSet, type ExerciseType, type NewSessionExercise } from '$lib/model';
+	import {
+		NOTE_MAX,
+		findSameExercise,
+		newExerciseId,
+		phaseOf,
+		type ActiveSession,
+		type ActiveSet,
+		type ExerciseType,
+		type ExtraPhase,
+		type NewSessionExercise
+	} from '$lib/model';
 	import {
 		addSet,
 		applySwap,
@@ -142,6 +153,27 @@
 	const ex = $derived(session?.exercises[cur]);
 	const info = $derived(ex ? infos.get(ex.exerciseId) : undefined);
 	const isLast = $derived(session ? cur === session.exercises.length - 1 : false);
+
+	// --- warm-up and stretch (#100) ------------------------------------------
+
+	type SessionExercise = ActiveSession['exercises'][number];
+	/** A warm-up or stretch exercise is ticked off (CheckRow); one with weights keeps the normal set rows. */
+	const isCheckList = (e: SessionExercise | undefined, i: ExerciseInfo | undefined) => !!e?.phase && i?.type !== 'weight';
+	const hasExtra = $derived(session?.exercises.some((e) => e.phase) ?? false);
+	/** "Uppvärmning 1 av 2", "Övning 3 av 5": the position within the exercise's part of the workout. */
+	function positionText(i: number): string {
+		const list = session?.exercises ?? [];
+		const phase = phaseOf(list[i] ?? {});
+		const part = list.filter((e) => phaseOf(e) === phase);
+		const n = list.slice(0, i + 1).filter((e) => phaseOf(e) === phase).length;
+		return `${phase === 'main' ? 'Övning' : PHASE_LABEL[phase]} ${n} av ${part.length}`;
+	}
+	/** Skipping a part moves on past it; its exercises that aren't done are simply not logged. */
+	function skipPart(phase: ExtraPhase) {
+		const next = phase === 'warmup' ? (session?.exercises.findIndex((e) => e.phase !== 'warmup') ?? -1) : -1;
+		if (next >= 0) goTo(next);
+		else openFinish();
+	}
 
 	const allDone = (sets: ActiveSet[]) => sets.length > 0 && sets.every((s) => s.done);
 	const firstOpen = (sets: ActiveSet[]) => {
@@ -330,9 +362,9 @@
 		focus[cur] = ex!.sets.length - 1;
 	}
 
-	/** New record for a done set: best set (1RM, reps, time) or heaviest weight. */
-	function isRecord(i: ExerciseInfo | undefined, set: ActiveSet): boolean {
-		if (!i || !set.done) return false;
+	/** New record for a done set: best set (1RM, reps, time) or heaviest weight. Never in a warm-up or stretch. */
+	function isRecord(i: ExerciseInfo | undefined, set: ActiveSet, phase?: ExtraPhase): boolean {
+		if (!i || !set.done || phase) return false;
 		const best = bestSet(i.type, [set]);
 		if (i.best !== undefined && best && best.value > i.best) return true;
 		const heaviest = heaviestWeight(i.type, [set]);
@@ -520,10 +552,14 @@
 
 	// --- finish -----------------------------------------------------------
 
-	const doneSets = $derived(session ? session.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0) : 0);
-	const totalSets = $derived(session ? session.exercises.reduce((n, e) => n + e.sets.length, 0) : 0);
+	// The totals are for the main part; warm-up and stretch don't count, done or skipped (#100).
+	const main = $derived(session ? session.exercises.filter((e) => !e.phase) : []);
+	const doneSets = $derived(main.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0));
+	const totalSets = $derived(main.reduce((n, e) => n + e.sets.length, 0));
+	/** Any done set, warm-up and stretch included: enough to save the workout. */
+	const anyDone = $derived(session ? session.exercises.some((e) => e.sets.some((s) => s.done)) : false);
 	const recordCount = $derived(
-		session ? session.exercises.filter((e) => e.sets.some((s) => isRecord(infos.get(e.exerciseId), s))).length : 0
+		session ? session.exercises.filter((e) => e.sets.some((s) => isRecord(infos.get(e.exerciseId), s, e.phase))).length : 0
 	);
 	const elapsed = $derived(session ? formatSeconds((now.getTime() - Date.parse(session.startedAt)) / 1000) : '');
 
@@ -600,14 +636,17 @@
 			<p class="error warning">Kunde inte spara i telefonen. Byten kan försvinna om du stänger sidan.</p>
 		{/if}
 		<div class="pagehead">
-			<span class="label">{session.exercises.length} övningar · {totalSets} set</span>
+			<span class="label">{main.length} {main.length === 1 ? 'övning' : 'övningar'} · {totalSets} set</span>
 			<h1>{data.workout.name}</h1>
 		</div>
 		<ol class="ovlist">
-			{#each session.exercises as e (e.exerciseId)}
+			{#each session.exercises as e, i (e.exerciseId)}
 				{@const ei = infos.get(e.exerciseId)}
 				{@const target = targetText(e.exerciseId, e.sets.length)}
 				{@const open = !!showInstruction[e.exerciseId]}
+				{#if hasExtra && (i === 0 || phaseOf(session.exercises[i - 1]) !== phaseOf(e))}
+					<li class="ovsection"><h2 class="label">{PHASE_LABEL[phaseOf(e)]}</h2></li>
+				{/if}
 				<li class="ovitem">
 					<div class="ovmain">
 						<div class="ovtop">
@@ -668,8 +707,9 @@
 			<button
 				class:current={i === cur}
 				class:done={i !== cur && allDone(e.sets)}
+				class:extra={!!e.phase}
 				onclick={() => goTo(i)}
-				aria-label="Övning {i + 1}: {infos.get(e.exerciseId)?.name ?? e.exerciseId}{allDone(e.sets) ? ', klar' : ''}{i === cur ? ', visas nu' : ''}"
+				aria-label="{positionText(i)}: {infos.get(e.exerciseId)?.name ?? e.exerciseId}{allDone(e.sets) ? ', klar' : ''}{i === cur ? ', visas nu' : ''}"
 			><i></i></button>
 		{/each}
 	</div>
@@ -681,7 +721,7 @@
 				<p class="error warning">Kunde inte spara i telefonen. Stäng inte sidan innan passet är sparat.</p>
 			{/if}
 			<div class="overline">
-				Övning {cur + 1} av {session.exercises.length}
+				{positionText(cur)}
 				{#if isSwappedIn(ex.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
 			</div>
 			<h1 class="exname">{info?.name ?? ex.exerciseId}</h1>
@@ -713,38 +753,63 @@
 					>
 				{/if}
 
-				<div class="sets">
-					<div class="sethead" class:one={info.type !== 'weight'}>
-						<span>Set</span><span>Förra</span>
-						{#if info.type === 'weight'}<span>Kg</span><span>Reps</span>{:else}<span>{info.type === 'time' ? 'Tid' : 'Reps'}</span>{/if}
-						<span></span>
+				{#if isCheckList(ex, info)}
+					<div class="checks">
+						{#each ex.sets as set, setIndex (setIndex)}
+							<CheckRow
+								{set}
+								type={info.type}
+								label={ex.sets.length > 1 ? `${info.name}, set ${setIndex + 1}` : info.name}
+								number={ex.sets.length > 1 ? setIndex + 1 : null}
+								{now}
+								oncheck={() => check(setIndex)}
+								onstarttimer={() => {
+									unlockAudio();
+									change((s) => startTimer(s.exercises[cur].sets[setIndex], new Date()));
+								}}
+								onstoptimer={() => change((s) => stopTimer(s.exercises[cur].sets[setIndex], new Date()))}
+							/>
+						{/each}
 					</div>
-					{#each ex.sets as set, setIndex (setIndex)}
-						<SetRow
-							{set}
-							type={info.type}
-							index={setIndex}
-							previous={previous(info, setIndex)}
-							active={setIndex === focusOf(cur)}
-							record={isRecord(info, set)}
-							{now}
-							onfocus={() => guard(() => (focus[cur] = setIndex))}
-							oncheck={() => check(setIndex)}
-							onstep={(field, delta) => step(setIndex, field, delta)}
-							onset={(field, value) => change((s) => changeSetField(s.exercises[cur].sets, setIndex, field, value))}
-							onremove={() => remove(setIndex)}
-							onstarttimer={() => {
-								unlockAudio();
-								change((s) => startTimer(s.exercises[cur].sets[setIndex], new Date()));
-							}}
-							onstoptimer={() => {
-								change((s) => stopTimer(s.exercises[cur].sets[setIndex], new Date()));
-								focus[cur] = firstOpen(ex.sets);
-							}}
-						/>
-					{/each}
-				</div>
-				<button class="btn full add" onclick={add}><Icon name="plus" /> Lägg till set</button>
+				{:else}
+					<div class="sets">
+						<div class="sethead" class:one={info.type !== 'weight'}>
+							<span>Set</span><span>Förra</span>
+							{#if info.type === 'weight'}<span>Kg</span><span>Reps</span>{:else}<span>{info.type === 'time' ? 'Tid' : 'Reps'}</span>{/if}
+							<span></span>
+						</div>
+						{#each ex.sets as set, setIndex (setIndex)}
+							<SetRow
+								{set}
+								type={info.type}
+								index={setIndex}
+								previous={previous(info, setIndex)}
+								active={setIndex === focusOf(cur)}
+								record={isRecord(info, set, ex.phase)}
+								{now}
+								onfocus={() => guard(() => (focus[cur] = setIndex))}
+								oncheck={() => check(setIndex)}
+								onstep={(field, delta) => step(setIndex, field, delta)}
+								onset={(field, value) => change((s) => changeSetField(s.exercises[cur].sets, setIndex, field, value))}
+								onremove={() => remove(setIndex)}
+								onstarttimer={() => {
+									unlockAudio();
+									change((s) => startTimer(s.exercises[cur].sets[setIndex], new Date()));
+								}}
+								onstoptimer={() => {
+									change((s) => stopTimer(s.exercises[cur].sets[setIndex], new Date()));
+									focus[cur] = firstOpen(ex.sets);
+								}}
+							/>
+						{/each}
+					</div>
+					<button class="btn full add" onclick={add}><Icon name="plus" /> Lägg till set</button>
+				{/if}
+				{#if ex.phase}
+					<button class="btn ghost full skip" onclick={() => skipPart(ex.phase!)}>
+						{ex.phase === 'warmup' ? 'Hoppa över uppvärmningen' : 'Hoppa över stretchen'}
+					</button>
+				{/if}
 				{@const upcoming = session.exercises.slice(cur + 1).map((e) => infos.get(e.exerciseId)?.name ?? e.exerciseId)}
 				{#if upcoming.length}
 					<p class="nextline">
@@ -782,7 +847,7 @@
 	<main class="finish">
 		<div class="pagehead">
 			<span class="label">Sammanfattning</span>
-			<h1>{doneSets ? 'Snyggt jobbat' : 'Inget avbockat än'}</h1>
+			<h1>{anyDone ? 'Snyggt jobbat' : 'Inget avbockat än'}</h1>
 		</div>
 		<div class="stats">
 			<div class="stat"><span class="num">{elapsed}</span><span class="label">Tid</span></div>
@@ -803,10 +868,13 @@
 					>
 						<span class="name">
 							{ei?.name ?? e.exerciseId}
-							{#if e.sets.some((s) => isRecord(ei, s))}<span class="tag">PR</span>{/if}
+							{#if e.sets.some((s) => isRecord(ei, s, e.phase))}<span class="tag">PR</span>{/if}
+							{#if e.phase}<span class="tag quiet">{PHASE_LABEL[e.phase]}</span>{/if}
 							{#if isSwappedIn(e.exerciseId)}<span class="tag quiet">Inbytt</span>{/if}
 						</span>
-						<span class="setsline num">{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : 'Inga set klara'}</span>
+						<span class="setsline num"
+							>{done.length ? done.map((s) => setText(ei?.type ?? 'bodyweight', s)).join(' · ') : e.phase ? 'Inte gjord' : 'Inga set klara'}</span
+						>
 						{#if e.note}<span class="sumnote">{e.note}{#if !done.length}<em>{' · sparas inte'}</em>{/if}</span>{/if}
 						<span class="go"><Icon name="right" /></span>
 					</button>
@@ -831,8 +899,8 @@
 
 		{#if saveError}<p class="error" role="alert">{saveError}</p>{/if}
 		<div class="final">
-			<button class="btn primary full" onclick={save} disabled={saving || doneSets === 0}>{saving ? 'Sparar…' : 'Avsluta pass'}</button>
-			{#if doneSets === 0}<p class="muted center">Bocka av minst ett set för att kunna spara.</p>{/if}
+			<button class="btn primary full" onclick={save} disabled={saving || !anyDone}>{saving ? 'Sparar…' : 'Avsluta pass'}</button>
+			{#if !anyDone}<p class="muted center">Bocka av minst ett set för att kunna spara.</p>{/if}
 			<button class="btn ghost full" onclick={() => (sheet = { kind: 'discard' })}>Släng passet</button>
 		</div>
 	</main>
@@ -870,6 +938,7 @@
 		<SwapPicker
 			name={infos.get(id)?.name ?? id}
 			type={infos.get(id)?.type}
+			phase={session.exercises.find((e) => e.exerciseId === id)?.phase}
 			catalog={data.catalog}
 			{session}
 			onaskmilon={data.helperAvailable ? () => askMilonToSwap(id) : undefined}
@@ -978,6 +1047,10 @@
 	}
 	.progress .done i {
 		background: var(--accent);
+	}
+	/* Warm-up and stretch are shorter segments, so the main part stands out. */
+	.progress .extra {
+		flex: 0.5;
 	}
 	.progress .current i {
 		background: var(--text);
@@ -1123,6 +1196,12 @@
 	.add {
 		margin-top: 14px;
 	}
+	.checks {
+		margin-top: 12px;
+	}
+	.skip {
+		margin-top: 8px;
+	}
 	.nextline {
 		margin: 12px 0 0;
 		padding: 14px 0;
@@ -1160,6 +1239,13 @@
 		margin: 16px 0 0;
 		padding: 0;
 		border-top: 1px solid var(--line);
+	}
+	.ovsection {
+		padding: 16px 0 6px;
+		border-bottom: 1px solid var(--line);
+	}
+	.ovsection h2 {
+		margin: 0;
 	}
 	.ovitem {
 		display: grid;

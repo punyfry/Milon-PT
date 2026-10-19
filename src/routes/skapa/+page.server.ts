@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getProfile, getWorkoutHistory, listExercises, listLatestWorkouts, type VersionSummary } from '$lib/server/data';
 import { aiAvailable, builderModel } from '$lib/server/ai/client';
-import { conversationView, loadConversation } from '$lib/server/builder/conversation';
+import { conversationView, loadConversation, type DraftItem } from '$lib/server/builder/conversation';
 import { storageFor } from '$lib/server/storage';
 import type { PageServerLoad } from './$types';
 
@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	let versions: VersionSummary[] = [];
 	let editing: { slug: string; name: string; version: number } | null = null;
 	/** The workout's exercises before the conversation starts, so the list isn't empty when editing. */
-	let initialDraft: { exerciseId: string; sets: number; target: { reps: number } | { seconds: number }; name: string; type: string }[] = [];
+	let initialDraft: DraftItem[] = [];
 	if (editSlug) {
 		const history = await getWorkoutHistory(storage, editSlug);
 		if (!history) {

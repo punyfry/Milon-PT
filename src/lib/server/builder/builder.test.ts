@@ -377,3 +377,95 @@ describe('saving a turn', () => {
 		await expect(saveTurn(storage, gone, 'v-gammal', 0)).rejects.toBeInstanceOf(StorageConflictError);
 	});
 });
+
+describe('warm-up and stretch in the builder (#100)', () => {
+	it('set_workout requires a phase per exercise with a plain enum', async () => {
+		const { BUILDER_TOOLS } = await import('./tools');
+		const setWorkout = BUILDER_TOOLS.find((t) => t.name === 'set_workout')!;
+		const item = (setWorkout.input_schema.properties as Record<string, { items: { properties: Record<string, unknown>; required: string[] } }>).exercises.items;
+		expect(item.properties.phase).toMatchObject({ type: 'string', enum: ['warmup', 'main', 'cooldown'] });
+		expect(item.required).toContain('phase');
+		const propose = BUILDER_TOOLS.find((t) => t.name === 'propose_exercise')!;
+		expect((propose.input_schema.required as string[]) ?? []).toContain('phase');
+	});
+
+	it('the prompt asks about a warm-up and a stretch matched to the trained muscles', () => {
+		const prompt = buildSystemPrompt({}, [], null);
+		expect(prompt).toMatch(/Fråga alltid om ett nytt pass ska ha uppvärmning och stretch/);
+		expect(prompt).toMatch(/specifik för de muskler passet har tränat/);
+		expect(prompt).toMatch(/phase warmup/);
+	});
+
+	it('shows the phases of the workout being edited', () => {
+		const prompt = buildSystemPrompt({}, [], {
+			slug: 'pass-c',
+			name: 'Pass C',
+			version: 1,
+			createdAt: TODAY,
+			exercises: [
+				{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'warmup' },
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 5 } }
+			]
+		});
+		expect(prompt).toContain('1. ex_plankan (ex_plankan): 1 set × 30 s, uppvärmning');
+		expect(prompt).toContain('2. ex_marklyft (ex_marklyft): 3 set × 5 reps\n');
+	});
+
+	it('set_workout saves phases in order and refuses weights in a warm-up or stretch', async () => {
+		const storage = await setup();
+		const state: BuilderState = { editingSlug: null, draft: [] };
+		const plank = { exerciseId: 'ex_plankan', sets: 1, target: { reps: null, seconds: 30 } };
+		const deadlift = { exerciseId: 'ex_marklyft', sets: 3, target: { reps: 5, seconds: null } };
+
+		const refused = await executeTool(
+			storage,
+			state,
+			'set_workout',
+			{ name: 'Pass C', changeNote: '', exercises: [{ ...deadlift, phase: 'warmup' }] },
+			TODAY
+		);
+		expect(refused).toMatchObject({ isError: true });
+		expect(refused.content).toMatch(/viktövning/);
+		expect(await listLatestWorkouts(storage)).toEqual([]);
+
+		const bad = await executeTool(storage, state, 'set_workout', { name: 'Pass C', changeNote: '', exercises: [{ ...deadlift, phase: 'stretch' }] }, TODAY);
+		expect(bad.content).toMatch(/phase måste vara/);
+
+		// The stretch is given first but saved last; main stays without a phase field.
+		const saved = await executeTool(
+			storage,
+			state,
+			'set_workout',
+			{ name: 'Pass C', changeNote: '', exercises: [{ ...plank, phase: 'cooldown' }, { ...deadlift, phase: 'main' }] },
+			TODAY
+		);
+		expect(saved.isError).toBe(false);
+		expect((await listLatestWorkouts(storage))[0].exercises).toEqual([
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 5 } },
+			{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'cooldown' }
+		]);
+	});
+
+	it('propose_exercise puts the phase in the live list', async () => {
+		const storage = await setup();
+		const state: BuilderState = { editingSlug: null, draft: [] };
+		const out = await executeTool(
+			storage,
+			state,
+			'propose_exercise',
+			{ ...newExercise, existingId: 'ex_plankan', name: null, sets: 1, target: { reps: null, seconds: 30 }, phase: 'warmup' },
+			TODAY
+		);
+		expect(out.event).toBe('Lade till Plankan: 1 set × 30 s (uppvärmning)');
+		expect(state.draft).toEqual([{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'warmup' }]);
+		// A main exercise proposed later still comes after the warm-up in the live list, and a new warm-up goes before it.
+		await executeTool(storage, state, 'propose_exercise', { ...newExercise, existingId: 'ex_marklyft', name: null, phase: 'main' }, TODAY);
+		await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'Höftcirklar', type: 'bodyweight', phase: 'warmup' }, TODAY);
+		expect(state.draft.map((d) => [d.exerciseId, d.phase])).toEqual([
+			['ex_plankan', 'warmup'],
+			['ex_hoftcirklar', 'warmup'],
+			['ex_marklyft', undefined]
+		]);
+		expect((await executeTool(storage, state, 'propose_exercise', { ...newExercise, phase: 'cooldown' }, TODAY)).content).toMatch(/viktövning/);
+	});
+});

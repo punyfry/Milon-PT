@@ -21,6 +21,9 @@ Arbetssätt:
 6. Typ är weight (vikt x reps), bodyweight (bara reps) eller time (sekunder).
 7. Instruktionen ska vara 2-4 korta punkter om utgångsläge, rörelse och vanligaste felet.
 8. Anteckningarna är användarens egna om övningen. Ta hänsyn till dem: har något gjort ont eller varit för lätt, föreslå en annan variant, utan att ge råd om själva smärtan.
+9. Ett pass kan ha en uppvärmning före och en stretch efter huvuddelen. Fråga alltid om ett nytt pass ska ha uppvärmning och stretch; det går bra att svara nej. Har passet som redigeras ingen, fråga bara om användaren tar upp det.
+10. Uppvärmningen är kort och förbereder just det passet tränar. Stretchen ska vara specifik för de muskler passet har tränat, till exempel höftböjare och baksida lår efter ett benpass, inte ett allmänt program.
+11. Uppvärmnings- och stretchövningar är av typen time eller bodyweight, aldrig weight, och bockas av utan vikter. Ange phase warmup för uppvärmning, cooldown för stretch och main för övriga övningar. De räknas inte i rekord eller volym.
 
 {{scope}}`;
 
@@ -88,7 +91,9 @@ export function formatCatalog(exercises: readonly Exercise[]): string {
 export function formatWorkout(workout: WorkoutTemplate | null, names: ReadonlyMap<string, string>): string {
 	if (!workout) return '(nytt pass)';
 	const lines = workout.exercises.map(
-		(e, i) => `${i + 1}. ${names.get(e.exerciseId) ?? e.exerciseId} (${e.exerciseId}): ${e.sets} set × ${formatTarget(e.target)}`
+		(e, i) =>
+			`${i + 1}. ${names.get(e.exerciseId) ?? e.exerciseId} (${e.exerciseId}): ${e.sets} set × ${formatTarget(e.target)}` +
+			(e.phase ? `, ${e.phase === 'warmup' ? 'uppvärmning' : 'stretch'}` : '')
 	);
 	return `${workout.name} (version ${workout.version})\n${lines.join('\n')}`;
 }

@@ -12,6 +12,7 @@ import {
 	NEW_EXERCISE_ID,
 	SAFE_ID,
 	ValidationError,
+	fitsPhase,
 	NOTE_MAX,
 	isObject,
 	sessionIdFor,
@@ -22,6 +23,7 @@ import {
 	type Deviation,
 	type Exercise,
 	type ExerciseSet,
+	type ExtraPhase,
 	type LogEntry,
 	type NewSessionExercise,
 	type SessionRecord,
@@ -74,6 +76,8 @@ export function checkActiveSession(raw: unknown, issues: string[]): ActiveSessio
 			else if (ex.note !== undefined && typeof ex.note !== 'string') issues.push(`session.exercises[${i}].note måste vara text`);
 			else if (typeof ex.note === 'string' && ex.note.length > NOTE_MAX)
 				issues.push(`session.exercises[${i}].note får vara högst ${NOTE_MAX} tecken`);
+			else if (ex.phase !== undefined && ex.phase !== 'warmup' && ex.phase !== 'cooldown')
+				issues.push(`session.exercises[${i}].phase är ogiltig`);
 		});
 	if (s.preparing !== undefined && typeof s.preparing !== 'boolean') issues.push('session.preparing är ogiltig');
 	if (!Array.isArray(s.deviations)) issues.push('session.deviations måste vara en lista');
@@ -123,8 +127,8 @@ export function parseSaveSessionInput(raw: unknown): SaveSessionInput {
 
 /**
  * Builds the next workout version with the deviations applied: each swapped
- * exercise is replaced in place. If the type changes (e.g. reps → time), the
- * target is taken from the set done during the session.
+ * exercise is replaced in place, in the same phase. If the type changes (e.g.
+ * reps → time), the target is taken from the set done during the session.
  */
 export function applyDeviations(
 	base: WorkoutTemplate,
@@ -145,7 +149,10 @@ export function applyDeviations(
 					? { seconds: first && 'seconds' in first && first.seconds > 0 ? first.seconds : 30 }
 					: { reps: first && 'reps' in first && first.reps > 0 ? first.reps : 8 };
 		}
-		return { exerciseId: to, sets: we.sets, target };
+		// The rule of fitsPhase holds here too (a swap can't break it, but an older client could): a weight
+		// exercise swapped into a warm-up or stretch becomes part of the main workout.
+		const phase = type && !fitsPhase(type, we.phase) ? undefined : we.phase;
+		return { exerciseId: to, sets: we.sets, target, ...(phase ? { phase } : {}) };
 	});
 }
 
@@ -252,6 +259,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 	const exercises = new Map<string, Exercise>();
 	const doneSets = new Map<string, ExerciseSet[]>();
 	const notes = new Map<string, string>();
+	/** Warm-up and stretch exercises; their log entries are marked so the stats leave them out (#100). */
+	const phases = new Map<string, ExtraPhase>();
 	const issues = new Issues();
 	for (const [i, ex] of session.exercises.entries()) {
 		const stored = await getExercise(storage, ex.exerciseId);
@@ -268,6 +277,7 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 		if (sets.length) doneSets.set(ex.exerciseId, [...(doneSets.get(ex.exerciseId) ?? []), ...sets]);
 		const note = typeof ex.note === 'string' ? ex.note.trim() : '';
 		if (note) notes.set(ex.exerciseId, note);
+		if (ex.phase) phases.set(ex.exerciseId, ex.phase);
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);
 	if (doneSets.size === 0) throw new ValidationError('sparning', ['Inga set är markerade som klara']);
@@ -297,7 +307,8 @@ export async function saveSession(storage: UserStorage, input: SaveSessionInput)
 		if (alreadySaved) break;
 		if (exercises.get(exerciseId)!.log.some((e) => e.sessionId === sessionId && fromThisSave(e))) continue;
 		const note = notes.get(exerciseId);
-		await prependLogEntry(storage, exerciseId, { sessionId, startedAt, date, sets, ...(note ? { note } : {}) }, fromThisSave);
+		const phase = phases.get(exerciseId);
+		await prependLogEntry(storage, exerciseId, { sessionId, startedAt, date, sets, ...(note ? { note } : {}), ...(phase ? { phase } : {}) }, fromThisSave);
 	}
 
 	// New workout version with the deviations, if the user wants it.

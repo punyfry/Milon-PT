@@ -9,14 +9,19 @@ import {
 	ValidationError,
 	SAFE_ID,
 	findSameExercise,
+	fitsPhase,
 	isObject,
+	isPhase,
 	issueText,
 	normalizeName,
+	phaseField,
 	slugify,
+	sortByPhase,
 	targetMatchesType,
 	validateExerciseInput,
 	validateTarget,
 	type Exercise,
+	type ExtraPhase,
 	type Target,
 	type WorkoutExercise,
 	type WorkoutTemplate
@@ -28,7 +33,8 @@ import { getLatestWorkout, saveWorkoutVersion } from './workouts';
 export const MAX_WORKOUT_EXERCISES = 30;
 export const MAX_WORKOUT_NAME = 60;
 
-export type ManualItem = { sets: number; target: Target } & (
+/** `phase` is only set for warm-up and stretch (#100); missing means the main part. */
+export type ManualItem = { sets: number; target: Target; phase?: ExtraPhase } & (
 	| { exerciseId: string }
 	| { newExercise: Pick<Exercise, 'name' | 'type' | 'instruction'> }
 );
@@ -81,20 +87,23 @@ export function parseManualWorkoutInput(raw: unknown): ManualWorkoutInput {
 			if (typeof sets !== 'number' || !Number.isInteger(sets) || sets < 1 || sets > 20) issues.add('', `${label}: antal set ska vara 1–20.`);
 			const target = parseTarget(x.target);
 			if (!target) issues.add('', `${label}: ange mål i reps (1–999) eller sekunder (1–3600).`);
+			if (x.phase !== undefined && !isPhase(x.phase)) issues.add('', `${label}: ogiltig del av passet.`);
+			const phase = phaseField(isPhase(x.phase) ? x.phase : undefined);
 			let item: ManualItem | null = null;
 			if (typeof x.exerciseId === 'string' && x.newExercise === undefined) {
 				if (!SAFE_ID.test(x.exerciseId)) issues.add('', `${label}: ogiltigt övnings-ID.`);
-				else item = { exerciseId: x.exerciseId, sets: sets as number, target: target! };
+				else item = { exerciseId: x.exerciseId, sets: sets as number, target: target!, ...phase };
 			} else if (x.exerciseId === undefined && x.newExercise !== undefined) {
 				const found = new Issues();
 				const fields = validateExerciseInput(x.newExercise, found, '');
 				for (const issue of found.list) issues.add('', `${label}: ${issueText(issue)}`);
-				if (fields) item = { newExercise: fields, sets: sets as number, target: target! };
+				if (fields) item = { newExercise: fields, sets: sets as number, target: target!, ...phase };
 			} else issues.add('', `${label}: välj en övning eller skriv in en ny.`);
 			if (item && target) items.push(item);
 		});
 	if (!issues.ok) throw new ValidationError('pass', issues.list);
-	return { editSlug: editSlug as string | null, baseVersion: baseVersion as number | null, name, items };
+	// Warm-up first and stretch last, as the workout is run.
+	return { editSlug: editSlug as string | null, baseVersion: baseVersion as number | null, name, items: sortByPhase(items) };
 }
 
 /** A short change note for the version list, e.g. "Lade till Hantelrodd, ändrade set eller mål". */
@@ -110,7 +119,9 @@ export function describeChange(before: WorkoutTemplate | null, after: Pick<Worko
 	if (added.length) parts.push(`lade till ${added.join(', ')}`);
 	if (removed.length) parts.push(`tog bort ${removed.join(', ')}`);
 	const kept = after.exercises.filter((e) => old.has(e.exerciseId));
-	if (kept.some((e) => JSON.stringify(old.get(e.exerciseId)) !== JSON.stringify(e))) parts.push('ändrade set eller mål');
+	const changed = kept.filter((e) => JSON.stringify(old.get(e.exerciseId)) !== JSON.stringify(e));
+	if (changed.some((e) => old.get(e.exerciseId)!.phase !== e.phase)) parts.push('flyttade övningar mellan uppvärmning, pass och stretch');
+	if (changed.some((e) => JSON.stringify({ ...old.get(e.exerciseId)!, phase: e.phase }) !== JSON.stringify(e))) parts.push('ändrade set eller mål');
 	const order = (list: WorkoutExercise[]) => list.filter((e) => old.has(e.exerciseId) && now.has(e.exerciseId)).map((e) => e.exerciseId).join();
 	if (order(before.exercises) !== order(after.exercises)) parts.push('ny ordning');
 	const text = parts.join(', ') || 'Inga ändringar';
@@ -142,6 +153,13 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 		if ('newExercise' in item && !targetMatchesType(item.target, item.newExercise.type))
 			problems.push(`Övning ${i + 1}: målet ska anges i ${item.newExercise.type === 'time' ? 'sekunder' : 'reps'}.`);
 	}
+	// Warm-up and stretch are ticked off by time or reps, without weights (#100).
+	for (const item of input.items) {
+		const type = 'exerciseId' in item ? byId.get(item.exerciseId)?.type : item.newExercise.type;
+		const name = 'exerciseId' in item ? byId.get(item.exerciseId)?.name : item.newExercise.name;
+		if (type && !fitsPhase(type, item.phase))
+			problems.push(`${name}: uppvärmning och stretch kan bara ha övningar med tid eller reps, inte vikt.`);
+	}
 	// The same exercise twice is caught before anything is created. A new one
 	// with the name and type of an existing one is that exercise (see findOrCreateExercise).
 	const active = catalog.filter((e) => !e.deleted);
@@ -166,7 +184,8 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	if (latest && (!input.editSlug || latest.version !== input.baseVersion)) {
 		const same =
 			latest.name === input.name &&
-			JSON.stringify(latest.exercises) === JSON.stringify(input.items.map((item) => ({ exerciseId: keyOf(item), sets: item.sets, target: item.target })));
+			JSON.stringify(latest.exercises) ===
+				JSON.stringify(input.items.map((item) => ({ exerciseId: keyOf(item), sets: item.sets, target: item.target, ...phaseField(item.phase) })));
 		if (same) return { slug, version: latest.version, saved: false };
 		if (input.editSlug) throw new WorkoutChangedError();
 		throw new ValidationError('pass', [`Det finns redan ett pass som heter ${latest.name}. Välj ett annat namn eller redigera det passet.`]);
@@ -175,7 +194,7 @@ export async function saveManualWorkout(storage: UserStorage, input: ManualWorko
 	const exercises: WorkoutExercise[] = [];
 	for (const item of input.items) {
 		const id = 'exerciseId' in item ? item.exerciseId : (await findOrCreateExercise(storage, catalog, item.newExercise)).exercise.id;
-		exercises.push({ exerciseId: id, sets: item.sets, target: item.target });
+		exercises.push({ exerciseId: id, sets: item.sets, target: item.target, ...phaseField(item.phase) });
 	}
 
 	if (base && base.name === input.name && JSON.stringify(base.exercises) === JSON.stringify(exercises)) {

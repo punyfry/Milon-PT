@@ -1,11 +1,21 @@
 /**
  * History is computed from the exercise logs and session records; nothing is
- * stored separately.
+ * stored separately. Log entries from a warm-up or stretch (`phase`, #100)
+ * are left out of everything here: records, 1RM, volume, the week and the
+ * milestones.
  */
-import { normalizeName, type Exercise, type ExerciseSet, type ExerciseType, type SessionRecord } from '$lib/model';
+import { normalizeName, type Exercise, type ExerciseSet, type ExerciseType, type LogEntry, type SessionRecord } from '$lib/model';
 import { volume } from '$lib/session/active';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Whether a log entry counts in the stats: not from a warm-up or stretch. */
+export function countsInStats(entry: Pick<LogEntry, 'phase'>): boolean {
+	return entry.phase === undefined;
+}
+
+/** The log entries that count in the stats. */
+const counted = (exercise: Exercise) => exercise.log.filter(countsInStats);
 
 /** Estimated 1RM (Epley): weight × (1 + reps / 30). */
 export function estimated1RM(weight: number, reps: number): number {
@@ -45,7 +55,7 @@ export interface SeriesPoint {
 /** Best value per date, oldest first (several sessions on one day are merged). */
 export function progressSeries(exercise: Exercise): SeriesPoint[] {
 	const byDate = new Map<string, SeriesPoint>();
-	for (const entry of exercise.log) {
+	for (const entry of counted(exercise)) {
 		const best = bestSet(exercise.type, entry.sets);
 		if (!best) continue;
 		const prev = byDate.get(entry.date);
@@ -57,7 +67,7 @@ export function progressSeries(exercise: Exercise): SeriesPoint[] {
 /** Best value ever, optionally excluding a given session. */
 export function bestEver(exercise: Exercise, excludeSessionId?: string): number | null {
 	let best: number | null = null;
-	for (const entry of exercise.log) {
+	for (const entry of counted(exercise)) {
 		if (excludeSessionId && entry.sessionId === excludeSessionId) continue;
 		const b = bestSet(exercise.type, entry.sets);
 		if (b && (best === null || b.value > best)) best = b.value;
@@ -76,7 +86,7 @@ export function heaviestWeight(type: ExerciseType, sets: readonly ExerciseSet[])
 /** Heaviest weight ever, optionally excluding a given session. */
 export function heaviestEver(exercise: Exercise, excludeSessionId?: string): number | null {
 	let max: number | null = null;
-	for (const entry of exercise.log) {
+	for (const entry of counted(exercise)) {
 		if (excludeSessionId && entry.sessionId === excludeSessionId) continue;
 		const h = heaviestWeight(exercise.type, entry.sets);
 		if (h !== null && (max === null || h > max)) max = h;
@@ -90,9 +100,13 @@ export type RecordKind = 'best' | 'heaviest';
 /**
  * Log entries (indexes into the exercise log) that set a record: strictly
  * better than everything before. The very first entry is not a record.
+ * Warm-up and stretch entries are skipped.
  */
 export function recordEntries(exercise: Exercise): Map<number, RecordKind[]> {
-	const order = exercise.log.map((e, i) => ({ e, i })).sort((a, b) => a.e.date.localeCompare(b.e.date) || b.i - a.i);
+	const order = exercise.log
+		.map((e, i) => ({ e, i }))
+		.filter(({ e }) => countsInStats(e))
+		.sort((a, b) => a.e.date.localeCompare(b.e.date) || b.i - a.i);
 	const records = new Map<number, RecordKind[]>();
 	const prev: Record<RecordKind, number | null> = { best: null, heaviest: null };
 	for (const { e, i } of order) {
@@ -168,7 +182,7 @@ export function weekSummary(start: string, exercises: readonly Exercise[], sessi
 
 	for (const ex of exercises) {
 		for (const entry of ex.log) {
-			if (!inWeek(entry.date)) continue;
+			if (!inWeek(entry.date) || !countsInStats(entry)) continue;
 			trained.add(entry.date);
 			if (!entry.sessionId && !sessionDates.includes(entry.date)) importOnly.add(entry.date);
 			volumeByType[ex.type] = round1(volumeByType[ex.type] + volume(ex.type, entry.sets));
@@ -209,7 +223,7 @@ export const MILESTONES = [
 	}
 ] as const;
 
-const lastDate = (e: Exercise) => e.log.reduce((d, l) => (l.date > d ? l.date : d), '');
+const lastDate = (e: Exercise) => counted(e).reduce((d, l) => (l.date > d ? l.date : d), '');
 /** Most recently trained first. */
 const byRecent = (a: Exercise, b: Exercise) => lastDate(b).localeCompare(lastDate(a));
 
@@ -218,9 +232,10 @@ const byRecent = (a: Exercise, b: Exercise) => lastDate(b).localeCompare(lastDat
  * shown (the most recently trained one).
  * Otherwise the most recently trained progression exercise is shown and
  * `progress` is true. `others` are the remaining progression exercises with
- * history.
+ * history. Only entries from the main part count as history here.
  */
-export function milestoneExercises(exercises: readonly Exercise[]) {
+export function milestoneExercises(all: readonly Exercise[]) {
+	const exercises = all.map((e) => (e.log.every(countsInStats) ? e : { ...e, log: counted(e) }));
 	return MILESTONES.map((m) => {
 		const goals = exercises.filter((e) => m.match.test(normalizeName(e.name))).sort(byRecent);
 		const steps = exercises

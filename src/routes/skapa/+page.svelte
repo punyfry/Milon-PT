@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { PHASE_LABEL } from '$lib/format';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import MilonMessage from '$lib/components/MilonMessage.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
@@ -123,7 +124,10 @@
 		{#if draftOpen && draft.length}
 			<ol class="draftlist" id="draftlist">
 				{#each draft as item, i (item.exerciseId)}
-					<li><span>{i + 1}. {item.name}</span><span class="num">{item.sets} × {targetText(item.target)}</span></li>
+					<li>
+						<span>{i + 1}. {item.name}{#if item.phase}<span class="tag quiet">{PHASE_LABEL[item.phase]}</span>{/if}</span>
+						<span class="num">{item.sets} × {targetText(item.target)}</span>
+					</li>
 				{/each}
 			</ol>
 		{/if}

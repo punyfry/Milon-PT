@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveSession } from '../../model';
 import { MemoryUserStorage } from '../storage/memory';
+import { applyDeviations } from './save-session';
 import {
 	createExercise,
 	deleteExercise,
@@ -491,5 +492,103 @@ describe('exercises written in during the session', () => {
 		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: ' ' }] }))).toThrow(/namn/);
 		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, type: 'cardio' as never }] }))).toThrow(/type/);
 		expect(() => input(withNew({ newExercises: [{ id: 'new_abc', ...rows, name: `A${' '.repeat(500)}B` }] }))).toThrow(/högst 80/);
+	});
+});
+
+describe('warm-up and stretch (#100)', () => {
+	/** Pass B with Armhävning as warm-up and Sidoplanka as stretch; the warm-up is done, the stretch skipped. */
+	function withParts(): ActiveSession {
+		const base = active();
+		return {
+			...base,
+			exercises: [
+				{ exerciseId: 'ex_armhavning', phase: 'warmup', sets: [{ reps: 10, done: true }] },
+				...base.exercises,
+				{ exerciseId: 'ex_sidoplanka', phase: 'cooldown', sets: [{ seconds: 30, done: false }] }
+			]
+		};
+	}
+	const endedAt = '2026-10-06T18:05:00+02:00';
+
+	it('logs a done warm-up with its phase and leaves a skipped stretch out', async () => {
+		const storage = await setup();
+		const result = await saveSession(storage, { session: withParts(), endedAt, saveAsNewVersion: false });
+
+		const warmup = (await getExercise(storage, 'ex_armhavning'))!.data.log;
+		expect(warmup).toEqual([expect.objectContaining({ sessionId: result.sessionId, sets: [{ reps: 10 }], phase: 'warmup' })]);
+		expect((await getExercise(storage, 'ex_sidoplanka'))!.data.log).toEqual([]);
+		// The main part is logged as before, without a phase.
+		expect((await getExercise(storage, 'ex_marklyft'))!.data.log[0]).not.toHaveProperty('phase');
+		// A skipped part leaves nothing on the record either.
+		const record = (await getSession(storage, result.sessionId))!.data;
+		expect(record.exerciseIds).toEqual(['ex_armhavning', 'ex_marklyft', 'ex_plankan']);
+	});
+
+	it('is idempotent with warm-up and stretch', async () => {
+		const storage = await setup();
+		const input = { session: withParts(), endedAt, saveAsNewVersion: false };
+		const first = await saveSession(storage, input);
+		const again = await saveSession(storage, input);
+		expect(again).toEqual({ sessionId: first.sessionId, alreadySaved: true });
+		expect((await getExercise(storage, 'ex_armhavning'))!.data.log).toHaveLength(1);
+		expect(await listSessionIds(storage)).toEqual([first.sessionId]);
+	});
+
+	it('saves a workout where only the warm-up was done', async () => {
+		const storage = await setup();
+		const session = withParts();
+		session.exercises = session.exercises.map((e) => (e.phase ? e : { ...e, sets: e.sets.map((s) => ({ ...s, done: false })) }));
+		const result = await saveSession(storage, { session, endedAt, saveAsNewVersion: false });
+		expect((await getSession(storage, result.sessionId))!.data.exerciseIds).toEqual(['ex_armhavning']);
+	});
+
+	it('a weight exercise swapped into a stretch by an older client becomes part of the main workout', () => {
+		const base = {
+			slug: 'pass-b',
+			name: 'Pass B',
+			version: 1,
+			createdAt: '2026-10-01',
+			exercises: [{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'cooldown' as const }]
+		};
+		const press = { id: 'ex_hantelpress', name: 'Hantelpress', type: 'weight' as const, instruction: '', log: [] };
+		const side = { id: 'ex_sidoplanka', name: 'Sidoplanka', type: 'time' as const, instruction: '', log: [] };
+		const exercises = new Map([press, side].map((e) => [e.id, e]));
+		const swapTo = (to: string) => applyDeviations(base, [{ type: 'swap', from: 'ex_plankan', to }], exercises, new Map());
+		expect(swapTo('ex_hantelpress')).toEqual([{ exerciseId: 'ex_hantelpress', sets: 1, target: { reps: 8 } }]);
+		expect(swapTo('ex_sidoplanka')).toEqual([{ exerciseId: 'ex_sidoplanka', sets: 1, target: { seconds: 30 }, phase: 'cooldown' }]);
+	});
+
+	it('rejects an unknown phase', () => {
+		const session = withParts();
+		(session.exercises[0] as { phase: string }).phase = 'stretch';
+		expect(() => parseSaveSessionInput({ session, endedAt })).toThrow(/phase/);
+	});
+
+	it('keeps the phase when a swap is saved as a new version', async () => {
+		const storage = await setup();
+		await saveWorkoutVersion(storage, {
+			slug: 'pass-b',
+			name: 'Pass B',
+			createdAt: '2026-10-02',
+			exercises: [
+				{ exerciseId: 'ex_armhavning', sets: 1, target: { reps: 10 }, phase: 'warmup' },
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+				{ exerciseId: 'ex_plankan', sets: 1, target: { seconds: 30 }, phase: 'cooldown' }
+			]
+		});
+		const session = active({
+			workoutVersion: 2,
+			exercises: [
+				{ exerciseId: 'ex_armhavning', phase: 'warmup', sets: [{ reps: 10, done: true }] },
+				{ exerciseId: 'ex_marklyft', sets: [{ weight: 40, reps: 8, done: true }] },
+				{ exerciseId: 'ex_sidoplanka', phase: 'cooldown', sets: [{ seconds: 30, done: true }] }
+			],
+			deviations: [{ type: 'swap', from: 'ex_plankan', to: 'ex_sidoplanka' }]
+		});
+		const result = await saveSession(storage, { session, endedAt, saveAsNewVersion: true });
+		expect(result.newWorkoutVersion).toBe(3);
+		const latest = (await listLatestWorkouts(storage))[0];
+		expect(latest.exercises.at(-1)).toEqual({ exerciseId: 'ex_sidoplanka', sets: 1, target: { seconds: 30 }, phase: 'cooldown' });
+		expect((await getExercise(storage, 'ex_sidoplanka'))!.data.log[0].phase).toBe('cooldown');
 	});
 });
