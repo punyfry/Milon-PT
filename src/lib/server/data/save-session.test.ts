@@ -448,6 +448,14 @@ describe('exercises written in during the session', () => {
 		expect((await getExercise(storage, 'ex_hantelrodd'))!.data.log).toHaveLength(1);
 	});
 
+	it('creates no exercise when a stored exercise has a done set above the bounds (#89)', async () => {
+		const storage = await setup();
+		const session = withNew();
+		session.exercises[0].sets[0] = { weight: 1000, reps: 8, done: true };
+		await expect(saveSession(storage, input(session))).rejects.toThrow(/exercises\[0\]\.sets\[0\]\.weight: får vara högst 500/);
+		expect(await getExercise(storage, 'ex_hantelrodd')).toBeNull();
+	});
+
 	it('saves the note of a written-in exercise with its log entry', async () => {
 		const storage = await setup();
 		const session = withNew();

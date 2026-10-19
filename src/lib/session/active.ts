@@ -85,7 +85,7 @@ function setValues(type: ExerciseType, set: ExerciseSet): ExerciseSet {
  */
 export function prefillSets(info: ExerciseInfo, count: number, target?: Target, options: { ownHistory?: boolean } = {}): ActiveSet[] {
 	const previous = info.lastEntry?.sets ?? [];
-	const planned = !options.ownHistory && target && 'seconds' in target ? target.seconds : 0;
+	const planned = !options.ownHistory && target && 'seconds' in target ? Math.min(target.seconds, SET_MAX.seconds) : 0;
 	return Array.from({ length: Math.max(count, 1) }, (_, i) => {
 		const from = previous[Math.min(i, previous.length - 1)];
 		const values = from ? setValues(info.type, from) : defaultSet(info.type, target);

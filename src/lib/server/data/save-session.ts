@@ -21,6 +21,8 @@ import {
 	targetMatchesType,
 	validateExerciseInput,
 	validateLoggedSet,
+	fieldsAboveSetMax,
+	SET_MAX,
 	type ActiveSession,
 	type Deviation,
 	type Exercise,
@@ -209,7 +211,10 @@ function precheck(session: ActiveSession): void {
 			if (!isObject(set) || set.done !== true) return;
 			anyDone = true;
 			const n = written.get(ex.exerciseId);
-			if (n) validateLoggedSet(set, n.type, issues, `session.exercises[${i}].sets[${j}]`);
+			const path = `session.exercises[${i}].sets[${j}]`;
+			if (n) validateLoggedSet(set, n.type, issues, path);
+			// The bounds for stored exercises too, before any exercise is created (#89).
+			else for (const key of fieldsAboveSetMax(set)) issues.add(`${path}.${key}`, `får vara högst ${SET_MAX[key]}`);
 		});
 	}
 	if (!issues.ok) throw new ValidationError('sparning', issues.list);

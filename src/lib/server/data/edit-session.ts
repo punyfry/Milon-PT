@@ -157,10 +157,9 @@ export async function editSession(storage: UserStorage, id: string, input: EditS
 			issues.add(`exercises[${i}]`, `övningen ${e.exerciseId} finns inte`);
 			continue;
 		}
-		const sets = e.sets.map((s, j) => {
-			const path = `exercises[${i}].sets[${j}]`;
-			return validateLoggedSet(s, stored.data.type, issues, path);
-		});
+		// Sets already saved for this session are kept as they are, even above the bounds.
+		const before = stored.data.log.find((l) => l.sessionId === id)?.sets ?? [];
+		const sets = e.sets.map((s, j) => validateLoggedSet(s, stored.data.type, issues, `exercises[${i}].sets[${j}]`, before));
 		kept.set(e.exerciseId, sets.filter((s) => s !== null));
 	}
 	if (!issues.ok) throw new ValidationError('ändring', issues.list);

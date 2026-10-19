@@ -85,6 +85,11 @@ describe('active session', () => {
 		const heavy: ExerciseInfo = { ...deadlift, lastEntry: { date: '2026-10-01', sets: [{ weight: 1000, reps: 300 }] } };
 		expect(prefillSets(heavy, 1)).toEqual([{ weight: 500, reps: 200, done: false }]);
 		expect(prefillSets({ ...deadlift, lastEntry: undefined }, 1, { reps: 999 })).toEqual([{ weight: 0, reps: 200, done: false }]);
+		const plank: ExerciseInfo = { id: 'ex_plankan', name: 'Plankan', type: 'time', instruction: '' };
+		expect(prefillSets(plank, 1, { seconds: 20000 })).toEqual([{ seconds: 10800, done: false }]);
+		expect(prefillSets({ ...plank, lastEntry: { date: '2026-10-01', sets: [{ seconds: 30 }] } }, 1, { seconds: 20000 })).toEqual([
+			{ seconds: 10800, done: false }
+		]);
 	});
 
 	it('sets typed values and ignores invalid ones', () => {

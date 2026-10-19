@@ -76,6 +76,8 @@ describe('manual workout', () => {
 		expect(issues(() => parseManualWorkoutInput({ name: 'A', items: [{ sets: 3, target: { reps: 8 } }] }))).toMatch(/välj en övning/);
 		expect(issues(() => parseManualWorkoutInput({ name: 'A', items: [{ ...rows, newExercise: { name: '', type: 'weight' } }] }))).toMatch(/Övning 1: Övningen behöver ett namn\./);
 		expect(issues(() => parseManualWorkoutInput({ editSlug: '../x', name: 'A', items: [rows] }))).toMatch(/Ogiltigt pass/);
+		expect(parseManualWorkoutInput({ name: 'A', items: [{ exerciseId: 'ex_a', sets: 3, target: { reps: 200 } }] }).items[0].target).toEqual({ reps: 200 });
+		expect(issues(() => parseManualWorkoutInput({ name: 'A', items: [{ exerciseId: 'ex_a', sets: 3, target: { reps: 201 } }] }))).toMatch(/reps \(1–200\)/);
 	});
 
 	it('refuses to edit a workout that does not exist', async () => {
