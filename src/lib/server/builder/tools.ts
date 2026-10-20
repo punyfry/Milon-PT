@@ -43,14 +43,15 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 	{
 		name: 'propose_exercise',
 		description:
-			'Lägger till en övning som användaren har godkänt i passet som byggs. Använd existingId om övningen finns i katalogen; ' +
+			'Lägger till en övning i passet som byggs, sist i sin del (uppvärmning, pass eller stretch). Använd existingId om övningen finns i katalogen; ' +
 			'annars anges name, type och instruction, och övningen skapas. ' +
-			'Anropa igen med samma övning för att ändra set eller mål.',
+			'Anropa igen med samma övning för att ändra set eller mål. Med replacesId ersätter övningen en annan i passet, på samma plats.',
 		strict: true,
 		input_schema: {
 			type: 'object',
 			properties: {
 				existingId: { type: ['string', 'null'], description: 'id från katalogen, eller null för en ny övning' },
+				replacesId: { type: ['string', 'null'], description: 'id för övningen i passet som den här ersätter, annars null' },
 				name: { type: ['string', 'null'], description: 'Namn på ny övning, annars null' },
 				// Strict tools don't accept enum with the type array ['string', 'null'], so null is expressed with anyOf.
 				type: { anyOf: [{ type: 'string', enum: ['weight', 'bodyweight', 'time'] }, { type: 'null' }] },
@@ -59,7 +60,18 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 				target,
 				phase
 			},
-			required: ['existingId', 'name', 'type', 'instruction', 'sets', 'target', 'phase'],
+			required: ['existingId', 'replacesId', 'name', 'type', 'instruction', 'sets', 'target', 'phase'],
+			additionalProperties: false
+		}
+	},
+	{
+		name: 'remove_exercise',
+		description: 'Tar bort en övning ur passet som byggs. Övningen finns kvar i katalogen.',
+		strict: true,
+		input_schema: {
+			type: 'object',
+			properties: { exerciseId: { type: 'string', description: 'id för övningen i passet' } },
+			required: ['exerciseId'],
 			additionalProperties: false
 		}
 	},
@@ -67,6 +79,7 @@ export const BUILDER_TOOLS: Anthropic.Beta.BetaTool[] = [
 		name: 'set_workout',
 		description:
 			'Sparar passet med övningarna i ordning. Ett nytt pass blir version 1; när ett befintligt pass redigeras blir det nästa version. ' +
+			'Har användaren nyss ändrat ordningen själv sparas den ordningen. ' +
 			'Alla exerciseId måste finnas (från katalogen eller från propose_exercise). ' +
 			'Uppvärmning (warmup) och stretch (cooldown) är valfria; appen lägger dem före respektive efter passet.',
 		strict: true,
@@ -98,6 +111,12 @@ export interface BuilderState {
 	/** The live list: the exercises agreed on so far, in order. */
 	draft: WorkoutExercise[];
 	saved?: { slug: string; version: number };
+	/**
+	 * The user reordered the list since Milon's last turn: a save in the next
+	 * turn keeps that order when it has the same exercises, whatever order the
+	 * model gives. Cleared when that turn ends.
+	 */
+	userOrder?: boolean;
 }
 
 export interface ToolOutcome {
@@ -105,6 +124,10 @@ export interface ToolOutcome {
 	isError: boolean;
 	/** Short line for the chat log, e.g. "Lade till Marklyft". */
 	event?: string;
+	/** The tool changed the live list; the turn shows the list as a card. */
+	changedDraft?: boolean;
+	/** The event is shown by the card alone (an exercise added or updated), not as a line of its own. */
+	cardOnly?: boolean;
 }
 
 function parseTarget(v: unknown): Target | null {
@@ -144,6 +167,10 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!tgt) return fail('target ska ha antingen reps eller seconds (ett positivt heltal), och den andra null.');
 	const part = parsePhase(input.phase);
 	if (!part) return fail(PHASE_ERROR);
+
+	// Checked before a new exercise is created, so a failed swap leaves nothing behind in the catalog.
+	const replacesId = typeof input.replacesId === 'string' && input.replacesId ? input.replacesId : null;
+	if (replacesId && !state.draft.some((d) => d.exerciseId === replacesId)) return fail(`${replacesId} finns inte i passet, så den kan inte ersättas.`);
 
 	const catalog = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
 	let exercise: Exercise | undefined;
@@ -186,7 +213,24 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!fitsPhase(exercise.type, part)) return fail(extraWeightError(exercise.name));
 
 	const item: WorkoutExercise = { exerciseId: exercise.id, sets, target: tgt, ...phaseField(part) };
+	const replaced = replacesId && replacesId !== exercise.id ? state.draft.findIndex((d) => d.exerciseId === replacesId) : -1;
 	const index = state.draft.findIndex((d) => d.exerciseId === exercise!.id);
+	if (replaced >= 0) {
+		const replacedName = catalog.find((e) => e.id === replacesId)?.name ?? replacesId;
+		// In the replaced exercise's place; an earlier copy of the new one goes, so it isn't in the list twice.
+		state.draft[replaced] = item;
+		if (index >= 0) state.draft.splice(index, 1);
+		state.draft = sortByPhase(state.draft);
+		const summary = `${sets} set × ${formatTarget(tgt)}${part === 'main' ? '' : ` (${PHASE_NAME[part]})`}`;
+		return {
+			isError: false,
+			changedDraft: true,
+			content:
+				(created ? `Ny övning skapad: ${exercise.id} (${exercise.name}). ` : `Använder befintlig övning ${exercise.id} (${exercise.name}). `) +
+				`Ersatte ${replacesId} i passet: ${summary}. Passet har nu ${state.draft.length} övningar.`,
+			event: `Bytte ${replacedName} mot ${exercise.name}: ${summary}${created ? ' (ny övning)' : ''}`
+		};
+	}
 	if (index >= 0) state.draft[index] = item;
 	else state.draft.push(item);
 	// The live list is shown as the workout will run: warm-up first, stretch last.
@@ -195,10 +239,26 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	const summary = `${sets} set × ${formatTarget(tgt)}${part === 'main' ? '' : ` (${PHASE_NAME[part]})`}`;
 	return {
 		isError: false,
+		changedDraft: true,
+		cardOnly: true,
 		content:
 			(created ? `Ny övning skapad: ${exercise.id} (${exercise.name}). ` : `Använder befintlig övning ${exercise.id} (${exercise.name}). `) +
 			`${index >= 0 ? 'Uppdaterad' : 'Tillagd'} i passet: ${summary}. Passet har nu ${state.draft.length} övningar.`,
 		event: `${index >= 0 ? 'Uppdaterade' : 'Lade till'} ${exercise.name}: ${summary}${created ? ' (ny övning)' : ''}`
+	};
+}
+
+async function removeExercise(storage: UserStorage, state: BuilderState, input: Record<string, unknown>): Promise<ToolOutcome> {
+	const id = typeof input.exerciseId === 'string' ? input.exerciseId : '';
+	const index = state.draft.findIndex((d) => d.exerciseId === id);
+	if (index < 0) return fail(`${id || 'Övningen'} finns inte i passet.`);
+	state.draft.splice(index, 1);
+	const name = (await listExercises(storage)).find((e) => e.data.id === id)?.data.name ?? id;
+	return {
+		isError: false,
+		changedDraft: true,
+		content: `Tog bort ${id} ur passet. Passet har nu ${state.draft.length} övningar.`,
+		event: `Tog bort ${name}`
 	};
 }
 
@@ -227,7 +287,12 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 		exercises.push({ exerciseId: ex.id, sets, target: tgt, ...phaseField(part) });
 	});
 	if (problems.length) return fail(problems.join('; '));
-	const ordered = sortByPhase(exercises);
+	let ordered = sortByPhase(exercises);
+	// The order the user just set wins over the model's, as long as it is the same exercises.
+	if (state.userOrder && sameExercises(ordered, state.draft)) {
+		const byId = new Map(ordered.map((e) => [e.exerciseId, e]));
+		ordered = sortByPhase(state.draft.map((d) => byId.get(d.exerciseId)!));
+	}
 
 	let slug = state.editingSlug;
 	if (!slug) {
@@ -258,6 +323,11 @@ async function setWorkout(storage: UserStorage, state: BuilderState, input: Reco
 	};
 }
 
+function sameExercises(a: readonly WorkoutExercise[], b: readonly WorkoutExercise[]): boolean {
+	const ids = new Set(b.map((e) => e.exerciseId));
+	return a.length === b.length && a.every((e) => ids.has(e.exerciseId));
+}
+
 /** Runs a tool call. Invalid input becomes an error result to the model, not an exception. */
 export async function executeTool(
 	storage: UserStorage,
@@ -268,6 +338,7 @@ export async function executeTool(
 ): Promise<ToolOutcome> {
 	if (!isObject(input)) return fail('Indata måste vara ett objekt.');
 	if (name === 'propose_exercise') return proposeExercise(storage, state, input);
+	if (name === 'remove_exercise') return removeExercise(storage, state, input);
 	if (name === 'set_workout') return setWorkout(storage, state, input, today);
 	return fail(`Okänt verktyg: ${name}`);
 }

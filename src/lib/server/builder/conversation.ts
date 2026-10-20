@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { AiLimitError } from '../ai/usage';
-import { isObject, type WorkoutExercise } from '../../model';
+import { isObject, phaseOf, PHASES, type WorkoutExercise } from '../../model';
 import { modelOptions, type CreateMessage } from '../ai/models';
 import { listExercises } from '../data/exercises';
 import { getProfile } from '../data/profile';
@@ -9,10 +9,15 @@ import { StorageConflictError, type UserStorage } from '../storage/types';
 import { buildSystemPrompt } from './prompt';
 import { BUILDER_TOOLS, executeTool, type BuilderState } from './tools';
 
-/** A line in the chat log shown to the user. */
+/**
+ * A line in the chat log shown to the user. `workout` is the live list as it
+ * was after a turn where Milon changed it, shown as a card in the chat.
+ */
 export interface LogItem {
-	role: 'user' | 'assistant' | 'event' | 'error';
+	role: 'user' | 'assistant' | 'event' | 'error' | 'workout';
 	text: string;
+	/** Only for `workout`. */
+	items?: WorkoutExercise[];
 }
 
 /**
@@ -26,6 +31,8 @@ export interface BuilderConversation extends BuilderState {
 	system: string;
 	messages: Anthropic.Beta.BetaMessageParam[];
 	log: LogItem[];
+	/** Something the user did outside the chat (reordering the list), told to Milon with the next message. */
+	pendingNote?: string;
 }
 
 const ID = /^b_[a-z0-9]{6,40}$/;
@@ -89,20 +96,28 @@ export async function saveConversation(storage: UserStorage, conversation: Build
 	return result.version;
 }
 
+/** How long the conversation was when a turn started: its messages and its chat log. */
+export interface TurnBase {
+	messages: number;
+	log: number;
+}
+
+export const turnBase = (conversation: BuilderConversation): TurnBase => ({ messages: conversation.messages.length, log: conversation.log.length });
+
 /**
- * Saves a turn that started from `baseMessages` messages. If the version
- * check fails but the stored conversation still has exactly those messages,
- * nobody else added a turn (the stored version just didn't match), so the
- * turn is saved on top of it. Throws StorageConflictError if another turn
- * really was saved in between.
+ * Saves a turn that started from `base`. If the version check fails but the
+ * stored conversation is still exactly that long, nobody else added a turn or
+ * reordered the list (the stored version just didn't match), so the turn is
+ * saved on top of it. Throws StorageConflictError if something else really was
+ * saved in between; a reorder adds to the log but not to the messages.
  */
-export async function saveTurn(storage: UserStorage, conversation: BuilderConversation, version: string | undefined, baseMessages: number) {
+export async function saveTurn(storage: UserStorage, conversation: BuilderConversation, version: string | undefined, base: TurnBase) {
 	try {
 		return await saveConversation(storage, conversation, version);
 	} catch (e) {
 		if (!(e instanceof StorageConflictError) || version === undefined) throw e;
 		const stored = await loadConversation(storage, conversation.id);
-		if (!stored || stored.conversation.messages.length !== baseMessages) throw e;
+		if (!stored || stored.conversation.messages.length !== base.messages || stored.conversation.log.length !== base.log) throw e;
 		return saveConversation(storage, conversation, stored.version);
 	}
 }
@@ -145,9 +160,26 @@ export async function runTurn(
 	userText: string,
 	options: TurnOptions
 ): Promise<void> {
-	conversation.messages.push({ role: 'user', content: userText });
+	const note = conversation.pendingNote;
+	delete conversation.pendingNote;
+	conversation.messages.push({ role: 'user', content: note ? `${note}\n\n${userText}` : userText });
 	conversation.log.push({ role: 'user', text: userText });
 
+	/** Where the turn's first change to the list happened: the card goes there, instead of one line per exercise. */
+	const card = { at: -1 };
+	try {
+		await turnLoop(storage, conversation, options, card);
+	} finally {
+		delete conversation.userOrder;
+		if (card.at >= 0 && conversation.draft.length) {
+			const items = structuredClone(conversation.draft);
+			const text = `Passet: ${items.length} ${items.length === 1 ? 'övning' : 'övningar'}`;
+			conversation.log.splice(card.at, 0, { role: 'workout', text, items });
+		}
+	}
+}
+
+async function turnLoop(storage: UserStorage, conversation: BuilderConversation, options: TurnOptions, card: { at: number }): Promise<void> {
 	const maxIterations = options.maxIterations ?? 8;
 	for (let i = 0; i < maxIterations; i++) {
 		let response: Anthropic.Beta.BetaMessage;
@@ -204,11 +236,42 @@ export async function runTurn(
 				conversation.log.push({ role: 'error', text: `Kunde inte spara: ${reason}` });
 			}
 			results.push({ type: 'tool_result', tool_use_id: tool.id, content: outcome.content, ...(outcome.isError ? { is_error: true } : {}) });
-			if ('event' in outcome && outcome.event) conversation.log.push({ role: 'event', text: outcome.event });
+			if ('changedDraft' in outcome && outcome.changedDraft && card.at < 0) card.at = conversation.log.length;
+			// Additions show in the card; a swap or removal also says what went.
+			if ('event' in outcome && outcome.event && !('cardOnly' in outcome && outcome.cardOnly)) conversation.log.push({ role: 'event', text: outcome.event });
 		}
 		conversation.messages.push({ role: 'user', content: results });
 	}
 	conversation.log.push({ role: 'error', text: 'Milon tog för många steg. Skriv igen för att fortsätta.' });
+}
+
+// --- reordering ---------------------------------------------------------
+
+/**
+ * The user's own order for the live list (exercise ids, the same exercises,
+ * each part kept together). Milon hears about it with the next message, and a
+ * save in that turn keeps it. Returns an error text for the user, or null.
+ */
+export function reorderDraft(conversation: BuilderConversation, order: unknown, names: ReadonlyMap<string, string>): string | null {
+	const draft = conversation.draft;
+	if (!Array.isArray(order) || order.length !== draft.length || new Set(order).size !== order.length) return 'Ordningen stämmer inte med passet.';
+	const byId = new Map(draft.map((d) => [d.exerciseId, d]));
+	const next: WorkoutExercise[] = [];
+	for (const id of order) {
+		const item = typeof id === 'string' ? byId.get(id) : undefined;
+		if (!item) return 'Ordningen stämmer inte med passet.';
+		next.push(item);
+	}
+	const parts = next.map((d) => PHASES.indexOf(phaseOf(d)));
+	if (parts.some((p, i) => i > 0 && p < parts[i - 1])) return 'Uppvärmningen ska vara först och stretchen sist.';
+	if (next.every((d, i) => d === draft[i])) return null;
+
+	conversation.draft = next;
+	conversation.userOrder = true;
+	const list = next.map((d, i) => `${i + 1}. ${names.get(d.exerciseId) ?? d.exerciseId} (${d.exerciseId})`).join('\n');
+	conversation.pendingNote = `(Användaren har själv ändrat ordningen i passet. Den är nu:\n${list}\nBehåll den ordningen.)`;
+	conversation.log.push({ role: 'event', text: 'Du ändrade ordningen' });
+	return null;
 }
 
 // --- view ---------------------------------------------------------------
@@ -218,21 +281,26 @@ export interface DraftItem extends WorkoutExercise {
 	type: string;
 }
 
+/** A log line for the client; a workout card has its exercises with names. */
+export interface LogView {
+	role: LogItem['role'];
+	text: string;
+	items?: DraftItem[];
+}
+
 /** What the client gets: the chat log and the live list with names, never the raw model messages. */
 export async function conversationView(storage: UserStorage, conversation: BuilderConversation) {
 	const names = new Map((await listExercises(storage)).map((e) => [e.data.id, e.data]));
-	const draft: DraftItem[] = conversation.draft.map((d) => ({
-		...d,
-		name: names.get(d.exerciseId)?.name ?? d.exerciseId,
-		type: names.get(d.exerciseId)?.type ?? 'weight'
-	}));
+	const withNames = (items: readonly WorkoutExercise[]): DraftItem[] =>
+		items.map((d) => ({ ...d, name: names.get(d.exerciseId)?.name ?? d.exerciseId, type: names.get(d.exerciseId)?.type ?? 'weight' }));
+	const log: LogView[] = conversation.log.map((l) => (l.role === 'workout' ? { role: l.role, text: l.text, items: withNames(l.items ?? []) } : { role: l.role, text: l.text }));
 	return {
 		conversationId: conversation.id,
 		editingSlug: conversation.editingSlug,
 		saved: conversation.saved ?? null,
 		turnsLeft: Math.max(0, MAX_TURNS - userTurns(conversation)),
-		log: conversation.log,
-		draft
+		log,
+		draft: withNames(conversation.draft)
 	};
 }
 

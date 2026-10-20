@@ -20,6 +20,7 @@ vi.mock('$lib/server/ai/client', async (original) => {
 });
 
 const { POST: builder } = await import('./builder/+server');
+const { POST: builderOrder } = await import('./builder/order/+server');
 const { POST: helper } = await import('./helper/+server');
 const { POST: notes } = await import('./notes/+server');
 const { POST: importer } = await import('./import/+server');
@@ -215,6 +216,51 @@ describe('POST /api/builder', () => {
 		expect(createMessage).not.toHaveBeenCalled();
 		// Checked before the turn, so the client can give the message back to resend.
 		expect(await state.storage.list('builder/')).toEqual([]);
+	});
+});
+
+describe('POST /api/builder/order', () => {
+	async function seedWorkout() {
+		await createExercise(state.storage, { name: 'Marklyft', type: 'weight', instruction: '' });
+		await createExercise(state.storage, { name: 'Plankan', type: 'time', instruction: '' });
+		await saveWorkoutVersion(state.storage, {
+			slug: 'pass-a',
+			name: 'Pass A',
+			createdAt: '2026-10-01',
+			exercises: [
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+				{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 40 } }
+			]
+		});
+	}
+
+	it('starts a conversation for a workout being edited and keeps the new order, without calling Claude', async () => {
+		await seedWorkout();
+		const res = await call(builderOrder as Handler, { editSlug: 'pass-a', order: ['ex_plankan', 'ex_marklyft'] });
+		expect(res.status).toBe(200);
+		expect(res.body.draft.map((d: { name: string }) => d.name)).toEqual(['Plankan', 'Marklyft']);
+		expect(res.body.log).toEqual([{ role: 'event', text: 'Du ändrade ordningen' }]);
+		const saved = (await loadConversation(state.storage, res.body.conversationId))!.conversation;
+		expect(saved).toMatchObject({ editingSlug: 'pass-a', userOrder: true });
+		expect(saved.pendingNote).toMatch(/1\. Plankan/);
+		expect(createMessage).not.toHaveBeenCalled();
+		expect(await state.storage.list('usage/')).toEqual([]);
+
+		// And back again in the same conversation.
+		const again = await call(builderOrder as Handler, { conversationId: res.body.conversationId, order: ['ex_marklyft', 'ex_plankan'] });
+		expect(again.body.draft.map((d: { name: string }) => d.name)).toEqual(['Marklyft', 'Plankan']);
+	});
+
+	it('refuses a wrong order, a missing workout or conversation, and a user with Milon off', async () => {
+		await seedWorkout();
+		expect((await call(builderOrder as Handler, { editSlug: 'pass-a', order: ['ex_plankan'] })).status).toBe(400);
+		expect((await call(builderOrder as Handler, { order: [] })).status).toBe(400);
+		expect((await call(builderOrder as Handler, { editSlug: 'finns-inte', order: [] })).status).toBe(404);
+		expect((await call(builderOrder as Handler, { conversationId: 'b_finnsinte1', order: [] })).status).toBe(404);
+		expect((await call(builderOrder as Handler, 'inte json')).status).toBe(400);
+		expect(await state.storage.list('builder/')).toEqual([]);
+		await saveProfile(state.storage, { coach: false });
+		expect((await call(builderOrder as Handler, { editSlug: 'pass-a', order: ['ex_plankan', 'ex_marklyft'] })).status).toBe(403);
 	});
 });
 

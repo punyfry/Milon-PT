@@ -69,6 +69,17 @@ export const FAKE_WORKOUT_WITH_PARTS = {
 	]
 };
 
+/**
+ * Put in a builder message to make the fake Claude propose FAKE_WHOLE_WORKOUT with one
+ * `propose_exercise` per exercise before it replies; the test seeds the exercises.
+ */
+export const FAKE_CLAUDE_WHOLE_WORKOUT = '#helt-pass';
+export const FAKE_WHOLE_WORKOUT = [
+	{ existingId: 'ex_knaboj', sets: 3, target: { reps: 8, seconds: null } },
+	{ existingId: 'ex_marklyft', sets: 3, target: { reps: 6, seconds: null } },
+	{ existingId: 'ex_utfall', sets: 2, target: { reps: 10, seconds: null } }
+].map((e) => ({ ...e, replacesId: null, name: null, type: null, instruction: null, phase: 'main' }));
+
 /** What the fake proposes when asked to change what Milon knows (#110), whatever the request says. */
 export const FAKE_NOTES_PROPOSAL = {
 	goals: ['Starkare', 'Orka 10 armhävningar'],
@@ -80,7 +91,8 @@ export const FAKE_NOTES_PROPOSAL = {
 /**
  * Answers a Messages API request with a short text reply, or with a 400 error
  * (which the SDK doesn't retry) when the request contains FAKE_CLAUDE_ERROR.
- * With FAKE_CLAUDE_SAVE_WITH_PARTS it first calls `set_workout`, and replies once the tool result is back.
+ * With FAKE_CLAUDE_SAVE_WITH_PARTS it first calls `set_workout`, and replies once the tool result is back;
+ * FAKE_CLAUDE_WHOLE_WORKOUT does the same with `propose_exercise`.
  * A request offering `propose_notes` gets FAKE_NOTES_PROPOSAL.
  */
 function fakeClaude(body: string): { status: number; body: unknown } {
@@ -97,6 +109,21 @@ function fakeClaude(body: string): { status: number; body: unknown } {
 				role: 'assistant',
 				model,
 				content: [{ type: 'tool_use', id: 'toolu_e2e', name: 'propose_notes', input: FAKE_NOTES_PROPOSAL }],
+				stop_reason: 'tool_use',
+				stop_sequence: null,
+				usage: { input_tokens: 1, output_tokens: 1 }
+			}
+		};
+	}
+	if (body.includes(FAKE_CLAUDE_WHOLE_WORKOUT) && !body.includes('"tool_result"')) {
+		return {
+			status: 200,
+			body: {
+				id: 'msg_e2e',
+				type: 'message',
+				role: 'assistant',
+				model,
+				content: FAKE_WHOLE_WORKOUT.map((input, i) => ({ type: 'tool_use', id: `toolu_e2e_${i}`, name: 'propose_exercise', input })),
 				stop_reason: 'tool_use',
 				stop_sequence: null,
 				usage: { input_tokens: 1, output_tokens: 1 }

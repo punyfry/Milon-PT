@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { afterNavigate, beforeNavigate, goto, invalidateAll } from '$app/navigation';
+	import { tick } from 'svelte';
 	import ExerciseFields, { TYPE_LABEL } from '$lib/components/ExerciseFields.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import { PHASE_LABEL } from '$lib/format';
+	import { dragHandle, focusArrow } from '$lib/reorder/drag';
+	import { moveWithinPhase } from '$lib/reorder/move';
 	import {
 		Issues,
 		SET_MAX,
@@ -99,10 +102,23 @@
 	];
 	const isExtra = (phase: Phase) => phase !== 'main';
 
-	function move(i: number, d: -1 | 1) {
-		const j = i + d;
-		if (j < 0 || j >= items.length || items[j].phase !== items[i].phase) return;
-		[items[i], items[j]] = [items[j], items[i]];
+	/** The list is locked until "Ändra ordning", so a stray drag never moves an exercise. */
+	let ordering = $state(false);
+	/** The item being dragged, for its style. */
+	let dragged = $state<number | null>(null);
+
+	function move(from: number, to: number): boolean {
+		const next = moveWithinPhase(items, from, to);
+		if (!next) return false;
+		items = next;
+		return true;
+	}
+
+	/** A move with an arrow button keeps the focus on the moved exercise. */
+	async function moveByArrow(i: number, d: -1 | 1, name: string) {
+		if (!move(i, i + d)) return;
+		await tick();
+		focusArrow(name, d < 0 ? 'upp' : 'ner');
 	}
 
 	function remove(i: number) {
@@ -241,28 +257,49 @@
 			<input bind:value={name} maxlength="60" placeholder="T.ex. Pass A" autocomplete="off" />
 		</label>
 
+		{#if items.length > 1}
+			<div class="orderrow">
+				{#if ordering}
+					<span class="muted">Dra i handtaget eller använd pilarna.</span>
+					<button type="button" class="btn small primary" onclick={() => (ordering = false)}>Klar</button>
+				{:else}
+					<button type="button" class="btn small" onclick={() => (ordering = true)}>Ändra ordning</button>
+				{/if}
+			</div>
+		{/if}
+
 		{#each sections as { phase, hint } (phase)}
 			{@const count = items.filter((x) => x.phase === phase).length}
 			<section aria-label={isExtra(phase) ? PHASE_LABEL[phase] : 'Övningar'}>
 				<span class="label">{isExtra(phase) ? PHASE_LABEL[phase] : 'Övningar'}</span>
 				{#if hint}<p class="muted hint">{hint}</p>{/if}
 				{#if count}
-					<ol class="items">
+					<ol class="items" class:ordering data-sortable>
 						{#each items as item, i (item.key)}
 							{#if item.phase === phase}
-								<li>
+								<li data-sort-index={i} class:dragged={dragged === item.key}>
 									<div class="itemhead">
+										{#if ordering}
+											<span
+												class="handle"
+												aria-hidden="true"
+												use:dragHandle={{ index: i, onmove: move, ondrag: (on) => (dragged = on ? item.key : null) }}
+											><Icon name="grip" /></span>
+										{/if}
 										<span class="itemname">
 											<strong>{item.name}</strong>
 											<span class="muted">{TYPE_LABEL[item.type]}{item.newExercise ? ' · ny övning' : ''}</span>
 										</span>
 										<span class="tools">
-											<button type="button" class="icon-btn" onclick={() => move(i, -1)} disabled={items[i - 1]?.phase !== phase} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
-											<button type="button" class="icon-btn" onclick={() => move(i, 1)} disabled={items[i + 1]?.phase !== phase} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
-											<button type="button" class="icon-btn" onclick={() => remove(i)} aria-label="Ta bort {item.name}"><Icon name="x" /></button>
+											{#if ordering}
+												<button type="button" class="icon-btn" onclick={() => moveByArrow(i, -1, item.name)} disabled={items[i - 1]?.phase !== phase} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
+												<button type="button" class="icon-btn" onclick={() => moveByArrow(i, 1, item.name)} disabled={items[i + 1]?.phase !== phase} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
+											{:else}
+												<button type="button" class="icon-btn" onclick={() => remove(i)} aria-label="Ta bort {item.name}"><Icon name="x" /></button>
+											{/if}
 										</span>
 									</div>
-									<div class="numbers">
+									<div class="numbers" hidden={ordering}>
 										<div class="stepper" role="group" aria-label="Antal set för {item.name}">
 											<button type="button" class="step" onclick={() => stepSets(item, -1)} disabled={item.sets <= 1} aria-label="Färre set">−</button>
 											<span class="num">{item.sets}</span>
@@ -426,6 +463,43 @@
 		justify-content: space-between;
 		align-items: flex-start;
 		gap: 8px;
+	}
+	.orderrow {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		font-size: 14px;
+	}
+	.orderrow .btn {
+		margin-left: auto;
+	}
+	.items.ordering li {
+		padding: 4px 4px 4px 0;
+	}
+	.items.ordering .itemhead {
+		align-items: center;
+	}
+	.items.ordering .itemname {
+		flex: 1;
+		padding-top: 0;
+	}
+	.items li.dragged {
+		background: var(--surface-2);
+	}
+	.numbers[hidden] {
+		display: none;
+	}
+	/* The drag handle: a 44 px target that doesn't scroll the page. */
+	.handle {
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		color: var(--muted);
+		touch-action: none;
+		cursor: grab;
+		flex: none;
 	}
 	.itemname {
 		display: grid;

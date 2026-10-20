@@ -9,7 +9,9 @@
 	import Questionnaire from '$lib/components/Questionnaire.svelte';
 	import { QUESTIONS } from '$lib/builder/questionnaire';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
-	import type { ConversationView } from '$lib/server/builder/conversation';
+	import { dragHandle, focusArrow } from '$lib/reorder/drag';
+	import { moveWithinPhase } from '$lib/reorder/move';
+	import type { ConversationView, DraftItem } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -36,6 +38,8 @@
 	async function send(text: string, save = false) {
 		const message = text.trim();
 		if (!message || sending) return;
+		// A new order is saved first, so Milon hears about it with this message.
+		if (order && !(await finishOrder())) return;
 		sending = true;
 		failure = null;
 		fromQuestions = false;
@@ -77,6 +81,70 @@
 			await scrollDown();
 		}
 	}
+
+	// --- the user's own order ------------------------------------------------
+
+	/** The list while it is unlocked for reordering; null when locked. */
+	let order = $state<DraftItem[] | null>(null);
+	let saving = $state(false);
+	/** The exercise being dragged, for its style. */
+	let dragged = $state<string | null>(null);
+
+	function startOrder() {
+		order = [...draft];
+		draftOpen = true;
+		failure = null;
+	}
+
+	function moveItem(from: number, to: number): boolean {
+		const next = order && moveWithinPhase(order, from, to);
+		if (!next) return false;
+		order = next;
+		return true;
+	}
+
+	/** A move with an arrow button keeps the focus on the moved exercise. */
+	async function moveByArrow(i: number, d: -1 | 1, name: string) {
+		if (!moveItem(i, i + d)) return;
+		await tick();
+		focusArrow(name, d < 0 ? 'upp' : 'ner');
+	}
+
+	/** Saves a changed order and locks the list again. Returns false if it couldn't be saved. */
+	async function finishOrder(): Promise<boolean> {
+		if (!order || saving) return false;
+		const ids = order.map((d) => d.exerciseId);
+		if (ids.every((id, i) => id === draft[i]?.exerciseId)) {
+			order = null;
+			return true;
+		}
+		saving = true;
+		failure = null;
+		try {
+			const res = await fetch('/api/builder/order', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ order: ids, ...(view?.conversationId ? { conversationId: view.conversationId } : { editSlug: data.editing?.slug }) })
+			});
+			const body = await res.json().catch(() => null);
+			if (!res.ok || !body || !Array.isArray(body.log)) {
+				failure = body?.message ?? `Kunde inte spara ordningen (${res.status}).`;
+				return false;
+			}
+			view = body as ConversationView;
+			if (page.url.searchParams.get('c') !== view.conversationId) replaceState(`/skapa?c=${view.conversationId}`, {});
+			order = null;
+			return true;
+		} catch {
+			failure = 'Kunde inte nå servern. Försök igen.';
+			return false;
+		} finally {
+			saving = false;
+		}
+	}
+
+	/** The latest card in the chat is the one with "Byt" buttons. */
+	const lastCard = $derived(view ? view.log.findLastIndex((l) => l.role === 'workout') : -1);
 
 	/** Starts over with a new conversation, for the same workout when one is being edited. */
 	async function newConversation() {
@@ -158,7 +226,7 @@
 			{/if}
 		</div>
 		{#if draft.length}
-			<button class="draft" aria-expanded={draftOpen} aria-controls="draftlist" onclick={() => (draftOpen = !draftOpen)}>
+			<button class="draft" aria-expanded={draftOpen} aria-controls="draftlist" onclick={() => (draftOpen = !draftOpen)} disabled={!!order}>
 				<span><strong>{draft.length} {draft.length === 1 ? 'övning' : 'övningar'}</strong> <span class="muted">i passet</span></span>
 				<Icon name={draftOpen ? 'up' : 'down'} />
 			</button>
@@ -167,14 +235,42 @@
 			<p class="empty muted">Inga övningar än</p>
 		{/if}
 		{#if draftOpen && draft.length}
-			<ol class="draftlist" id="draftlist">
-				{#each draft as item, i (item.exerciseId)}
-					<li>
-						<span>{i + 1}. {item.name}{#if item.phase}<span class="tag quiet">{PHASE_LABEL[item.phase]}</span>{/if}</span>
-						<span class="num">{item.sets} × {targetText(item.target)}</span>
-					</li>
-				{/each}
-			</ol>
+			<div class="draftlist" id="draftlist">
+				{#if order}
+					<ol class="ordering" data-sortable aria-label="Ändra ordning">
+						{#each order as item, i (item.exerciseId)}
+							<li data-sort-index={i} class:dragged={dragged === item.exerciseId}>
+								<span
+									class="handle"
+									aria-hidden="true"
+									use:dragHandle={{ index: i, onmove: moveItem, ondrag: (on) => (dragged = on ? item.exerciseId : null) }}
+								><Icon name="grip" /></span>
+								<span class="name">{item.name}{#if item.phase}<span class="tag quiet">{PHASE_LABEL[item.phase]}</span>{/if}</span>
+								<button type="button" class="icon-btn" onclick={() => moveByArrow(i, -1, item.name)} disabled={!moveWithinPhase(order, i, i - 1)} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
+								<button type="button" class="icon-btn" onclick={() => moveByArrow(i, 1, item.name)} disabled={!moveWithinPhase(order, i, i + 1)} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
+							</li>
+						{/each}
+					</ol>
+					<div class="orderbar">
+						<button type="button" class="link" onclick={() => (order = null)} disabled={saving}>Avbryt</button>
+						<button type="button" class="btn small primary" onclick={finishOrder} disabled={saving}>Klar</button>
+					</div>
+				{:else}
+					<ol>
+						{#each draft as item, i (item.exerciseId)}
+							<li>
+								<span>{i + 1}. {item.name}{#if item.phase}<span class="tag quiet">{PHASE_LABEL[item.phase]}</span>{/if}</span>
+								<span class="num">{item.sets} × {targetText(item.target)}</span>
+							</li>
+						{/each}
+					</ol>
+					{#if draft.length > 1}
+						<div class="orderbar">
+							<button type="button" class="btn small" onclick={startOrder} disabled={sending}>Ändra ordning</button>
+						</div>
+					{/if}
+				{/if}
+			</div>
 		{/if}
 		{#if view?.saved}
 			<p class="saved">Sparat som version {view.saved.version}. <a href={`/pass/${view.saved.slug}`}>Starta passet</a></p>
@@ -214,6 +310,26 @@
 			{#each view?.log ?? [] as item, i (i)}
 				{#if item.role === 'assistant'}
 					<MilonMessage><Markdown text={item.text} /></MilonMessage>
+				{:else if item.role === 'workout' && item.items}
+					<!-- The list as Milon left it this turn; the latest one can swap exercises and be reordered. -->
+					<div class="card" role="group" aria-label="Passet">
+						<ol>
+							{#each item.items as ex (ex.exerciseId)}
+								<li>
+									<span class="name">
+										<span>{ex.name}{#if ex.phase}<span class="tag quiet">{PHASE_LABEL[ex.phase]}</span>{/if}</span>
+										<span class="num">{ex.sets} × {targetText(ex.target)}</span>
+									</span>
+									{#if i === lastCard}
+										<button type="button" class="btn small" onclick={() => send(`Byt ut ${ex.name}.`)} disabled={sending || !!order} aria-label="Byt {ex.name}">Byt</button>
+									{/if}
+								</li>
+							{/each}
+						</ol>
+						{#if i === lastCard && draft.length > 1}
+							<button type="button" class="link" onclick={startOrder} disabled={sending || !!order}>Ändra ordning</button>
+						{/if}
+					</div>
 				{:else}
 					<p class="bubble {item.role}">{item.text}</p>
 				{/if}
@@ -310,11 +426,19 @@
 		font-size: 14px;
 	}
 	.draftlist {
-		list-style: none;
 		margin: -10px 0 0;
 		padding: 4px 14px 10px;
 		background: var(--surface);
 		border-radius: 0 0 var(--radius) var(--radius);
+		display: grid;
+		gap: 8px;
+		max-height: 55dvh;
+		overflow-y: auto;
+	}
+	.draftlist ol {
+		list-style: none;
+		margin: 0;
+		padding: 0;
 		display: grid;
 		gap: 4px;
 	}
@@ -324,6 +448,39 @@
 		gap: 12px;
 		font-size: 14px;
 		padding-top: 6px;
+	}
+	.draftlist .ordering {
+		gap: 0;
+	}
+	.draftlist .ordering li {
+		align-items: center;
+		gap: 4px;
+		padding: 0;
+		border-radius: 10px;
+	}
+	.ordering li.dragged {
+		background: var(--surface-2);
+	}
+	.ordering .name {
+		flex: 1;
+		min-width: 0;
+	}
+	/* The drag handle: a 44 px target that doesn't scroll the page. */
+	.handle {
+		width: 44px;
+		height: 44px;
+		display: grid;
+		place-items: center;
+		color: var(--muted);
+		touch-action: none;
+		cursor: grab;
+		flex: none;
+	}
+	.orderbar {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 8px;
 	}
 	.draftlist .num {
 		font-size: 13px;
@@ -351,6 +508,44 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
+	}
+	/* Milon's proposal as a card, indented like his bubbles. */
+	.card {
+		margin-left: 44px;
+		padding: 6px 14px 10px;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		background: var(--surface);
+		display: grid;
+		gap: 4px;
+	}
+	.card ol {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.card li {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 48px;
+		border-bottom: 1px solid var(--line);
+	}
+	.card li:last-child {
+		border-bottom: 0;
+	}
+	.card .name {
+		display: grid;
+		min-width: 0;
+		font-size: 15px;
+	}
+	.card .num {
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.card .link {
+		justify-self: start;
 	}
 	.bubble {
 		margin: 0;

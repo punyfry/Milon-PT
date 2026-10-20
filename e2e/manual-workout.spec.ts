@@ -44,3 +44,45 @@ test('editing a workout saves a new version, and an older one can be restored', 
 	// Versions are never overwritten.
 	expect(((await user.files())['workouts/rygg.v2.json'] as WorkoutTemplate).exercises).toHaveLength(2);
 });
+
+test('the order is locked until unlocked, and can then be changed by dragging or with the arrows', async ({ page, user }) => {
+	await user.seed({
+		...profile(),
+		...exercise({ id: 'ex_rodd', name: 'Hantelrodd' }),
+		...exercise({ id: 'ex_press', name: 'Bänkpress' }),
+		...exercise({ id: 'ex_pull', name: 'Chins' }),
+		...workout({
+			slug: 'rygg',
+			name: 'Rygg',
+			exercises: [
+				{ exerciseId: 'ex_rodd', sets: 3, target: { reps: 10 } },
+				{ exerciseId: 'ex_press', sets: 3, target: { reps: 8 } },
+				{ exerciseId: 'ex_pull', sets: 3, target: { reps: 6 } }
+			]
+		})
+	});
+	await open(page, '/skapa/manuell?pass=rygg');
+	await expect(page.getByRole('button', { name: /Flytta/ })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Ändra ordning' }).click();
+
+	const list = page.getByRole('region', { name: 'Övningar' }).getByRole('list');
+	const row = (name: string) => list.getByRole('listitem').filter({ hasText: name });
+	// Chins is dragged to the top by its handle (hidden from screen readers; the arrows are their way).
+	const from = (await row('Chins').locator('.handle').boundingBox())!;
+	const to = (await row('Hantelrodd').boundingBox())!;
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(from.x + from.width / 2, to.y + 4, { steps: 8 });
+	await page.mouse.up();
+	await expect(list.getByRole('listitem').first()).toContainText('Chins');
+
+	await page.getByRole('button', { name: 'Flytta ner Hantelrodd' }).click();
+	// Last in the list now, so the focus moves to its other arrow instead of being lost.
+	await expect(page.getByRole('button', { name: 'Flytta upp Hantelrodd' })).toBeFocused();
+	await page.getByRole('button', { name: 'Klar' }).click();
+	await expect(page.getByRole('button', { name: /Flytta/ })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Spara pass' }).click();
+	await expect(page.getByRole('status')).toContainText('Sparat som version 2.');
+	const saved = (await user.files())['workouts/rygg.v2.json'] as WorkoutTemplate;
+	expect(saved.exercises.map((e) => e.exerciseId)).toEqual(['ex_pull', 'ex_press', 'ex_rodd']);
+});

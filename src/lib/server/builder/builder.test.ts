@@ -2,7 +2,17 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { createExercise, getExercise, listLatestWorkouts, saveProfile, saveWorkoutVersion } from '../data';
 import { MemoryUserStorage } from '../storage/memory';
-import { loadConversation, requestParams, runTurn, saveConversation, saveTurn, startConversation, type CreateMessage } from './conversation';
+import {
+	conversationView,
+	loadConversation,
+	reorderDraft,
+	requestParams,
+	runTurn,
+	saveConversation,
+	saveTurn,
+	startConversation,
+	type CreateMessage
+} from './conversation';
 import { StorageConflictError } from '../storage/types';
 import { MAX_GOALS, MAX_RULE, MAX_RULES } from '../../model';
 import { buildSystemPrompt, CATALOG_NOTE_MAX, formatCatalog, formatGoalsAndRules, formatNote } from './prompt';
@@ -232,7 +242,7 @@ describe('a turn', () => {
 		expect(conversation.log).toEqual([
 			{ role: 'user', text: 'Ja, ta med hantelrodd' },
 			{ role: 'assistant', text: 'Bra val, jag lägger till hantelrodd.' },
-			{ role: 'event', text: 'Lade till Hantelrodd: 3 set × 10 reps (ny övning)' },
+			{ role: 'workout', text: 'Passet: 1 övning', items: [{ exerciseId: 'ex_hantelrodd', sets: 3, target: { reps: 10 } }] },
 			{ role: 'assistant', text: 'Klart. Något mer?' }
 		]);
 		// The second call contains the whole first response unchanged (incl. the thinking block) and the tool result.
@@ -370,21 +380,43 @@ describe('saving a turn', () => {
 
 		const mine = structuredClone(loaded.conversation);
 		mine.messages.push({ role: 'user', content: 'Hej' });
-		await saveTurn(storage, mine, loaded.version, 0);
+		await saveTurn(storage, mine, loaded.version, { messages: 0, log: 0 });
 		expect((await loadConversation(storage, conversation.id))!.conversation.messages).toHaveLength(1);
 
 		const stale = structuredClone(loaded.conversation);
 		stale.messages.push({ role: 'user', content: 'Från en annan flik' });
-		await expect(saveTurn(storage, stale, loaded.version, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, stale, loaded.version, { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
+	});
+
+	it('refuses when the list was reordered in another tab while the turn ran', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		conversation.draft = [
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+			{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 40 } }
+		];
+		await saveConversation(storage, conversation);
+		const loaded = (await loadConversation(storage, conversation.id))!;
+		const base = { messages: loaded.conversation.messages.length, log: loaded.conversation.log.length };
+
+		// The other tab: a reorder adds to the log, not to the messages.
+		const other = structuredClone(loaded.conversation);
+		reorderDraft(other, ['ex_plankan', 'ex_marklyft'], new Map());
+		await saveConversation(storage, other, loaded.version);
+
+		const mine = structuredClone(loaded.conversation);
+		mine.messages.push({ role: 'user', content: 'Hej' });
+		await expect(saveTurn(storage, mine, loaded.version, base)).rejects.toBeInstanceOf(StorageConflictError);
+		expect((await loadConversation(storage, conversation.id))!.conversation.draft[0].exerciseId).toBe('ex_plankan');
 	});
 
 	it('never retries creating a conversation, nor one that is gone', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const conversation = await startConversation(storage, null);
 		await saveConversation(storage, conversation);
-		await expect(saveTurn(storage, conversation, undefined, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, conversation, undefined, { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
 		const gone = { ...conversation, id: 'b_finnsinte1' };
-		await expect(saveTurn(storage, gone, 'v-gammal', 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, gone, 'v-gammal', { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
 	});
 });
 
@@ -401,7 +433,7 @@ describe('warm-up and stretch in the builder (#100)', () => {
 
 	it('the prompt asks about a warm-up and a stretch matched to the trained muscles', () => {
 		const prompt = buildSystemPrompt({}, [], null);
-		expect(prompt).toMatch(/Fråga alltid om ett nytt pass ska ha uppvärmning och stretch/);
+		expect(prompt).toMatch(/ta med en kort uppvärmning och stretch i ett nytt pass och nämn att de går att ta bort/);
 		expect(prompt).toMatch(/specifik för de muskler passet har tränat/);
 		expect(prompt).toMatch(/phase warmup/);
 	});
@@ -477,5 +509,179 @@ describe('warm-up and stretch in the builder (#100)', () => {
 			['ex_marklyft', undefined]
 		]);
 		expect((await executeTool(storage, state, 'propose_exercise', { ...newExercise, phase: 'cooldown' }, TODAY)).content).toMatch(/viktövning/);
+	});
+});
+
+describe('a whole workout at once', () => {
+	const marklyft = { ...newExercise, existingId: 'ex_marklyft', name: null, type: null, instruction: null, replacesId: null };
+	const plankan = { ...marklyft, existingId: 'ex_plankan', target: { reps: null, seconds: 40 } };
+
+	it('asks Milon to propose the whole workout and to swap in place', () => {
+		const prompt = buildSystemPrompt({}, [], null);
+		expect(prompt).toMatch(/Föreslå ett helt pass på en gång/);
+		expect(prompt).toMatch(/replacesId/);
+		expect(prompt).toMatch(/remove_exercise/);
+	});
+
+	it('propose_exercise with replacesId puts the new exercise in the old one\'s place', async () => {
+		const storage = await setup();
+		const state: BuilderState = { editingSlug: null, draft: [] };
+		await executeTool(storage, state, 'propose_exercise', marklyft, TODAY);
+		await executeTool(storage, state, 'propose_exercise', plankan, TODAY);
+		const swap = await executeTool(storage, state, 'propose_exercise', { ...newExercise, replacesId: 'ex_marklyft' }, TODAY);
+		expect(swap).toMatchObject({ isError: false, changedDraft: true, event: 'Bytte Marklyft mot Hantelrodd: 3 set × 10 reps (ny övning)' });
+		expect(state.draft.map((d) => d.exerciseId)).toEqual(['ex_hantelrodd', 'ex_plankan']);
+
+		// Swapping in an exercise already in the list moves it there instead of listing it twice.
+		await executeTool(storage, state, 'propose_exercise', { ...plankan, replacesId: 'ex_hantelrodd' }, TODAY);
+		expect(state.draft.map((d) => d.exerciseId)).toEqual(['ex_plankan']);
+
+		const missing = await executeTool(storage, state, 'propose_exercise', { ...marklyft, replacesId: 'ex_finns_inte' }, TODAY);
+		expect(missing).toMatchObject({ isError: true });
+		expect(state.draft.map((d) => d.exerciseId)).toEqual(['ex_plankan']);
+
+		// A failed swap with a new exercise leaves nothing behind in the catalog.
+		const before = (await storage.list('exercises/')).length;
+		const failed = await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'Kettlebellsving', replacesId: 'ex_finns_inte' }, TODAY);
+		expect(failed).toMatchObject({ isError: true });
+		expect((await storage.list('exercises/')).length).toBe(before);
+	});
+
+	it('remove_exercise takes an exercise out of the list, but not out of the catalog', async () => {
+		const storage = await setup();
+		const state: BuilderState = { editingSlug: null, draft: [] };
+		await executeTool(storage, state, 'propose_exercise', marklyft, TODAY);
+		expect(await executeTool(storage, state, 'remove_exercise', { exerciseId: 'ex_marklyft' }, TODAY)).toMatchObject({
+			isError: false,
+			changedDraft: true,
+			event: 'Tog bort Marklyft'
+		});
+		expect(state.draft).toEqual([]);
+		expect(await getExercise(storage, 'ex_marklyft')).not.toBeNull();
+		expect(await executeTool(storage, state, 'remove_exercise', { exerciseId: 'ex_marklyft' }, TODAY)).toMatchObject({ isError: true });
+	});
+
+	it('a turn that proposes several exercises shows one card where the list first changed', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		const { create } = scripted(
+			message([toolUse('t1', 'propose_exercise', marklyft), toolUse('t2', 'propose_exercise', plankan)], 'tool_use'),
+			message([text('Här är passet.')], 'end_turn')
+		);
+		await runTurn(storage, conversation, 'Ben, 30 min', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: create });
+		expect(conversation.log.map((l) => l.role)).toEqual(['user', 'workout', 'assistant']);
+		expect(conversation.log[1].items?.map((d) => d.exerciseId)).toEqual(['ex_marklyft', 'ex_plankan']);
+
+		const view = await conversationView(storage, conversation);
+		expect(view.log[1]).toMatchObject({ role: 'workout', items: [{ name: 'Marklyft' }, { name: 'Plankan' }] });
+	});
+
+	it('a swap or removal also says what went, and a turn that empties the list shows no card', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		conversation.draft = [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }];
+		const swap = scripted(message([toolUse('t1', 'propose_exercise', { ...plankan, replacesId: 'ex_marklyft' })], 'tool_use'), message([text('Bytt.')], 'end_turn'));
+		await runTurn(storage, conversation, 'Byt ut Marklyft.', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: swap.create });
+		expect(conversation.log.slice(1).map((l) => [l.role, l.text])).toEqual([
+			['workout', 'Passet: 1 övning'],
+			['event', 'Bytte Marklyft mot Plankan: 3 set × 40 s'],
+			['assistant', 'Bytt.']
+		]);
+
+		const remove = scripted(message([toolUse('t2', 'remove_exercise', { exerciseId: 'ex_plankan' })], 'tool_use'), message([text('Borta.')], 'end_turn'));
+		await runTurn(storage, conversation, 'Ta bort plankan.', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: remove.create });
+		expect(conversation.log.slice(4).map((l) => [l.role, l.text])).toEqual([
+			['user', 'Ta bort plankan.'],
+			['event', 'Tog bort Plankan'],
+			['assistant', 'Borta.']
+		]);
+	});
+
+	it('the card is shown even when the turn fails after changing the list', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		const { create } = scripted(message([toolUse('t1', 'propose_exercise', marklyft)], 'tool_use'));
+		await expect(runTurn(storage, conversation, 'Ben', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: create })).rejects.toThrow();
+		expect(conversation.log.map((l) => l.role)).toEqual(['user', 'workout', 'error']);
+	});
+});
+
+describe("the user's own order", () => {
+	async function withList() {
+		const storage = await setup();
+		await createExercise(storage, { name: 'Jumping jacks', type: 'bodyweight', instruction: '' });
+		const conversation = await startConversation(storage, null);
+		conversation.draft = [
+			{ exerciseId: 'ex_jumping_jacks', sets: 1, target: { reps: 20 }, phase: 'warmup' },
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+			{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 40 } }
+		];
+		const names = new Map([
+			['ex_marklyft', 'Marklyft'],
+			['ex_plankan', 'Plankan'],
+			['ex_jumping_jacks', 'Jumping jacks']
+		]);
+		return { storage, conversation, names };
+	}
+
+	it('refuses an order that is not the same exercises, or that splits the parts', async () => {
+		const { conversation, names } = await withList();
+		expect(reorderDraft(conversation, ['ex_marklyft', 'ex_plankan'], names)).toMatch(/stämmer inte/);
+		expect(reorderDraft(conversation, ['ex_marklyft', 'ex_plankan', 'ex_okand'], names)).toMatch(/stämmer inte/);
+		expect(reorderDraft(conversation, ['ex_marklyft', 'ex_marklyft', 'ex_plankan'], names)).toMatch(/stämmer inte/);
+		expect(reorderDraft(conversation, 'ex_marklyft', names)).toMatch(/stämmer inte/);
+		expect(reorderDraft(conversation, ['ex_marklyft', 'ex_jumping_jacks', 'ex_plankan'], names)).toMatch(/Uppvärmningen ska vara först/);
+		expect(conversation.draft.map((d) => d.exerciseId)).toEqual(['ex_jumping_jacks', 'ex_marklyft', 'ex_plankan']);
+		expect(conversation.pendingNote).toBeUndefined();
+	});
+
+	it('tells Milon with the next message, and a save in that turn keeps the order', async () => {
+		const { storage, conversation, names } = await withList();
+		expect(reorderDraft(conversation, ['ex_jumping_jacks', 'ex_plankan', 'ex_marklyft'], names)).toBeNull();
+		expect(conversation.log).toEqual([{ role: 'event', text: 'Du ändrade ordningen' }]);
+
+		// Milon saves in its own order; the user's wins.
+		const save = {
+			name: 'Pass X',
+			changeNote: 'Nytt',
+			exercises: [
+				{ exerciseId: 'ex_jumping_jacks', sets: 1, target: { reps: 20, seconds: null }, phase: 'warmup' },
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8, seconds: null }, phase: 'main' },
+				{ exerciseId: 'ex_plankan', sets: 3, target: { reps: null, seconds: 40 }, phase: 'main' }
+			]
+		};
+		const { create, calls } = scripted(message([toolUse('t1', 'set_workout', save)], 'tool_use'), message([text('Sparat.')], 'end_turn'));
+		await runTurn(storage, conversation, 'Spara passet.', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: create });
+
+		const sent = calls[0].messages.at(-1)!.content as string;
+		expect(sent).toMatch(/^\(Användaren har själv ändrat ordningen i passet\. Den är nu:\n1\. Jumping jacks \(ex_jumping_jacks\)\n2\. Plankan/);
+		expect(sent).toMatch(/\n\nSpara passet\.$/);
+		// The note is for Milon only; the chat shows what the user wrote.
+		expect(conversation.log.find((l) => l.role === 'user')).toEqual({ role: 'user', text: 'Spara passet.' });
+		const saved = (await listLatestWorkouts(storage))[0];
+		expect(saved.exercises.map((e) => e.exerciseId)).toEqual(['ex_jumping_jacks', 'ex_plankan', 'ex_marklyft']);
+		expect(conversation.pendingNote).toBeUndefined();
+		expect(conversation.userOrder).toBeUndefined();
+	});
+
+	it("after that turn, Milon's own order is saved again", async () => {
+		const storage = await setup();
+		const state: BuilderState = {
+			editingSlug: null,
+			draft: [
+				{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 40 } },
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }
+			]
+		};
+		const save = {
+			name: 'Pass Y',
+			changeNote: '',
+			exercises: [
+				{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8, seconds: null }, phase: 'main' },
+				{ exerciseId: 'ex_plankan', sets: 3, target: { reps: null, seconds: 40 }, phase: 'main' }
+			]
+		};
+		await executeTool(storage, state, 'set_workout', save, TODAY);
+		expect(state.draft.map((d) => d.exerciseId)).toEqual(['ex_marklyft', 'ex_plankan']);
 	});
 });
