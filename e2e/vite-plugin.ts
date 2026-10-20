@@ -71,6 +71,7 @@ export const FAKE_WORKOUT_WITH_PARTS = {
 
 /** What the fake proposes when asked to change what Milon knows (#110), whatever the request says. */
 export const FAKE_NOTES_PROPOSAL = {
+	goals: ['Starkare', 'Orka 10 armhävningar'],
 	rules: ['Inga hopp'],
 	context: ['Tränar: hemma med hantlar'],
 	summary: 'Jag tog bort knät och skrev att du tränar hemma.'

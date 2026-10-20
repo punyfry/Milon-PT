@@ -18,7 +18,8 @@ const post = (action: 'forget' | 'notes', fields: Record<string, string>) => {
 	return konto.actions[action]({ locals, request: new Request(`https://milon.test/konto?/${action}`, { method: 'POST', body }) } as never);
 };
 
-const base = { rules: ['Ont i knät', 'Inga hopp'], context: ['Tränar: på gym'] };
+const base = { goals: ['Starkare'], rules: ['Ont i knät', 'Inga hopp'], context: ['Tränar: på gym'] };
+const none = { goals: [], rules: [], context: [] };
 
 beforeEach(async () => {
 	state.storage = new MemoryUserStorage('u1');
@@ -31,33 +32,38 @@ describe('what Milon knows on Konto (#110)', () => {
 		expect(data.notes).toEqual(base);
 	});
 
-	it('removes one rule or line, and nothing when it is no longer there', async () => {
+	it('removes one goal, rule or line, and nothing when it is no longer there', async () => {
 		expect(await post('forget', { kind: 'rules', text: 'Ont i knät' })).toEqual({ notesSaved: true });
 		expect(await post('forget', { kind: 'context', text: 'Tränar: på gym' })).toEqual({ notesSaved: true });
 		expect((await getProfile(state.storage)).data).toEqual({ goals: 'Starkare', rules: ['Inga hopp'] });
+		expect(await post('forget', { kind: 'goals', text: 'Starkare' })).toEqual({ notesSaved: true });
+		expect((await getProfile(state.storage)).data).toEqual({ rules: ['Inga hopp'] });
 		expect(await post('forget', { kind: 'rules', text: 'Ont i knät' })).toMatchObject({ status: 409 });
-		expect(await post('forget', { kind: 'goals', text: 'Starkare' })).toMatchObject({ status: 400 });
+		expect(await post('forget', { kind: 'weeklySessionGoal', text: '3' })).toMatchObject({ status: 400 });
 	});
 
 	it('saves an approved proposal, keeping the rest of the profile', async () => {
-		const proposal = { rules: ['Inga hopp'], context: ['Tränar: hemma med hantlar'] };
+		const proposal = { goals: ['Starkare', 'Orka 10 armhävningar'], rules: ['Inga hopp'], context: ['Tränar: hemma med hantlar'] };
 		expect(await post('notes', { base: JSON.stringify(base), proposal: JSON.stringify(proposal) })).toEqual({ notesSaved: true });
-		expect((await getProfile(state.storage)).data).toEqual({ goals: 'Starkare', rules: ['Inga hopp'], coachContext: 'Tränar: hemma med hantlar' });
+		expect((await getProfile(state.storage)).data).toEqual({
+			goals: 'Starkare\nOrka 10 armhävningar',
+			rules: ['Inga hopp'],
+			coachContext: 'Tränar: hemma med hantlar'
+		});
 	});
 
 	it('saves a proposal for a profile with duplicate rules', async () => {
 		await saveProfile(state.storage, { rules: ['Inga hopp', 'Inga hopp'] }, (await getProfile(state.storage)).version);
 		const data = (await konto.load({ locals } as never)) as { notes: unknown };
-		const proposal = JSON.stringify({ rules: [], context: [] });
-		expect(await post('notes', { base: JSON.stringify(data.notes), proposal })).toEqual({ notesSaved: true });
+		expect(await post('notes', { base: JSON.stringify(data.notes), proposal: JSON.stringify(none) })).toEqual({ notesSaved: true });
 		expect((await getProfile(state.storage)).data).toEqual({});
 	});
 
 	it('saves nothing when the notes changed since the proposal, or the proposal is invalid', async () => {
-		const proposal = JSON.stringify({ rules: [], context: [] });
+		const proposal = JSON.stringify(none);
 		expect(await post('notes', { base: JSON.stringify({ ...base, rules: ['Ont i knät'] }), proposal })).toMatchObject({ status: 409 });
 		expect(await post('notes', { base: JSON.stringify(base), proposal: '{' })).toMatchObject({ status: 400 });
-		expect(await post('notes', { base: JSON.stringify(base), proposal: JSON.stringify({ rules: ['x'.repeat(301)], context: [] }) })).toMatchObject({
+		expect(await post('notes', { base: JSON.stringify(base), proposal: JSON.stringify({ ...none, rules: ['x'.repeat(301)] }) })).toMatchObject({
 			status: 400
 		});
 		expect((await getProfile(state.storage)).data.rules).toEqual(base.rules);

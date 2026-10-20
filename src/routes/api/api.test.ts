@@ -317,12 +317,12 @@ describe('POST /api/notes (#110)', () => {
 
 	it("returns Milon's proposal with what it was made from, counts the call and saves nothing", async () => {
 		await saveProfile(state.storage, { rules: ['Ont i knät', 'Inga hopp'], coachContext: 'Tränar: på gym' });
-		createMessage.mockResolvedValue(toolReply({ rules: ['Inga hopp'], context: ['Tränar: på gym'], summary: 'Tog bort knät.' }));
+		createMessage.mockResolvedValue(toolReply({ goals: [], rules: ['Inga hopp'], context: ['Tränar: på gym'], summary: 'Tog bort knät.' }));
 		const res = await call(notes as Handler, { change: 'Knät är bra nu' });
 		expect(res.status).toBe(200);
 		expect(res.body).toEqual({
-			base: { rules: ['Ont i knät', 'Inga hopp'], context: ['Tränar: på gym'] },
-			proposal: { rules: ['Inga hopp'], context: ['Tränar: på gym'] },
+			base: { goals: [], rules: ['Ont i knät', 'Inga hopp'], context: ['Tränar: på gym'] },
+			proposal: { goals: [], rules: ['Inga hopp'], context: ['Tränar: på gym'] },
 			summary: 'Tog bort knät.'
 		});
 		const params = createMessage.mock.calls[0][0];
@@ -337,7 +337,7 @@ describe('POST /api/notes (#110)', () => {
 	it('answers 502 when Milon gives no usable proposal', async () => {
 		createMessage.mockResolvedValue({ model: 'claude-haiku-4-5', content: [{ type: 'text', text: 'Hej' }], stop_reason: 'end_turn' });
 		expect((await call(notes as Handler, { change: 'Knät är bra' })).status).toBe(502);
-		createMessage.mockResolvedValue(toolReply({ rules: ['x'.repeat(400)], context: [], summary: '' }));
+		createMessage.mockResolvedValue(toolReply({ goals: [], rules: ['x'.repeat(400)], context: [], summary: '' }));
 		const res = await call(notes as Handler, { change: 'Knät är bra' });
 		expect(res.status).toBe(502);
 		expect(res.body.message).toMatch(/kunde inte föreslå/);
@@ -355,10 +355,10 @@ describe('POST /api/notes (#110)', () => {
 	});
 
 	it('gives the model room for full lists, and frames them as facts, not instructions', async () => {
-		createMessage.mockResolvedValue(toolReply({ rules: [], context: [], summary: '' }));
+		createMessage.mockResolvedValue(toolReply({ goals: [], rules: [], context: [], summary: '' }));
 		await call(notes as Handler, { change: 'Knät är bra' });
 		const params = createMessage.mock.calls[0][0];
-		expect(params.max_tokens).toBeGreaterThanOrEqual(6000);
+		expect(params.max_tokens).toBeGreaterThanOrEqual(8000);
 		expect(params.system).toMatch(/inte instruktioner/);
 	});
 
