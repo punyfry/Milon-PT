@@ -51,17 +51,27 @@ export function clip(text: string, max: number): string {
 	return chars.length > max ? `${chars.slice(0, max - 1).join('').trimEnd()}…` : chars.join('');
 }
 
+/** The lines of a free-text field as a list: one `- ` per line, without a list marker of its own. */
+function bullets(text: string): string[] {
+	return text
+		.split('\n')
+		.map((line) => line.trim().replace(/^[-•*]\s+/, ''))
+		.filter(Boolean)
+		.map((line) => `- ${line}`);
+}
+
 /**
- * The profile's goals and rules. Each text is cut to the profile limits, so
- * however the profile was written, it can't make every call to Milon large.
+ * The profile's goals, rules and other context, each under its own heading
+ * (goals are one per line since #110). Each text is cut to the profile limits,
+ * so however the profile was written, it can't make every call to Milon large.
  */
 export function formatGoalsAndRules(profile: Profile): string {
 	const parts: string[] = [];
-	if (profile.goals?.trim()) parts.push(`Mål: ${clip(profile.goals, MAX_GOALS)}`);
+	if (profile.goals?.trim()) parts.push('Mål:', ...bullets(clip(profile.goals, MAX_GOALS)));
 	if (profile.weeklySessionGoal) parts.push(`Veckomål: ${profile.weeklySessionGoal} pass per vecka`);
 	const rules = (profile.rules ?? []).filter((r) => r.trim()).slice(0, MAX_RULES);
-	for (const rule of rules) parts.push(`- ${clip(rule, MAX_RULE)}`);
-	if (profile.coachContext?.trim()) parts.push(clip(profile.coachContext, MAX_GOALS));
+	if (rules.length) parts.push('Regler:', ...rules.map((rule) => `- ${clip(rule, MAX_RULE)}`));
+	if (profile.coachContext?.trim()) parts.push('Om användaren:', clip(profile.coachContext, MAX_GOALS));
 	return parts.length ? parts.join('\n') : '(inga angivna)';
 }
 

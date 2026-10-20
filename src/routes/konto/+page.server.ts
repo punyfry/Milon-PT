@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { ValidationError, coachEnabled, coachNotes, parseNotes, sameNotes, withNotes, type Profile } from '$lib/model';
+import { NOTE_KINDS, ValidationError, coachEnabled, coachNotes, parseNotes, sameNotes, withNotes, type NoteKind, type Profile } from '$lib/model';
 import { isAiConfigured } from '$lib/server/ai/client';
 import { canImport } from '$lib/server/allowlist';
 import { deleteAccount, getProfile, saveProfile } from '$lib/server/data';
@@ -71,11 +71,12 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const kind = form.get('kind');
 		const text = form.get('text');
-		if ((kind !== 'rules' && kind !== 'context') || typeof text !== 'string') return fail(400, { notesError: 'Ogiltig rad.' });
+		if (!NOTE_KINDS.some(([k]) => k === kind) || typeof text !== 'string') return fail(400, { notesError: 'Ogiltig rad.' });
+		const list = kind as NoteKind;
 		const saved = await updateProfile(storageFor(locals), (profile) => {
 			const notes = coachNotes(profile);
-			if (!notes[kind].includes(text)) return false;
-			return withNotes(profile, { ...notes, [kind]: notes[kind].filter((x) => x !== text) });
+			if (!notes[list].includes(text)) return false;
+			return withNotes(profile, { ...notes, [list]: notes[list].filter((x) => x !== text) });
 		});
 		if (!saved) return fail(409, { notesError: 'Listan ändrades samtidigt. Försök igen.' });
 		return { notesSaved: true };

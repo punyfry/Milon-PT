@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
-	import { notesDiff, type CoachNotes } from '$lib/model';
+	import { NOTE_KINDS, notesDiff, type CoachNotes } from '$lib/model';
 	import { pendingSaves } from '$lib/session/outbox';
 	import { clearUserData, loadActiveSession } from '$lib/session/storage';
 	import { applyTheme, loadTheme, type Theme } from '$lib/theme';
@@ -104,9 +104,9 @@
 	let proposal = $state<{ base: CoachNotes; proposal: CoachNotes; summary: string } | null>(null);
 	const diff = $derived(proposal ? notesDiff(proposal.base, proposal.proposal) : null);
 	const noChange = $derived(
-		diff ? !diff.rules.added.length && !diff.rules.removed.length && !diff.context.added.length && !diff.context.removed.length : false
+		diff ? NOTE_KINDS.every(([kind]) => !diff[kind].added.length && !diff[kind].removed.length) : false
 	);
-	const notesCount = $derived(data.notes.rules.length + data.notes.context.length);
+	const notesCount = $derived(NOTE_KINDS.reduce((n, [kind]) => n + data.notes[kind].length, 0));
 
 	async function askMilon(e: SubmitEvent) {
 		e.preventDefault();
@@ -233,9 +233,9 @@
 			<section class="notes" aria-labelledby="notes-title">
 				<div class="t">
 					<h2 id="notes-title">Det här vet Milon om dig</h2>
-					<span>{notesCount ? 'Milon tar hänsyn till det när han bygger pass och svarar' : 'Inget än. Det du sparar från frågorna i Skapa hamnar här.'}{form?.notesSaved ? ' · sparat' : ''}</span>
+					<span>{notesCount ? 'Milon tar hänsyn till det när han bygger pass och svarar' : data.coach ? 'Inget än. Berätta för Milon nedan vad du vill uppnå.' : 'Inget än.'}{form?.notesSaved ? ' · sparat' : ''}</span>
 				</div>
-				{#each [['rules', 'Regler'], ['context', 'Om dig']] as const as [kind, label] (kind)}
+				{#each NOTE_KINDS as [kind, label] (kind)}
 					{#if data.notes[kind].length}
 						<h3 class="label">{label}</h3>
 						<ul class="notelist">
@@ -257,7 +257,7 @@
 				{#if data.coach}
 					<form class="ask" onsubmit={askMilon}>
 						<label for="notes-change">Har något ändrats? Berätta för Milon</label>
-						<textarea id="notes-change" rows="2" maxlength="500" bind:value={change} placeholder="T.ex. ”knät är bra nu” eller ”jag tränar hemma i stället”"></textarea>
+						<textarea id="notes-change" rows="2" maxlength="500" bind:value={change} placeholder="T.ex. ”jag vill orka 10 armhävningar” eller ”knät är bra nu”"></textarea>
 						<button class="btn" disabled={asking || !change.trim()}>{asking ? 'Milon tänker…' : 'Fråga Milon'}</button>
 					</form>
 					{#if askError}<p class="error" role="alert">{askError}</p>{/if}
@@ -268,7 +268,7 @@
 								{#if noChange}<p class="muted">Milon föreslår ingen ändring.</p>{/if}
 							</div>
 							{#if !noChange}
-								{#each [['rules', 'Regler'], ['context', 'Om dig']] as const as [kind, label] (kind)}
+								{#each NOTE_KINDS as [kind, label] (kind)}
 									{#if diff[kind].removed.length || diff[kind].added.length}
 										<h3 class="label">{label}</h3>
 										<ul class="changes">
