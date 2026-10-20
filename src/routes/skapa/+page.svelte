@@ -234,6 +234,10 @@
 		<textarea
 			bind:value={input}
 			onkeydown={onKeydown}
+			oninput={() => {
+				// Emptied: whatever is typed next is the user's own message, not the questionnaire's.
+				if (!input.trim()) fromQuestions = false;
+			}}
 			rows="1"
 			maxlength="2000"
 			placeholder="Skriv till Milon…"

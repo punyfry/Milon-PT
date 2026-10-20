@@ -81,6 +81,11 @@ test('nothing is saved to the profile without the choice, and a known answer is 
 	// Place is already known, so only the new answer is in the message.
 	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('Hej! Hjälp mig bygga ett nytt pass.\nErfarenhet: van vid styrketräning.');
 	expect(((await user.files())['profile.json'] as Profile).coachContext).toBe('Tränar: hemma med hantlar');
+	// Emptied and retyped, the message is the user's own: no hint about the questionnaire's message.
+	await expect(page.getByText('Ändra meddelandet om du vill, och tryck Skicka.')).toBeVisible();
+	await page.getByLabel('Meddelande till Milon').fill('');
+	await page.getByLabel('Meddelande till Milon').pressSequentially('Eget');
+	await expect(page.getByText('Ändra meddelandet om du vill, och tryck Skicka.')).toHaveCount(0);
 });
 
 test('the step and the answers survive back and a reload, and the first step leads back to free text', async ({ page }) => {
