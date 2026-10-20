@@ -15,7 +15,7 @@ test.beforeEach(async ({ user }) => {
 
 test('the answers become an editable first message, and chosen answers are saved to the profile', async ({ page, user }) => {
 	await open(page, '/skapa');
-	await page.getByRole('button', { name: 'Hjälp mig beskriva passet' }).click();
+	await page.getByRole('button', { name: /^Svara på några frågor/ }).click();
 	await expect(page).toHaveURL(/\/skapa\?steg=1$/);
 	// The question takes focus, for a screen reader.
 	await expect(page.getByRole('heading', { name: 'Vad ska passet fokusera på?' })).toBeFocused();
@@ -41,9 +41,11 @@ test('the answers become an editable first message, and chosen answers are saved
 	await page.getByRole('textbox').fill('Ont i knät');
 	await page.getByRole('checkbox', { name: /Spara i profilen/ }).check();
 	await next.click();
-	await page.getByRole('button', { name: 'Klart' }).click();
+	await page.getByRole('button', { name: 'Klart – visa meddelandet' }).click();
 
 	const message = page.getByLabel('Meddelande till Milon');
+	const hint = page.getByText('Ändra meddelandet om du vill, och tryck Skicka.');
+	await expect(hint).toBeVisible();
 	await expect(message).toHaveValue(
 		[
 			'Hej! Hjälp mig bygga ett nytt pass.',
@@ -62,6 +64,7 @@ test('the answers become an editable first message, and chosen answers are saved
 	await page.getByRole('button', { name: 'Skicka' }).click();
 	await expect(page.getByText(FAKE_CLAUDE_REPLY)).toBeVisible();
 	await expect(page.getByText('Max 40 minuter.')).toBeVisible();
+	await expect(hint).toHaveCount(0);
 });
 
 test('nothing is saved to the profile without the choice, and a known answer is preselected', async ({ page, user }) => {
@@ -74,15 +77,20 @@ test('nothing is saved to the profile without the choice, and a known answer is 
 	await page.getByRole('button', { name: 'Nästa' }).click();
 	await expect(page.getByText('Fråga 7 av 8')).toBeVisible();
 	await page.getByRole('button', { name: 'Nästa' }).click();
-	await page.getByRole('button', { name: 'Klart' }).click();
+	await page.getByRole('button', { name: 'Klart – visa meddelandet' }).click();
 	// Place is already known, so only the new answer is in the message.
 	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('Hej! Hjälp mig bygga ett nytt pass.\nErfarenhet: van vid styrketräning.');
 	expect(((await user.files())['profile.json'] as Profile).coachContext).toBe('Tränar: hemma med hantlar');
+	// Emptied and retyped, the message is the user's own: no hint about the questionnaire's message.
+	await expect(page.getByText('Ändra meddelandet om du vill, och tryck Skicka.')).toBeVisible();
+	await page.getByLabel('Meddelande till Milon').fill('');
+	await page.getByLabel('Meddelande till Milon').pressSequentially('Eget');
+	await expect(page.getByText('Ändra meddelandet om du vill, och tryck Skicka.')).toHaveCount(0);
 });
 
 test('the step and the answers survive back and a reload, and the first step leads back to free text', async ({ page }) => {
 	await open(page, '/skapa');
-	await page.getByRole('button', { name: 'Hjälp mig beskriva passet' }).click();
+	await page.getByRole('button', { name: /^Svara på några frågor/ }).click();
 	await page.getByRole('checkbox', { name: 'Rygg' }).check();
 	await page.getByRole('button', { name: 'Nästa' }).click();
 	await page.getByRole('radio', { name: '30 min' }).check();
@@ -91,15 +99,36 @@ test('the step and the answers survive back and a reload, and the first step lea
 	await expect(page.getByRole('radio', { name: '30 min' })).toBeChecked();
 	await page.getByRole('button', { name: 'Tillbaka' }).click();
 	await expect(page.getByRole('checkbox', { name: 'Rygg' })).toBeChecked();
-	await page.getByRole('button', { name: 'Skriv själv' }).click();
+	await page.getByRole('button', { name: 'Avbryt frågorna' }).click();
 	await expect(page.getByText('Hej! Vad ska passet fokusera på, och hur lång tid har du?')).toBeVisible();
 	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('');
+});
+
+test('the start offers the questionnaire as a reply to Milon, before the existing workouts', async ({ page }) => {
+	await open(page, '/skapa');
+	// Nothing to open yet, so the exercise count is plain text and not a button.
+	await expect(page.getByText('Inga övningar än')).toBeVisible();
+	await expect(page.getByRole('button', { name: /Inga övningar/ })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Skicka' })).toBeDisabled();
+	const reply = page.getByRole('button', { name: /^Svara på några frågor.*8 snabba frågor/ });
+	await expect(reply).toBeVisible();
+	const existing = page.getByRole('link', { name: 'Ben' });
+	expect((await reply.boundingBox())!.y).toBeLessThan((await existing.boundingBox())!.y);
+	expect((await page.getByRole('link', { name: 'Bygg själv utan Milon' }).boundingBox())!.y).toBeLessThan((await existing.boundingBox())!.y);
+});
+
+test('the questionnaire shows its progress and skips with a link-styled button', async ({ page }) => {
+	await open(page, '/skapa?steg=2');
+	await expect(page.getByText('Fråga 2 av 8')).toBeVisible();
+	await page.getByRole('button', { name: 'Hoppa över' }).click();
+	await expect(page.getByText('Fråga 3 av 8')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Tillbaka' })).toBeVisible();
 });
 
 test('is not offered when a workout is edited', async ({ page }) => {
 	await open(page, '/skapa?pass=ben&steg=1');
 	await expect(page.getByText('Vad vill du ändra i Ben?')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Hjälp mig beskriva passet' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: /^Svara på några frågor/ })).toHaveCount(0);
 	await expect(page.getByText(/Fråga 1 av/)).toHaveCount(0);
 });
 
@@ -114,11 +143,11 @@ test("the intro's first workout with Milon starts with the questionnaire", async
 test('back after the questionnaire leaves Skapa instead of returning to a question', async ({ page }) => {
 	await open(page, '/');
 	await page.getByRole('link', { name: 'Skapa' }).click();
-	await page.getByRole('button', { name: 'Hjälp mig beskriva passet' }).click();
+	await page.getByRole('button', { name: /^Svara på några frågor/ }).click();
 	await page.getByRole('button', { name: 'Nästa' }).click();
 	await expect(page.getByText('Fråga 2 av 8')).toBeVisible();
 	for (let i = 2; i < 8; i++) await page.getByRole('button', { name: 'Nästa' }).click();
-	await page.getByRole('button', { name: 'Klart' }).click();
+	await page.getByRole('button', { name: 'Klart – visa meddelandet' }).click();
 	await expect(page.getByLabel('Meddelande till Milon')).toHaveValue('Hej! Hjälp mig bygga ett nytt pass.');
 	await page.goBack();
 	await expect(page).toHaveURL(/\/$/);

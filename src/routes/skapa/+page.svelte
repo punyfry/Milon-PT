@@ -22,6 +22,8 @@
 	let logEnd: HTMLElement | undefined = $state();
 	let draftOpen = $state(false);
 	let versionsOpen = $state(false);
+	/** The input holds a message written from the questionnaire's answers, not yet sent. */
+	let fromQuestions = $state(false);
 
 	const title = $derived(data.editing ? `Redigera ${data.editing.name}` : 'Skapa pass');
 	const draft = $derived(view?.conversationId ? view.draft : data.initialDraft);
@@ -36,6 +38,7 @@
 		if (!message || sending) return;
 		sending = true;
 		failure = null;
+		fromQuestions = false;
 		// Show the message immediately while Milon responds.
 		view = view
 			? { ...view, log: [...view.log, { role: 'user', text: message }] }
@@ -114,6 +117,7 @@
 		}
 		replaceState('/skapa', { askStep: 0 });
 		input = text;
+		fromQuestions = true;
 		await tick();
 		document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus();
 	}
@@ -153,12 +157,15 @@
 				<a class="btn small" href="/skapa">Nytt pass</a>
 			{/if}
 		</div>
-		<button class="draft" aria-expanded={draftOpen} aria-controls="draftlist" onclick={() => (draftOpen = !draftOpen)} disabled={!draft.length}>
-			<span>
-				{#if draft.length}<strong>{draft.length} {draft.length === 1 ? 'övning' : 'övningar'}</strong> <span class="muted">i passet</span>{:else}<span class="muted">Inga övningar än</span>{/if}
-			</span>
-			{#if draft.length}<Icon name={draftOpen ? 'up' : 'down'} />{/if}
-		</button>
+		{#if draft.length}
+			<button class="draft" aria-expanded={draftOpen} aria-controls="draftlist" onclick={() => (draftOpen = !draftOpen)}>
+				<span><strong>{draft.length} {draft.length === 1 ? 'övning' : 'övningar'}</strong> <span class="muted">i passet</span></span>
+				<Icon name={draftOpen ? 'up' : 'down'} />
+			</button>
+		{:else}
+			<!-- Plain text until there is something to open, so it doesn't look like an input field. -->
+			<p class="empty muted">Inga övningar än</p>
+		{/if}
 		{#if draftOpen && draft.length}
 			<ol class="draftlist" id="draftlist">
 				{#each draft as item, i (item.exerciseId)}
@@ -181,6 +188,21 @@
 		</section>
 	{:else}
 		<section class="chat" aria-live="polite">
+			{#if !view?.log.length}
+				<MilonMessage>
+					{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
+				</MilonMessage>
+				{#if !data.editing}
+					<!-- A suggested reply on the user's side of the chat, since it leads to the first message. -->
+					<button type="button" class="reply" onclick={() => ask(1)}>
+						<strong>Svara på några frågor</strong>
+						<span>{QUESTIONS.length} snabba frågor, sen skriver Milon passet</span>
+					</button>
+				{/if}
+				<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
+					{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
+				</a>
+			{/if}
 			{#if !view && !data.editing && data.workouts.length}
 				<div class="existing">
 					<span class="label">Eller redigera ett befintligt pass</span>
@@ -188,17 +210,6 @@
 						{#each data.workouts as w (w.slug)}<a class="btn small" href={`/skapa?pass=${w.slug}`}>{w.name}</a>{/each}
 					</div>
 				</div>
-			{/if}
-			{#if !view?.log.length}
-				<MilonMessage>
-					{data.editing ? `Vad vill du ändra i ${data.editing.name}?` : 'Hej! Vad ska passet fokusera på, och hur lång tid har du?'}
-				</MilonMessage>
-				{#if !data.editing}
-					<button type="button" class="btn small help" onclick={() => ask(1)}>Hjälp mig beskriva passet</button>
-				{/if}
-				<a class="manual" href={data.editing ? `/skapa/manuell?pass=${data.editing.slug}` : '/skapa/manuell'}>
-					{data.editing ? 'Ändra själv utan Milon' : 'Bygg själv utan Milon'}
-				</a>
 			{/if}
 			{#each view?.log ?? [] as item, i (i)}
 				{#if item.role === 'assistant'}
@@ -219,13 +230,19 @@
 	{/if}
 
 	<form class="composer" hidden={askStep > 0} onsubmit={(e) => (e.preventDefault(), send(input))}>
+		{#if fromQuestions && input.trim()}<p class="hint" id="composer-hint">Ändra meddelandet om du vill, och tryck Skicka.</p>{/if}
 		<textarea
 			bind:value={input}
 			onkeydown={onKeydown}
+			oninput={() => {
+				// Emptied: whatever is typed next is the user's own message, not the questionnaire's.
+				if (!input.trim()) fromQuestions = false;
+			}}
 			rows="1"
 			maxlength="2000"
 			placeholder="Skriv till Milon…"
 			aria-label="Meddelande till Milon"
+			aria-describedby={fromQuestions && input.trim() ? 'composer-hint' : undefined}
 			enterkeyhint="enter"
 		></textarea>
 		<div class="buttons">
@@ -288,8 +305,9 @@
 		font-size: 14px;
 		cursor: pointer;
 	}
-	.draft:disabled {
-		cursor: default;
+	.empty {
+		margin: 0;
+		font-size: 14px;
 	}
 	.draftlist {
 		list-style: none;
@@ -327,7 +345,7 @@
 	.existing {
 		display: grid;
 		gap: 8px;
-		margin-bottom: 8px;
+		margin-top: 16px;
 	}
 	.chips {
 		display: flex;
@@ -359,8 +377,31 @@
 		font-size: 14px;
 		color: var(--danger);
 	}
-	.help {
-		align-self: flex-start;
+	/* Like the user's own bubbles, but outlined in the accent: a reply to tap. */
+	.reply {
+		align-self: flex-end;
+		max-width: 88%;
+		min-height: 48px;
+		display: grid;
+		gap: 2px;
+		padding: 10px 14px;
+		border: 1px solid var(--accent);
+		border-radius: 14px;
+		background: var(--surface-2);
+		color: var(--text);
+		text-align: left;
+		font-size: 15px;
+		cursor: pointer;
+	}
+	.reply strong {
+		font-weight: 500;
+	}
+	.reply span {
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.reply:active {
+		transform: scale(0.98);
 	}
 	.manual {
 		align-self: flex-start;
@@ -398,6 +439,11 @@
 		background: var(--surface-2);
 		padding: 12px 14px;
 		resize: none;
+	}
+	.hint {
+		margin: 0;
+		font-size: 13px;
+		color: var(--muted);
 	}
 	.buttons {
 		display: grid;

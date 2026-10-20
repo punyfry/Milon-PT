@@ -165,6 +165,10 @@
 </script>
 
 <form class="ask" onsubmit={(e) => (e.preventDefault(), next())}>
+	<!-- Segments like the workout's progress; the text below says the same for a screen reader. -->
+	<div class="progress" aria-hidden="true">
+		{#each QUESTIONS as q, i (q.id)}<i class:done={i < step - 1} class:current={i === step - 1}></i>{/each}
+	</div>
 	<p class="label">Fråga {step} av {QUESTIONS.length}</p>
 	<fieldset>
 		<legend><h2 tabindex="-1" bind:this={heading}>{question.title}</h2></legend>
@@ -232,10 +236,10 @@
 
 	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 
+	<button type="button" class="link skip" onclick={skip} disabled={busy}>Hoppa över</button>
 	<div class="nav">
-		<button type="button" class="btn" onclick={back} disabled={busy}>{step > 1 ? 'Tillbaka' : 'Skriv själv'}</button>
-		<button type="button" class="btn ghost" onclick={skip} disabled={busy}>Hoppa över</button>
-		<button type="submit" class="btn primary" disabled={busy}>{last ? 'Klart' : 'Nästa'}</button>
+		<button type="button" class="btn" onclick={back} disabled={busy}>{step > 1 ? 'Tillbaka' : 'Avbryt frågorna'}</button>
+		<button type="submit" class="btn primary" disabled={busy}>{last ? 'Klart – visa meddelandet' : 'Nästa'}</button>
 	</div>
 </form>
 
@@ -243,6 +247,22 @@
 	.ask {
 		display: grid;
 		gap: 14px;
+	}
+	.progress {
+		display: flex;
+		gap: 4px;
+	}
+	.progress i {
+		flex: 1;
+		height: 4px;
+		border-radius: 2px;
+		background: var(--seg);
+	}
+	.progress .done {
+		background: var(--accent);
+	}
+	.progress .current {
+		background: var(--text);
 	}
 	.label {
 		margin: 0;
@@ -322,9 +342,13 @@
 		margin: 0;
 		font-size: 14px;
 	}
+	.skip {
+		justify-self: end;
+		margin: -6px 0;
+	}
 	.nav {
 		display: grid;
-		grid-template-columns: 1fr auto 1fr;
+		grid-template-columns: auto 1fr;
 		gap: 8px;
 	}
 	.error {
