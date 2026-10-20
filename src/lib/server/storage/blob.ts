@@ -8,6 +8,7 @@ import {
 	put,
 	type ListBlobResultBlob
 } from '@vercel/blob';
+import { BlobContentCache } from './blob-cache';
 import { resolvePath, userRoot } from './paths';
 import {
 	StorageConflictError,
@@ -16,6 +17,9 @@ import {
 	type UserStorage,
 	type WriteOptions
 } from './types';
+
+/** Shared by every request on this server instance; see BlobContentCache. */
+const contents = new BlobContentCache(20_000_000);
 
 /**
  * Vercel Blob implementation. Every blob is written with `access: 'private'`,
@@ -26,6 +30,9 @@ export class BlobUserStorage implements UserStorage {
 	readonly userId: string;
 	readonly #root: string;
 	readonly #token: string;
+	/** ETag per pathname from this instance's listings, newest listing wins. */
+	readonly #listed = new Map<string, string>();
+	cacheHits = 0;
 
 	constructor(userId: string, token: string | undefined) {
 		if (!token) throw new Error('BLOB_READ_WRITE_TOKEN saknas');
@@ -36,6 +43,12 @@ export class BlobUserStorage implements UserStorage {
 
 	async readJson<T>(path: string): Promise<StoredJson<T> | null> {
 		const pathname = resolvePath(this.userId, path);
+		const listed = this.#listed.get(pathname);
+		const cached = listed === undefined ? null : contents.get(pathname, listed);
+		if (cached) {
+			this.cacheHits++;
+			return { data: JSON.parse(cached.body) as T, version: cached.etag };
+		}
 		let file = await this.#get<T>(pathname);
 		if (file && file.version.startsWith('W/')) {
 			// A weak ETag (W/"…", from a compressed download) never matches a conditional
@@ -58,8 +71,9 @@ export class BlobUserStorage implements UserStorage {
 			token: this.#token
 		});
 		if (!result || result.statusCode !== 200) return null;
-		const data = (await new Response(result.stream).json()) as T;
-		return { data, version: result.blob.etag };
+		const body = await new Response(result.stream).text();
+		contents.set(pathname, result.blob.etag, body);
+		return { data: JSON.parse(body) as T, version: result.blob.etag };
 	}
 
 	async writeJson(
@@ -68,8 +82,9 @@ export class BlobUserStorage implements UserStorage {
 		options: WriteOptions = {}
 	): Promise<{ version: string }> {
 		const pathname = resolvePath(this.userId, path);
+		const body = JSON.stringify(data, null, 2);
 		try {
-			const result = await put(pathname, JSON.stringify(data, null, 2), {
+			const result = await put(pathname, body, {
 				access: 'private',
 				contentType: 'application/json',
 				addRandomSuffix: false,
@@ -78,8 +93,12 @@ export class BlobUserStorage implements UserStorage {
 				cacheControlMaxAge: 60,
 				token: this.#token
 			});
+			contents.set(pathname, result.etag, body);
+			if (this.#listed.has(pathname)) this.#listed.set(pathname, result.etag);
 			return { version: result.etag };
 		} catch (e) {
+			// The file changed since it was listed, so the next read must download it.
+			this.#listed.delete(pathname);
 			if (e instanceof BlobPreconditionFailedError) throw new StorageConflictError(path);
 			// put throws a generic BlobError when the blob exists and overwrite isn't
 			// allowed, so check whether that's what happened.
@@ -108,6 +127,9 @@ export class BlobUserStorage implements UserStorage {
 			blobs.push(...page.blobs);
 			cursor = page.hasMore ? page.cursor : undefined;
 		} while (cursor);
+		// A file missing from the listing is gone, so forget what an earlier listing said about it.
+		for (const pathname of this.#listed.keys()) if (pathname.startsWith(fullPrefix)) this.#listed.delete(pathname);
+		for (const b of blobs) this.#listed.set(b.pathname, b.etag);
 
 		return blobs.map((b) => ({
 			path: b.pathname.slice(this.#root.length),
@@ -118,6 +140,9 @@ export class BlobUserStorage implements UserStorage {
 	}
 
 	async delete(path: string): Promise<void> {
-		await del(resolvePath(this.userId, path), { token: this.#token });
+		const pathname = resolvePath(this.userId, path);
+		this.#listed.delete(pathname);
+		contents.delete(pathname);
+		await del(pathname, { token: this.#token });
 	}
 }

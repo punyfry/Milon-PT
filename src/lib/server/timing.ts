@@ -5,7 +5,7 @@ import { beginRequest, requestStats, type StorageStats } from '$lib/server/stora
 export function serverTimingHeader(totalMs: number, stats: StorageStats | null): string {
 	const parts = [`total;dur=${totalMs.toFixed(0)}`];
 	if (stats) {
-		const desc = `${stats.reads} reads, ${stats.lists} lists, ${stats.writes} writes, ${stats.shared} shared`;
+		const desc = `${stats.reads} reads (${stats.cached} cached), ${stats.lists} lists, ${stats.writes} writes, ${stats.shared} shared`;
 		parts.push(`storage;desc="${desc}";dur=${stats.ms.toFixed(0)}`);
 	}
 	return parts.join(', ');
@@ -34,7 +34,7 @@ export const serverTiming: Handle = async ({ event, resolve }) => {
 		const route = `${event.route.id ?? '(no route)'}${event.isDataRequest ? ' (data)' : ''}`;
 		console.info(
 			`[timing] ${event.request.method} ${route} ${response.status} ${total.toFixed(0)} ms, storage ${stats.ms.toFixed(0)} ms ` +
-				`(${stats.reads} reads, ${stats.lists} lists, ${stats.writes} writes, ${stats.shared} shared)`
+				`(${stats.reads} reads (${stats.cached} cached), ${stats.lists} lists, ${stats.writes} writes, ${stats.shared} shared)`
 		);
 	}
 	return response;

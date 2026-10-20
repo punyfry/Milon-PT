@@ -10,6 +10,9 @@
 export interface UserStorage {
 	readonly userId: string;
 
+	/** Reads answered from memory without a call to the store, if the implementation caches. */
+	readonly cacheHits?: number;
+
 	/** Returns null if the file doesn't exist. */
 	readJson<T>(path: string): Promise<StoredJson<T> | null>;
 

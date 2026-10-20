@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BlobUserStorage } from './blob';
+import { BlobContentCache, sameEtag } from './blob-cache';
 import { MemoryUserStorage } from './memory';
 import { resolvePath, userRoot } from './paths';
 import { StorageConflictError } from './types';
+import { BlobPreconditionFailedError } from '@vercel/blob';
 
 const blob = vi.hoisted(() => ({
 	put: vi.fn(),
@@ -167,6 +169,117 @@ describe('Vercel Blob storage', () => {
 		expect(JSON.stringify(files)).not.toContain('hemlig');
 	});
 
+	describe('reads after a listing', () => {
+		// Each test uses its own user, since the content cache is shared by the whole server instance.
+		let n = 0;
+		let user = '';
+		const download = (data: unknown, etag: string) => ({ statusCode: 200, stream: new Response(JSON.stringify(data)).body, blob: { etag, url: 'https://hemlig.blob/x' } });
+		const listing = (etag: string) => ({
+			blobs: [{ pathname: `users/${user}/exercises/ex_a.json`, size: 2, uploadedAt: new Date(0), etag, url: 'https://hemlig.blob/a' }],
+			hasMore: false
+		});
+		beforeEach(() => {
+			user = `cache${++n}`;
+		});
+
+		it('skip the download when the listed ETag matches what an earlier request read', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"'));
+			expect((await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json'))?.data).toEqual({ n: 1 });
+
+			blob.list.mockResolvedValue(listing('e1'));
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 1 }, version: '"e1"' });
+			expect(blob.get).toHaveBeenCalledOnce();
+			expect(s.cacheHits).toBe(1);
+		});
+
+		it('download again when the listing shows a newer version', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"')).mockResolvedValueOnce(download({ n: 2 }, '"e2"'));
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			blob.list.mockResolvedValue(listing('"e2"'));
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 2 }, version: '"e2"' });
+			expect(blob.get).toHaveBeenCalledTimes(2);
+		});
+
+		it('always download without a listing in the same request', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"')).mockResolvedValueOnce(download({ n: 2 }, '"e2"'));
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			expect((await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json'))?.data).toEqual({ n: 2 });
+		});
+
+		it('use what was just written, and hand out a copy each time', async () => {
+			blob.list.mockResolvedValue(listing('"e1"'));
+			blob.put.mockResolvedValue({ etag: '"e2"', url: 'https://hemlig.blob/x' });
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			await s.writeJson('exercises/ex_a.json', { n: 2 }, { ifMatch: '"e1"' });
+			const first = await s.readJson<{ n: number }>('exercises/ex_a.json');
+			first!.data.n = 99;
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 2 }, version: '"e2"' });
+			expect(blob.get).not.toHaveBeenCalled();
+		});
+
+		it('download after a conflict, so a retry sees the newer file', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"')).mockResolvedValueOnce(download({ n: 3 }, '"e3"'));
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			blob.list.mockResolvedValue(listing('"e1"'));
+			blob.put.mockRejectedValue(new BlobPreconditionFailedError());
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			const read = await s.readJson('exercises/ex_a.json');
+			await expect(s.writeJson('exercises/ex_a.json', { n: 2 }, { ifMatch: read!.version })).rejects.toBeInstanceOf(StorageConflictError);
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 3 }, version: '"e3"' });
+		});
+
+		it('forget a deleted file', async () => {
+			blob.list.mockResolvedValue(listing('"e1"'));
+			blob.put.mockResolvedValue({ etag: '"e1"', url: 'https://hemlig.blob/x' });
+			blob.get.mockResolvedValue(null);
+			const s = new BlobUserStorage(user, 'token');
+			await s.writeJson('exercises/ex_a.json', { n: 1 });
+			await s.delete('exercises/ex_a.json');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toBeNull();
+		});
+
+		it('forget a file that a newer listing no longer has', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"')).mockResolvedValueOnce(null);
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			const s = new BlobUserStorage(user, 'token');
+			blob.list.mockResolvedValueOnce(listing('"e1"')).mockResolvedValueOnce({ blobs: [], hasMore: false });
+			await s.list('exercises/');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toBeNull();
+		});
+
+		it('never cache a download with a weak ETag', async () => {
+			const weak = () => download({ n: 1 }, 'W/"e1"');
+			blob.get.mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak());
+			blob.head.mockResolvedValue({ etag: '"e1"', url: 'https://hemlig.blob/x' });
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			blob.list.mockResolvedValue(listing('"e1"'));
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 1 }, version: '"e1"' });
+			expect(blob.get).toHaveBeenCalledTimes(4);
+			expect(s.cacheHits).toBe(0);
+		});
+
+		it('keep users apart even with the same ETag', async () => {
+			blob.get.mockResolvedValueOnce(download({ owner: 'a' }, '"e1"')).mockResolvedValueOnce(download({ owner: 'b' }, '"e1"'));
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			const other = `${user}x`;
+			blob.list.mockResolvedValue({ blobs: [{ pathname: `users/${other}/exercises/ex_a.json`, size: 2, uploadedAt: new Date(0), etag: '"e1"', url: 'u' }], hasMore: false });
+			const s = new BlobUserStorage(other, 'token');
+			await s.list('exercises/');
+			expect((await s.readJson('exercises/ex_a.json'))?.data).toEqual({ owner: 'b' });
+		});
+	});
+
 	it("refuses paths outside the user's folder before any call is made", async () => {
 		const s = new BlobUserStorage('u1', 'token');
 		await expect(s.readJson('../u2/profile.json')).rejects.toThrow();
@@ -175,5 +288,45 @@ describe('Vercel Blob storage', () => {
 		expect(blob.get).not.toHaveBeenCalled();
 		expect(blob.put).not.toHaveBeenCalled();
 		expect(blob.del).not.toHaveBeenCalled();
+	});
+});
+
+describe('Blob content cache', () => {
+	it('matches strong ETags with or without quotes, never weak or empty ones', () => {
+		expect(sameEtag('"e1"', 'e1')).toBe(true);
+		expect(sameEtag('e1', 'e2')).toBe(false);
+		expect(sameEtag('W/"e1"', 'W/"e1"')).toBe(false);
+		expect(sameEtag('', '')).toBe(false);
+	});
+
+	it('drops the least recently used entries past the size limit', () => {
+		const cache = new BlobContentCache(40);
+		cache.set('a', 'e', 'x'.repeat(10));
+		cache.set('b', 'e', 'x'.repeat(10));
+		cache.set('c', 'e', 'x'.repeat(10));
+		cache.get('a', 'e');
+		cache.set('d', 'e', 'x'.repeat(10));
+		cache.set('f', 'e', 'x'.repeat(10));
+		expect(cache.get('b', 'e')).toBeNull();
+		expect(cache.get('a', 'e')).not.toBeNull();
+		expect(cache.size).toBe(4);
+	});
+
+	it('counts a replaced entry once and ignores deleting a missing one', () => {
+		const cache = new BlobContentCache(40);
+		for (let i = 0; i < 10; i++) cache.set('a', `e${i}`, 'x'.repeat(8));
+		cache.delete('missing');
+		cache.set('b', 'e', 'x'.repeat(10));
+		cache.set('c', 'e', 'x'.repeat(10));
+		cache.set('d', 'e', 'x'.repeat(10));
+		expect(cache.size).toBe(4);
+		expect(cache.get('a', 'e9')).not.toBeNull();
+	});
+
+	it('does not keep weak ETags or bodies over a quarter of the limit', () => {
+		const cache = new BlobContentCache(40);
+		cache.set('a', 'W/"e"', 'x');
+		cache.set('b', 'e', 'x'.repeat(11));
+		expect(cache.size).toBe(0);
 	});
 });

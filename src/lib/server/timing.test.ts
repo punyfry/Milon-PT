@@ -25,7 +25,7 @@ describe('request storage scope', () => {
 		expect(first).toBeInstanceOf(RequestStorage);
 		expect(storageFor(locals)).toBe(first);
 		expect(storageFor(localsFor(user))).not.toBe(first);
-		expect(requestStats(locals)).toEqual({ reads: 0, lists: 0, writes: 0, shared: 0, ms: 0 });
+		expect(requestStats(locals)).toEqual({ reads: 0, cached: 0, lists: 0, writes: 0, shared: 0, ms: 0 });
 	});
 
 	it('still requires a signed-in user', () => {
@@ -38,8 +38,8 @@ describe('request storage scope', () => {
 describe('serverTiming', () => {
 	it('formats total and storage time', () => {
 		expect(serverTimingHeader(12.4, null)).toBe('total;dur=12');
-		expect(serverTimingHeader(250, { reads: 3, lists: 1, writes: 0, shared: 2, ms: 180.6 })).toBe(
-			'total;dur=250, storage;desc="3 reads, 1 lists, 0 writes, 2 shared";dur=181'
+		expect(serverTimingHeader(250, { reads: 3, cached: 1, lists: 1, writes: 0, shared: 2, ms: 180.6 })).toBe(
+			'total;dur=250, storage;desc="3 reads (1 cached), 1 lists, 0 writes, 2 shared";dur=181'
 		);
 	});
 
@@ -63,9 +63,9 @@ describe('serverTiming', () => {
 				return new Response('ok');
 			}
 		});
-		expect(response.headers.get('Server-Timing')).toMatch(/^total;dur=\d+, storage;desc="2 reads, 0 lists, 0 writes, 0 shared";dur=\d+$/);
+		expect(response.headers.get('Server-Timing')).toMatch(/^total;dur=\d+, storage;desc="2 reads \(0 cached\), 0 lists, 0 writes, 0 shared";dur=\d+$/);
 		expect(log).toHaveBeenCalledOnce();
-		expect(log.mock.calls[0][0]).toMatch(/^\[timing\] GET \/pass\/\[slug\] \(data\) 200 \d+ ms, storage \d+ ms \(2 reads/);
+		expect(log.mock.calls[0][0]).toMatch(/^\[timing\] GET \/pass\/\[slug\] \(data\) 200 \d+ ms, storage \d+ ms \(2 reads \(0 cached\)/);
 		expect(log.mock.calls[0][0]).not.toContain('benpass');
 	});
 
