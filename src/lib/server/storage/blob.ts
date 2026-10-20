@@ -127,6 +127,8 @@ export class BlobUserStorage implements UserStorage {
 			blobs.push(...page.blobs);
 			cursor = page.hasMore ? page.cursor : undefined;
 		} while (cursor);
+		// A file missing from the listing is gone, so forget what an earlier listing said about it.
+		for (const pathname of this.#listed.keys()) if (pathname.startsWith(fullPrefix)) this.#listed.delete(pathname);
 		for (const b of blobs) this.#listed.set(b.pathname, b.etag);
 
 		return blobs.map((b) => ({

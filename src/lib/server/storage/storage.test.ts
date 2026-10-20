@@ -245,7 +245,31 @@ describe('Vercel Blob storage', () => {
 			expect(await s.readJson('exercises/ex_a.json')).toBeNull();
 		});
 
-		it("keep users apart even with the same ETag", async () => {
+		it('forget a file that a newer listing no longer has', async () => {
+			blob.get.mockResolvedValueOnce(download({ n: 1 }, '"e1"')).mockResolvedValueOnce(null);
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			const s = new BlobUserStorage(user, 'token');
+			blob.list.mockResolvedValueOnce(listing('"e1"')).mockResolvedValueOnce({ blobs: [], hasMore: false });
+			await s.list('exercises/');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toBeNull();
+		});
+
+		it('never cache a download with a weak ETag', async () => {
+			const weak = () => download({ n: 1 }, 'W/"e1"');
+			blob.get.mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak()).mockResolvedValueOnce(weak());
+			blob.head.mockResolvedValue({ etag: '"e1"', url: 'https://hemlig.blob/x' });
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
+			blob.list.mockResolvedValue(listing('"e1"'));
+			const s = new BlobUserStorage(user, 'token');
+			await s.list('exercises/');
+			expect(await s.readJson('exercises/ex_a.json')).toEqual({ data: { n: 1 }, version: '"e1"' });
+			expect(blob.get).toHaveBeenCalledTimes(4);
+			expect(s.cacheHits).toBe(0);
+		});
+
+		it('keep users apart even with the same ETag', async () => {
 			blob.get.mockResolvedValueOnce(download({ owner: 'a' }, '"e1"')).mockResolvedValueOnce(download({ owner: 'b' }, '"e1"'));
 			await new BlobUserStorage(user, 'token').readJson('exercises/ex_a.json');
 			const other = `${user}x`;
@@ -286,6 +310,17 @@ describe('Blob content cache', () => {
 		expect(cache.get('b', 'e')).toBeNull();
 		expect(cache.get('a', 'e')).not.toBeNull();
 		expect(cache.size).toBe(4);
+	});
+
+	it('counts a replaced entry once and ignores deleting a missing one', () => {
+		const cache = new BlobContentCache(40);
+		for (let i = 0; i < 10; i++) cache.set('a', `e${i}`, 'x'.repeat(8));
+		cache.delete('missing');
+		cache.set('b', 'e', 'x'.repeat(10));
+		cache.set('c', 'e', 'x'.repeat(10));
+		cache.set('d', 'e', 'x'.repeat(10));
+		expect(cache.size).toBe(4);
+		expect(cache.get('a', 'e9')).not.toBeNull();
 	});
 
 	it('does not keep weak ETags or bodies over a quarter of the limit', () => {

@@ -3,7 +3,7 @@ import type { StoredFileInfo, StoredJson, UserStorage, WriteOptions } from './ty
 export interface StorageStats {
 	reads: number;
 	/** Of the reads, those answered from the server's memory cache (see BlobContentCache). */
-	cached: number;
+	readonly cached: number;
 	lists: number;
 	writes: number;
 	/** Reads and listings answered from an earlier call in the same request. */
