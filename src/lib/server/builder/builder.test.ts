@@ -55,7 +55,7 @@ describe('system prompt', () => {
 			[ex],
 			{ slug: 'pass-a', name: 'Pass A', version: 2, createdAt: TODAY, exercises: [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }] }
 		);
-		expect(prompt).toContain('Mål: Bli starkare $& snabbt\n- Max 45 min');
+		expect(prompt).toContain('Mål:\n- Bli starkare $& snabbt\nRegler:\n- Max 45 min');
 		expect(prompt).toContain('ex_marklyft | Marklyft | weight');
 		expect(prompt).toContain('Pass A (version 2)\n1. Marklyft (ex_marklyft): 3 set × 8 reps');
 		expect(buildSystemPrompt({}, [], null)).toContain('(inga angivna)');
@@ -89,12 +89,22 @@ describe('system prompt', () => {
 			coachContext: 'c'.repeat(MAX_GOALS + 500)
 		});
 		const lines = text.split('\n');
-		expect(lines[0]).toHaveLength('Mål: '.length + MAX_GOALS);
-		expect(lines[0].endsWith('…')).toBe(true);
-		expect(lines.filter((l) => l.startsWith('- '))).toHaveLength(MAX_RULES);
-		expect(lines[1]).toHaveLength(2 + MAX_RULE);
+		expect(lines[0]).toBe('Mål:');
+		expect(lines[1]).toHaveLength('- '.length + MAX_GOALS);
+		expect(lines[1].endsWith('…')).toBe(true);
+		expect(lines[2]).toBe('Regler:');
+		expect(lines.filter((l) => l.startsWith('- '))).toHaveLength(1 + MAX_RULES);
+		expect(lines[3]).toHaveLength(2 + MAX_RULE);
+		expect(lines.at(-2)).toBe('Om användaren:');
 		expect(lines.at(-1)).toHaveLength(MAX_GOALS);
-		expect(formatGoalsAndRules({ goals: 'Kort\nmål', rules: ['  ', 'Max 45 min'] })).toBe('Mål: Kort\nmål\n- Max 45 min');
+	});
+
+	it('lists each goal on its own line, separate from the rules', () => {
+		// Goals from the import may already be a list; they get one marker each.
+		expect(formatGoalsAndRules({ goals: 'Kort\n\n- mål', rules: ['  ', 'Max 45 min'], weeklySessionGoal: 3 })).toBe(
+			'Mål:\n- Kort\n- mål\nVeckomål: 3 pass per vecka\nRegler:\n- Max 45 min'
+		);
+		expect(formatGoalsAndRules({})).toBe('(inga angivna)');
 	});
 });
 
@@ -231,7 +241,7 @@ describe('a turn', () => {
 		expect(second[2].content).toEqual([expect.objectContaining({ type: 'tool_result', tool_use_id: 't1' })]);
 		// The system prompt is the same in both calls.
 		expect(calls[0].system).toEqual(calls[1].system);
-		expect(JSON.stringify(calls[0].system)).toContain('Mål: Styrka');
+		expect(JSON.stringify(calls[0].system)).toContain('Mål:\\n- Styrka');
 	});
 
 	it('logs API errors but keeps what already happened', async () => {

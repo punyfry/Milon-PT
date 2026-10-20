@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_GOALS, MAX_RULES } from './validate';
-import { MAX_CONTEXT_LINES, coachNotes, notesDiff, parseNotes, sameNotes, withNotes } from './notes';
+import { coachNotes, notesDiff, parseNotes, sameNotes, withNotes } from './notes';
 
 const empty = { goals: [], rules: [], context: [] };
 
@@ -18,6 +18,21 @@ describe('what Milon knows (#110)', () => {
 		const dup = coachNotes({ goals: 'x\nx', rules: ['Inga hopp', 'Inga  hopp'], coachContext: 'a\na' });
 		expect(dup).toEqual({ goals: ['x'], rules: ['Inga hopp'], context: ['a'] });
 		expect(sameNotes(dup, parseNotes(dup))).toBe(true);
+	});
+
+	it('reads a list marker of its own as part of the line', () => {
+		expect(coachNotes({ goals: '- Starkare\n• Snabbare\n-1 kg', rules: ['- Inga hopp'] })).toMatchObject({
+			goals: ['Starkare', 'Snabbare', '-1 kg'],
+			rules: ['Inga hopp']
+		});
+	});
+
+	it('only rewrites the lists that changed, so an imported text is kept as it was', () => {
+		const profile = { goals: '  - Starkare rygg\n\n  - Orka mer', rules: ['a', 'b'], coachContext: 'x\ny' };
+		const notes = coachNotes(profile);
+		expect(withNotes(profile, { ...notes, rules: ['a'] })).toEqual({ ...profile, rules: ['a'] });
+		expect(withNotes(profile, { ...notes, goals: ['Starkare rygg'] })).toEqual({ ...profile, goals: 'Starkare rygg' });
+		expect(withNotes(profile, notes)).toEqual(profile);
 	});
 
 	it('writes them back and leaves the rest of the profile alone', () => {
@@ -40,7 +55,8 @@ describe('what Milon knows (#110)', () => {
 		expect(() => parseNotes(null)).toThrow(/Mål[\s\S]*Regler[\s\S]*Om dig/);
 		expect(() => parseNotes({ ...empty, rules: Array.from({ length: MAX_RULES + 1 }, (_, i) => `r${i}`) })).toThrow(/högst 30 rader/);
 		expect(() => parseNotes({ ...empty, rules: ['x'.repeat(301)] })).toThrow(/högst 300 tecken/);
-		expect(() => parseNotes({ ...empty, context: Array.from({ length: MAX_CONTEXT_LINES + 1 }, (_, i) => `c${i}`) })).toThrow(/Om dig/);
+		// Goals and context have no line limit, like the import: 40 short goals are fine.
+		expect(parseNotes({ ...empty, goals: Array.from({ length: 40 }, (_, i) => `g${i}`) }).goals).toHaveLength(40);
 		const long = Array.from({ length: 8 }, (_, i) => 'x'.repeat(290) + i);
 		expect(() => parseNotes({ ...empty, context: long })).toThrow(new RegExp(`Om dig får vara högst ${MAX_GOALS} tecken`));
 		expect(() => parseNotes({ ...empty, goals: long })).toThrow(new RegExp(`Mål får vara högst ${MAX_GOALS} tecken`));
