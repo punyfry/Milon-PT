@@ -2,6 +2,8 @@ import type { StoredFileInfo, StoredJson, UserStorage, WriteOptions } from './ty
 
 export interface StorageStats {
 	reads: number;
+	/** Of the reads, those answered from the server's memory cache (see BlobContentCache). */
+	cached: number;
 	lists: number;
 	writes: number;
 	/** Reads and listings answered from an earlier call in the same request. */
@@ -19,7 +21,7 @@ export interface StorageStats {
  * retry after a conflict reads the file again.
  */
 export class RequestStorage implements UserStorage {
-	readonly stats: StorageStats = { reads: 0, lists: 0, writes: 0, shared: 0, ms: 0 };
+	readonly stats: StorageStats;
 	readonly #inner: UserStorage;
 	readonly #shareReads: boolean;
 	readonly #reads = new Map<string, Promise<StoredJson<unknown> | null>>();
@@ -30,6 +32,16 @@ export class RequestStorage implements UserStorage {
 	constructor(inner: UserStorage, options: { shareReads: boolean }) {
 		this.#inner = inner;
 		this.#shareReads = options.shareReads;
+		this.stats = {
+			reads: 0,
+			get cached() {
+				return inner.cacheHits ?? 0;
+			},
+			lists: 0,
+			writes: 0,
+			shared: 0,
+			ms: 0
+		};
 	}
 
 	get userId(): string {

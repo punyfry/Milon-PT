@@ -57,6 +57,8 @@ await storage.writeJson('profile.json', data, { ifMatch: profile?.version });
 
 Within one request `storageFor` returns the same storage. In GET requests, identical reads and listings share one call (each caller gets its own copy); any write drops what is shared. Every request gets a `Server-Timing` header (total and storage time), and requests that use storage log one `[timing]` line with the route pattern and call counts, so slow views can be traced in the Vercel logs.
 
+Each Blob download counts against the store's monthly operations, and the pages read every exercise and several sessions. So the server keeps downloaded and written files in memory (`blob-cache.ts`, up to ~20 MB per instance), keyed by ETag: a read right after a listing in the same request uses the cached copy when the listed ETag still matches, instead of downloading. Reads without a listing always download. The `[timing]` line shows how many reads were cached.
+
 ## Getting started locally
 
 1. `npm install`
