@@ -66,6 +66,7 @@ export const dragHandle: Action<HTMLElement, DragParams> = (node, initial) => {
 			params = next;
 		},
 		destroy() {
+			if (pointer !== null) params.ondrag?.(false);
 			node.removeEventListener('pointerdown', start);
 			removeEventListener('pointermove', move);
 			removeEventListener('pointerup', end);
@@ -73,3 +74,14 @@ export const dragHandle: Action<HTMLElement, DragParams> = (node, initial) => {
 		}
 	};
 };
+
+/**
+ * After a move with an arrow button, focus is lost because the row moves in
+ * the DOM. Puts it back on the moved exercise's arrow in the same direction,
+ * or the other one when that end is reached. Call after the DOM has updated.
+ */
+export function focusArrow(name: string, direction: 'upp' | 'ner') {
+	const arrow = (d: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${CSS.escape(`Flytta ${d} ${name}`)}"]`);
+	const same = arrow(direction);
+	(same && !same.disabled ? same : arrow(direction === 'upp' ? 'ner' : 'upp'))?.focus();
+}

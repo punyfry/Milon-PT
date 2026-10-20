@@ -380,21 +380,43 @@ describe('saving a turn', () => {
 
 		const mine = structuredClone(loaded.conversation);
 		mine.messages.push({ role: 'user', content: 'Hej' });
-		await saveTurn(storage, mine, loaded.version, 0);
+		await saveTurn(storage, mine, loaded.version, { messages: 0, log: 0 });
 		expect((await loadConversation(storage, conversation.id))!.conversation.messages).toHaveLength(1);
 
 		const stale = structuredClone(loaded.conversation);
 		stale.messages.push({ role: 'user', content: 'Från en annan flik' });
-		await expect(saveTurn(storage, stale, loaded.version, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, stale, loaded.version, { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
+	});
+
+	it('refuses when the list was reordered in another tab while the turn ran', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		conversation.draft = [
+			{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } },
+			{ exerciseId: 'ex_plankan', sets: 3, target: { seconds: 40 } }
+		];
+		await saveConversation(storage, conversation);
+		const loaded = (await loadConversation(storage, conversation.id))!;
+		const base = { messages: loaded.conversation.messages.length, log: loaded.conversation.log.length };
+
+		// The other tab: a reorder adds to the log, not to the messages.
+		const other = structuredClone(loaded.conversation);
+		reorderDraft(other, ['ex_plankan', 'ex_marklyft'], new Map());
+		await saveConversation(storage, other, loaded.version);
+
+		const mine = structuredClone(loaded.conversation);
+		mine.messages.push({ role: 'user', content: 'Hej' });
+		await expect(saveTurn(storage, mine, loaded.version, base)).rejects.toBeInstanceOf(StorageConflictError);
+		expect((await loadConversation(storage, conversation.id))!.conversation.draft[0].exerciseId).toBe('ex_plankan');
 	});
 
 	it('never retries creating a conversation, nor one that is gone', async () => {
 		const storage = new MemoryUserStorage('u1');
 		const conversation = await startConversation(storage, null);
 		await saveConversation(storage, conversation);
-		await expect(saveTurn(storage, conversation, undefined, 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, conversation, undefined, { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
 		const gone = { ...conversation, id: 'b_finnsinte1' };
-		await expect(saveTurn(storage, gone, 'v-gammal', 0)).rejects.toBeInstanceOf(StorageConflictError);
+		await expect(saveTurn(storage, gone, 'v-gammal', { messages: 0, log: 0 })).rejects.toBeInstanceOf(StorageConflictError);
 	});
 });
 
@@ -517,6 +539,12 @@ describe('a whole workout at once', () => {
 		const missing = await executeTool(storage, state, 'propose_exercise', { ...marklyft, replacesId: 'ex_finns_inte' }, TODAY);
 		expect(missing).toMatchObject({ isError: true });
 		expect(state.draft.map((d) => d.exerciseId)).toEqual(['ex_plankan']);
+
+		// A failed swap with a new exercise leaves nothing behind in the catalog.
+		const before = (await storage.list('exercises/')).length;
+		const failed = await executeTool(storage, state, 'propose_exercise', { ...newExercise, name: 'Kettlebellsving', replacesId: 'ex_finns_inte' }, TODAY);
+		expect(failed).toMatchObject({ isError: true });
+		expect((await storage.list('exercises/')).length).toBe(before);
 	});
 
 	it('remove_exercise takes an exercise out of the list, but not out of the catalog', async () => {
@@ -546,6 +574,27 @@ describe('a whole workout at once', () => {
 
 		const view = await conversationView(storage, conversation);
 		expect(view.log[1]).toMatchObject({ role: 'workout', items: [{ name: 'Marklyft' }, { name: 'Plankan' }] });
+	});
+
+	it('a swap or removal also says what went, and a turn that empties the list shows no card', async () => {
+		const storage = await setup();
+		const conversation = await startConversation(storage, null);
+		conversation.draft = [{ exerciseId: 'ex_marklyft', sets: 3, target: { reps: 8 } }];
+		const swap = scripted(message([toolUse('t1', 'propose_exercise', { ...plankan, replacesId: 'ex_marklyft' })], 'tool_use'), message([text('Bytt.')], 'end_turn'));
+		await runTurn(storage, conversation, 'Byt ut Marklyft.', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: swap.create });
+		expect(conversation.log.slice(1).map((l) => [l.role, l.text])).toEqual([
+			['workout', 'Passet: 1 övning'],
+			['event', 'Bytte Marklyft mot Plankan: 3 set × 40 s'],
+			['assistant', 'Bytt.']
+		]);
+
+		const remove = scripted(message([toolUse('t2', 'remove_exercise', { exerciseId: 'ex_plankan' })], 'tool_use'), message([text('Borta.')], 'end_turn'));
+		await runTurn(storage, conversation, 'Ta bort plankan.', { model: 'claude-sonnet-5-5', today: TODAY, createMessage: remove.create });
+		expect(conversation.log.slice(4).map((l) => [l.role, l.text])).toEqual([
+			['user', 'Ta bort plankan.'],
+			['event', 'Tog bort Plankan'],
+			['assistant', 'Borta.']
+		]);
 	});
 
 	it('the card is shown even when the turn fails after changing the list', async () => {

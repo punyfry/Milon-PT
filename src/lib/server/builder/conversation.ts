@@ -96,20 +96,28 @@ export async function saveConversation(storage: UserStorage, conversation: Build
 	return result.version;
 }
 
+/** How long the conversation was when a turn started: its messages and its chat log. */
+export interface TurnBase {
+	messages: number;
+	log: number;
+}
+
+export const turnBase = (conversation: BuilderConversation): TurnBase => ({ messages: conversation.messages.length, log: conversation.log.length });
+
 /**
- * Saves a turn that started from `baseMessages` messages. If the version
- * check fails but the stored conversation still has exactly those messages,
- * nobody else added a turn (the stored version just didn't match), so the
- * turn is saved on top of it. Throws StorageConflictError if another turn
- * really was saved in between.
+ * Saves a turn that started from `base`. If the version check fails but the
+ * stored conversation is still exactly that long, nobody else added a turn or
+ * reordered the list (the stored version just didn't match), so the turn is
+ * saved on top of it. Throws StorageConflictError if something else really was
+ * saved in between; a reorder adds to the log but not to the messages.
  */
-export async function saveTurn(storage: UserStorage, conversation: BuilderConversation, version: string | undefined, baseMessages: number) {
+export async function saveTurn(storage: UserStorage, conversation: BuilderConversation, version: string | undefined, base: TurnBase) {
 	try {
 		return await saveConversation(storage, conversation, version);
 	} catch (e) {
 		if (!(e instanceof StorageConflictError) || version === undefined) throw e;
 		const stored = await loadConversation(storage, conversation.id);
-		if (!stored || stored.conversation.messages.length !== baseMessages) throw e;
+		if (!stored || stored.conversation.messages.length !== base.messages || stored.conversation.log.length !== base.log) throw e;
 		return saveConversation(storage, conversation, stored.version);
 	}
 }
@@ -163,7 +171,7 @@ export async function runTurn(
 		await turnLoop(storage, conversation, options, card);
 	} finally {
 		delete conversation.userOrder;
-		if (card.at >= 0) {
+		if (card.at >= 0 && conversation.draft.length) {
 			const items = structuredClone(conversation.draft);
 			const text = `Passet: ${items.length} ${items.length === 1 ? 'övning' : 'övningar'}`;
 			conversation.log.splice(card.at, 0, { role: 'workout', text, items });
@@ -228,9 +236,9 @@ async function turnLoop(storage: UserStorage, conversation: BuilderConversation,
 				conversation.log.push({ role: 'error', text: `Kunde inte spara: ${reason}` });
 			}
 			results.push({ type: 'tool_result', tool_use_id: tool.id, content: outcome.content, ...(outcome.isError ? { is_error: true } : {}) });
-			if ('changedDraft' in outcome && outcome.changedDraft) {
-				if (card.at < 0) card.at = conversation.log.length;
-			} else if ('event' in outcome && outcome.event) conversation.log.push({ role: 'event', text: outcome.event });
+			if ('changedDraft' in outcome && outcome.changedDraft && card.at < 0) card.at = conversation.log.length;
+			// Additions show in the card; a swap or removal also says what went.
+			if ('event' in outcome && outcome.event && !('cardOnly' in outcome && outcome.cardOnly)) conversation.log.push({ role: 'event', text: outcome.event });
 		}
 		conversation.messages.push({ role: 'user', content: results });
 	}

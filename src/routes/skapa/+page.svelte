@@ -9,7 +9,7 @@
 	import Questionnaire from '$lib/components/Questionnaire.svelte';
 	import { QUESTIONS } from '$lib/builder/questionnaire';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
-	import { dragHandle } from '$lib/reorder/drag';
+	import { dragHandle, focusArrow } from '$lib/reorder/drag';
 	import { moveWithinPhase } from '$lib/reorder/move';
 	import type { ConversationView, DraftItem } from '$lib/server/builder/conversation';
 	import type { PageProps } from './$types';
@@ -101,6 +101,13 @@
 		if (!next) return false;
 		order = next;
 		return true;
+	}
+
+	/** A move with an arrow button keeps the focus on the moved exercise. */
+	async function moveByArrow(i: number, d: -1 | 1, name: string) {
+		if (!moveItem(i, i + d)) return;
+		await tick();
+		focusArrow(name, d < 0 ? 'upp' : 'ner');
 	}
 
 	/** Saves a changed order and locks the list again. Returns false if it couldn't be saved. */
@@ -239,8 +246,8 @@
 									use:dragHandle={{ index: i, onmove: moveItem, ondrag: (on) => (dragged = on ? item.exerciseId : null) }}
 								><Icon name="grip" /></span>
 								<span class="name">{item.name}{#if item.phase}<span class="tag quiet">{PHASE_LABEL[item.phase]}</span>{/if}</span>
-								<button type="button" class="icon-btn" onclick={() => moveItem(i, i - 1)} disabled={!moveWithinPhase(order, i, i - 1)} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
-								<button type="button" class="icon-btn" onclick={() => moveItem(i, i + 1)} disabled={!moveWithinPhase(order, i, i + 1)} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
+								<button type="button" class="icon-btn" onclick={() => moveByArrow(i, -1, item.name)} disabled={!moveWithinPhase(order, i, i - 1)} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
+								<button type="button" class="icon-btn" onclick={() => moveByArrow(i, 1, item.name)} disabled={!moveWithinPhase(order, i, i + 1)} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
 							</li>
 						{/each}
 					</ol>

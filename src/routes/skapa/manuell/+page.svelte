@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { afterNavigate, beforeNavigate, goto, invalidateAll } from '$app/navigation';
+	import { tick } from 'svelte';
 	import ExerciseFields, { TYPE_LABEL } from '$lib/components/ExerciseFields.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import VersionsSheet from '$lib/components/VersionsSheet.svelte';
 	import { PHASE_LABEL } from '$lib/format';
-	import { dragHandle } from '$lib/reorder/drag';
+	import { dragHandle, focusArrow } from '$lib/reorder/drag';
 	import { moveWithinPhase } from '$lib/reorder/move';
 	import {
 		Issues,
@@ -111,6 +112,13 @@
 		if (!next) return false;
 		items = next;
 		return true;
+	}
+
+	/** A move with an arrow button keeps the focus on the moved exercise. */
+	async function moveByArrow(i: number, d: -1 | 1, name: string) {
+		if (!move(i, i + d)) return;
+		await tick();
+		focusArrow(name, d < 0 ? 'upp' : 'ner');
 	}
 
 	function remove(i: number) {
@@ -284,8 +292,8 @@
 										</span>
 										<span class="tools">
 											{#if ordering}
-												<button type="button" class="icon-btn" onclick={() => move(i, i - 1)} disabled={items[i - 1]?.phase !== phase} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
-												<button type="button" class="icon-btn" onclick={() => move(i, i + 1)} disabled={items[i + 1]?.phase !== phase} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
+												<button type="button" class="icon-btn" onclick={() => moveByArrow(i, -1, item.name)} disabled={items[i - 1]?.phase !== phase} aria-label="Flytta upp {item.name}"><Icon name="up" /></button>
+												<button type="button" class="icon-btn" onclick={() => moveByArrow(i, 1, item.name)} disabled={items[i + 1]?.phase !== phase} aria-label="Flytta ner {item.name}"><Icon name="down" /></button>
 											{:else}
 												<button type="button" class="icon-btn" onclick={() => remove(i)} aria-label="Ta bort {item.name}"><Icon name="x" /></button>
 											{/if}

@@ -87,7 +87,10 @@ test('a workout being edited with Milon can be reordered with the arrows before 
 	// Locked until unlocked.
 	await expect(page.getByRole('button', { name: /Flytta/ })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Ändra ordning' }).click();
-	await page.getByRole('button', { name: 'Flytta ner Knäböj' }).click();
+	// With the keyboard; the focus follows the moved exercise (on its other arrow, at the end of the list).
+	await page.getByRole('button', { name: 'Flytta ner Knäböj' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('button', { name: 'Flytta upp Knäböj' })).toBeFocused();
 	await page.getByRole('button', { name: 'Klar' }).click();
 
 	await expect(page.getByText('Du ändrade ordningen')).toBeVisible();

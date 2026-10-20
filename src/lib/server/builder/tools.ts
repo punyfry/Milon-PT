@@ -124,8 +124,10 @@ export interface ToolOutcome {
 	isError: boolean;
 	/** Short line for the chat log, e.g. "Lade till Marklyft". */
 	event?: string;
-	/** The tool changed the live list; the turn shows the list as a card instead of the event line. */
+	/** The tool changed the live list; the turn shows the list as a card. */
 	changedDraft?: boolean;
+	/** The event is shown by the card alone (an exercise added or updated), not as a line of its own. */
+	cardOnly?: boolean;
 }
 
 function parseTarget(v: unknown): Target | null {
@@ -165,6 +167,10 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!tgt) return fail('target ska ha antingen reps eller seconds (ett positivt heltal), och den andra null.');
 	const part = parsePhase(input.phase);
 	if (!part) return fail(PHASE_ERROR);
+
+	// Checked before a new exercise is created, so a failed swap leaves nothing behind in the catalog.
+	const replacesId = typeof input.replacesId === 'string' && input.replacesId ? input.replacesId : null;
+	if (replacesId && !state.draft.some((d) => d.exerciseId === replacesId)) return fail(`${replacesId} finns inte i passet, så den kan inte ersättas.`);
 
 	const catalog = (await listExercises(storage)).map((e) => e.data).filter((e) => !e.deleted);
 	let exercise: Exercise | undefined;
@@ -207,9 +213,7 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	if (!fitsPhase(exercise.type, part)) return fail(extraWeightError(exercise.name));
 
 	const item: WorkoutExercise = { exerciseId: exercise.id, sets, target: tgt, ...phaseField(part) };
-	const replacesId = typeof input.replacesId === 'string' && input.replacesId && input.replacesId !== exercise.id ? input.replacesId : null;
-	const replaced = replacesId ? state.draft.findIndex((d) => d.exerciseId === replacesId) : -1;
-	if (replacesId && replaced < 0) return fail(`${replacesId} finns inte i passet, så den kan inte ersättas.`);
+	const replaced = replacesId && replacesId !== exercise.id ? state.draft.findIndex((d) => d.exerciseId === replacesId) : -1;
 	const index = state.draft.findIndex((d) => d.exerciseId === exercise!.id);
 	if (replaced >= 0) {
 		const replacedName = catalog.find((e) => e.id === replacesId)?.name ?? replacesId;
@@ -236,6 +240,7 @@ async function proposeExercise(storage: UserStorage, state: BuilderState, input:
 	return {
 		isError: false,
 		changedDraft: true,
+		cardOnly: true,
 		content:
 			(created ? `Ny övning skapad: ${exercise.id} (${exercise.name}). ` : `Använder befintlig övning ${exercise.id} (${exercise.name}). `) +
 			`${index >= 0 ? 'Uppdaterad' : 'Tillagd'} i passet: ${summary}. Passet har nu ${state.draft.length} övningar.`,

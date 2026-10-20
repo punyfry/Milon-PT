@@ -77,6 +77,8 @@ test('the order is locked until unlocked, and can then be changed by dragging or
 	await expect(list.getByRole('listitem').first()).toContainText('Chins');
 
 	await page.getByRole('button', { name: 'Flytta ner Hantelrodd' }).click();
+	// Last in the list now, so the focus moves to its other arrow instead of being lost.
+	await expect(page.getByRole('button', { name: 'Flytta upp Hantelrodd' })).toBeFocused();
 	await page.getByRole('button', { name: 'Klar' }).click();
 	await expect(page.getByRole('button', { name: /Flytta/ })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Spara pass' }).click();
