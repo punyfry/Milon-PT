@@ -193,6 +193,11 @@
 		background: var(--accent);
 		color: var(--on-accent);
 	}
+	/* The accent marks what can be done now, so a disabled main button is neutral. */
+	:global(.btn.primary:disabled) {
+		background: var(--surface-2);
+		color: var(--text);
+	}
 	:global(.btn.ghost) {
 		background: none;
 		color: var(--soft);
